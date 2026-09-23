@@ -1,0 +1,31 @@
+# Environment and credentials
+.env
+cookies*.txt
+*.pem
+*.key
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Application storage & logs
+data/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing & Linting
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
