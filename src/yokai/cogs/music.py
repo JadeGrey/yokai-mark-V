@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
@@ -12,6 +12,7 @@ from discord.ext import commands
 from yokai.errors import VoiceChannelError, VoicePermissionError
 from yokai.music.classifier import InputKind, classify_input
 from yokai.music.models import LoopMode, Track
+from yokai.music.spotify.urls import parse_spotify_uri_or_url, resolve_spotify_link
 from yokai.theme import quip_bank
 from yokai.ui.embeds import EmbedFactory, send
 from yokai.ui.views import QueuePaginator
@@ -110,27 +111,10 @@ class MusicCog(commands.Cog, name="Music"):
             await send(interaction, embed=err_embed, ephemeral=True)
             return
 
-        # Phase 3 readiness: Spotify message
-        if classified.kind in (
-            InputKind.SPOTIFY_TRACK,
-            InputKind.SPOTIFY_ALBUM,
-            InputKind.SPOTIFY_PLAYLIST,
-        ):
-            err_embed = EmbedFactory.info(
-                title="Spotify Support",
-                description=(
-                    "Spotify link resolution is coming in Phase 3. "
-                    "Please paste a YouTube link or search query for now."
-                ),
-                context="Notice",
-                bot_avatar_url=avatar_url,
-            )
-            await send(interaction, embed=err_embed)
-            return
-
         # 3. Resolve target
         tracks_to_queue: list[Track] = []
         is_playlist = False
+        collection_info: Optional[tuple[str, str, int, int, bool]] = None
 
         if classified.kind == InputKind.SEARCH_QUERY:
             single = await player.resolver.resolve_query(
@@ -145,6 +129,70 @@ class MusicCog(commands.Cog, name="Music"):
             )
             is_playlist = is_pl
             tracks_to_queue = result if isinstance(result, list) else [result]
+        elif classified.kind in (
+            InputKind.SPOTIFY_TRACK,
+            InputKind.SPOTIFY_ALBUM,
+            InputKind.SPOTIFY_PLAYLIST,
+        ):
+            target = classified.clean_target
+            if "spotify.link" in target:
+                target = await resolve_spotify_link(target)
+
+            entity_type, entity_id = parse_spotify_uri_or_url(target)
+
+            if entity_type == "track":
+                meta = await self.bot.spotify.resolve_track(entity_id)
+                matched = await self.bot.matcher.match_track(meta, interaction.user.id)
+                if not matched:
+                    err_embed = EmbedFactory.error(
+                        message=f"Could not find a confident YouTube match for '{meta.title}'.",
+                        user_hint="Try searching with YouTube song title and artist.",
+                        bot_avatar_url=avatar_url,
+                    )
+                    await send(interaction, embed=err_embed)
+                    return
+                tracks_to_queue = [matched]
+                is_playlist = False
+            else:
+                is_playlist = True
+                if entity_type == "album":
+                    collection = await self.bot.spotify.resolve_album(entity_id)
+                else:
+                    collection = await self.bot.spotify.resolve_playlist(
+                        entity_id, max_tracks=self.bot.config.max_playlist_tracks
+                    )
+
+                if not collection.tracks:
+                    err_embed = EmbedFactory.error(
+                        message=f"No playable tracks found in Spotify {entity_type}.",
+                        user_hint="Check that the link is public and contains audio tracks.",
+                        bot_avatar_url=avatar_url,
+                    )
+                    await send(interaction, embed=err_embed)
+                    return
+
+                collection_info = (
+                    entity_type,
+                    collection.name,
+                    collection.count,
+                    collection.total,
+                    collection.partial,
+                )
+                tracks_to_queue = [
+                    Track(
+                        video_id=f"sp:{t.spotify_id}",
+                        title=t.title,
+                        artist=t.artist_summary,
+                        duration_s=t.duration_s,
+                        thumbnail_url=t.thumbnail_url,
+                        requester_id=interaction.user.id,
+                        origin="import",
+                        spotify_id=t.spotify_id,
+                        is_pending_match=True,
+                        spotify_meta=t,
+                    )
+                    for t in collection.tracks
+                ]
 
         if not tracks_to_queue:
             err_embed = EmbedFactory.error(
@@ -208,12 +256,22 @@ class MusicCog(commands.Cog, name="Music"):
                 player.maybe_prefetch()
                 msg = f"Queued **{total_loaded}** tracks from playlist."
 
-            embed = EmbedFactory.success(
-                title=f"Playlist Loaded ({total_loaded} tracks)",
-                description=msg,
-                context="Playlist",
-                bot_avatar_url=avatar_url,
-            )
+            if collection_info:
+                c_type, c_name, c_count, c_total, c_partial = collection_info
+                partial_note = f" (loaded {c_count} of {c_total})" if c_partial else ""
+                embed = EmbedFactory.success(
+                    title=f"Spotify {c_type.title()} Loaded ({c_count} tracks)",
+                    description=f"Loaded **{c_name}**{partial_note}.\n{msg}",
+                    context="Spotify Import",
+                    bot_avatar_url=avatar_url,
+                )
+            else:
+                embed = EmbedFactory.success(
+                    title=f"Playlist Loaded ({total_loaded} tracks)",
+                    description=msg,
+                    context="Playlist",
+                    bot_avatar_url=avatar_url,
+                )
             await send(interaction, embed=embed)
 
     @app_commands.command(name="pause", description="Pause current audio playback.")

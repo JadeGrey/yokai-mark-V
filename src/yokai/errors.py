@@ -80,6 +80,19 @@ class UnsupportedError(YokaiError):
         super().__init__(message, user_hint=user_hint)
 
 
+class SpotifyResolutionError(YokaiError):
+    """Raised when Spotify metadata resolution fails across all providers."""
+
+    def __init__(
+        self,
+        message: str = "Could not resolve metadata for this Spotify link.",
+        user_hint: Optional[
+            str
+        ] = "Try pasting a YouTube link or searching with song title and artist.",
+    ) -> None:
+        super().__init__(message, user_hint=user_hint)
+
+
 class VoiceError(YokaiError):
     """Base exception for voice channel connection or playback errors."""
 

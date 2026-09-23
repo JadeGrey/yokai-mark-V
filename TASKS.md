@@ -78,15 +78,15 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 **Goal:** paste a Spotify track, album, or playlist link and have it play via YouTube.
 
-- [ ] P3.1 Spotify URL/URI parser (open.spotify.com with locale prefixes, `spotify:` URIs, `spotify.link` redirect that must land on `open.spotify.com`); friendly rejection of artist/show/episode links.
-- [ ] P3.2 `SpotifyProvider` interface and models (`SpotifyTrackMeta`, `SpotifyCollection` with `partial`).
-- [ ] P3.3 Official provider (`httpx`): check the current Spotify docs first; use `/playlists/{id}/items`; detect missing items or 403; auto-disable if the app is rejected.
-- [ ] P3.4 Scraper provider (`spotifyscraper`, exact pin, threaded, cache 24h, cap and `partial`).
-- [ ] P3.5 Orchestrator with official-first fallback, circuit breaker (3 failures → 10-minute skip), provider logging, friendly failure embed.
-- [ ] P3.6 `matcher.py`: query building, candidate retrieval (ytmusicapi songs first, yt-dlp fallback), scoring, thresholds, penalties (`SPEC.md` §7.5); table-driven tests including live-version and wrong-duration traps.
-- [ ] P3.7 `spotify_match_cache` read/write.
-- [ ] P3.8 Lazy matching: Spotify tracks enter the queue as `PENDING_MATCH`, are matched just before playback, and the summary embed lists tracks that couldn't be matched and shows "loaded N of M" when partial.
-- [ ] P3.9 Tests with fake providers: fallback order, circuit breaker, partial collections, unmatched tracks, cache hits.
+- [x] P3.1 Spotify URL/URI parser (open.spotify.com with locale prefixes, `spotify:` URIs, `spotify.link` redirect that must land on `open.spotify.com`); friendly rejection of artist/show/episode links.
+- [x] P3.2 `SpotifyProvider` interface and models (`SpotifyTrackMeta`, `SpotifyCollection` with `partial`).
+- [x] P3.3 Official provider (`httpx`): check the current Spotify docs first; use `/playlists/{id}/items`; detect missing items or 403; auto-disable if the app is rejected.
+- [x] P3.4 Scraper provider (`spotifyscraper`, exact pin, threaded, cache 24h, cap and `partial`).
+- [x] P3.5 Orchestrator with official-first fallback, circuit breaker (3 failures → 10-minute skip), provider logging, friendly failure embed.
+- [x] P3.6 `matcher.py`: query building, candidate retrieval (ytmusicapi songs first, yt-dlp fallback), scoring, thresholds, penalties (`SPEC.md` §7.5); table-driven tests including live-version and wrong-duration traps.
+- [x] P3.7 `spotify_match_cache` read/write.
+- [x] P3.8 Lazy matching: Spotify tracks enter the queue as `PENDING_MATCH`, are matched just before playback, and the summary embed lists tracks that couldn't be matched and shows "loaded N of M" when partial.
+- [x] P3.9 Tests with fake providers: fallback order, circuit breaker, partial collections, unmatched tracks, cache hits.
 
 **Acceptance criteria**
 - A Spotify track link plays the correct song. *(manual)*

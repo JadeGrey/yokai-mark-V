@@ -13,7 +13,13 @@ from yokai.config import Config
 from yokai.errors import YokaiError
 from yokai.health import HealthReport, check_health
 from yokai.music.player import GuildPlayer
+from yokai.music.resolvers.matcher import TrackMatcher
 from yokai.music.resolvers.ytdlp import YtDlpResolver
+from yokai.music.spotify import (
+    OfficialSpotifyProvider,
+    ScraperSpotifyProvider,
+    SpotifyOrchestrator,
+)
 from yokai.presence import PresenceManager, get_default_activity
 from yokai.storage.db import Database
 from yokai.ui.embeds import EmbedFactory, send
@@ -34,6 +40,19 @@ class YokaiBot(commands.Bot):
             cookies_file=config.ytdlp_cookies_file,
             max_track_seconds=config.max_track_seconds,
         )
+
+        official_sp = None
+        if config.spotify_client_id and config.spotify_client_secret:
+            official_sp = OfficialSpotifyProvider(
+                client_id=config.spotify_client_id,
+                client_secret=config.spotify_client_secret,
+            )
+        scraper_sp = ScraperSpotifyProvider(enabled=config.spotify_scraper_enabled)
+        self.spotify = SpotifyOrchestrator(
+            official_provider=official_sp,
+            scraper_provider=scraper_sp,
+        )
+        self.matcher = TrackMatcher(ytdlp_resolver=self.resolver, db=self.db)
         self.players: dict[int, GuildPlayer] = {}
 
         # Standard default intents with zero privileged intents
@@ -180,7 +199,10 @@ class YokaiBot(commands.Bot):
                 await p.stop()
             except Exception as exc:
                 logger.debug("Error stopping player during shutdown: %s", exc)
-        self.players.clear()
+        try:
+            await self.spotify.close()
+        except Exception as exc:
+            logger.error("Error closing Spotify orchestrator: %s", exc)
 
         try:
             await self.db.close()

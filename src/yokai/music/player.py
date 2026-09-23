@@ -132,6 +132,44 @@ class GuildPlayer:
 
     async def _start_playback(self, track: Track) -> None:
         """Resolve stream info and invoke FFmpeg playback."""
+        # 0. Lazy match Spotify tracks if pending
+        if track.is_pending_match and track.spotify_meta:
+            matcher = getattr(self.bot, "matcher", None)
+            if matcher:
+                try:
+                    matched = await matcher.match_track(track.spotify_meta, track.requester_id)
+                    if matched:
+                        track.video_id = matched.video_id
+                        track.title = matched.title
+                        track.artist = matched.artist
+                        track.duration_s = matched.duration_s
+                        track.thumbnail_url = matched.thumbnail_url
+                        track.origin = "import"
+                        track.is_pending_match = False
+                    else:
+                        logger.warning("Unmatched Spotify track: %s", track.spotify_meta.title)
+                        if self.text_channel:
+                            from yokai.ui.embeds import EmbedFactory
+
+                            warn_embed = EmbedFactory.warning(
+                                title="Track Skipped (Unmatched)",
+                                description=(
+                                    "Could not find a confident YouTube match for "
+                                    f"**{track.spotify_meta.title}**."
+                                ),
+                                context="Auto-Skip",
+                            )
+                            try:
+                                await self.text_channel.send(embed=warn_embed)
+                            except Exception:
+                                pass
+                        await self.play_next()
+                        return
+                except Exception as exc:
+                    logger.error("Error matching track %s: %s", track.spotify_meta.title, exc)
+                    await self.play_next()
+                    return
+
         stream_info: Optional[StreamInfo] = None
 
         # 1. Check if prefetched
@@ -238,6 +276,18 @@ class GuildPlayer:
 
         async def _do_prefetch(track: Track) -> None:
             try:
+                if track.is_pending_match and track.spotify_meta:
+                    matcher = getattr(self.bot, "matcher", None)
+                    if matcher:
+                        matched = await matcher.match_track(track.spotify_meta, track.requester_id)
+                        if matched:
+                            track.video_id = matched.video_id
+                            track.title = matched.title
+                            track.artist = matched.artist
+                            track.duration_s = matched.duration_s
+                            track.thumbnail_url = matched.thumbnail_url
+                            track.origin = "import"
+                            track.is_pending_match = False
                 info = await self.resolver.get_stream(track)
                 self._prefetched = (track.video_id, info)
                 logger.debug("Prefetched stream URL for %s", track.video_id)
@@ -282,7 +332,14 @@ class GuildPlayer:
         await self.play_next()
 
     async def _record_event(self, track: Track, outcome: str, listened_s: int) -> None:
-        """Log playback event to SQLite play_events table."""
+        """Log playback event to SQLite play_events table (YouTube-derived fields only)."""
+        # Strictly guard against persisting Spotify-derived fields or dummy IDs into analytics
+        if track.is_pending_match or track.video_id.startswith("sp:"):
+            logger.debug(
+                "Skipping play_events logging for unmatched/Spotify entity %s", track.video_id
+            )
+            return
+
         try:
             await self.bot.db.record_play_event(
                 user_id=track.requester_id,

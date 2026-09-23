@@ -171,6 +171,28 @@ class YtDlpResolver(Resolver):
                 user_hint="Try searching with a different title or direct link.",
             )
 
+    async def search_candidates(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Query yt-dlp for search candidates with metadata for matching."""
+        async with self._semaphore:
+            opts = self._get_base_opts()
+            opts["noplaylist"] = True
+            search_term = f"ytsearch{limit}:{query}"
+
+            def _search() -> dict[str, Any]:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    return ydl.extract_info(search_term, download=False) or {}
+
+            try:
+                data = await asyncio.wait_for(
+                    asyncio.to_thread(_search),
+                    timeout=self.timeout_seconds,
+                )
+                entries = data.get("entries") or []
+                return [e for e in entries if isinstance(e, dict)]
+            except Exception as exc:
+                logger.debug("yt-dlp candidate search failed for %s: %s", query, exc)
+                return []
+
     async def resolve_url(
         self, url: str, requester_id: int, max_tracks: int = 100
     ) -> tuple[Track | list[Track], bool]:

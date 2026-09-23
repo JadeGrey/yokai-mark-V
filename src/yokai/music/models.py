@@ -6,7 +6,10 @@ import enum
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
+
+if TYPE_CHECKING:
+    from yokai.music.spotify.models import SpotifyTrackMeta
 
 
 class LoopMode(enum.Enum):
@@ -39,6 +42,7 @@ class Track:
     origin: str = "link"  # link | search | import | recommendation
     spotify_id: Optional[str] = None
     is_pending_match: bool = False
+    spotify_meta: Optional[SpotifyTrackMeta] = None
 
     @property
     def url(self) -> str:
