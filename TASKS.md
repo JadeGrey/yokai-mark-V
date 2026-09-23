@@ -103,12 +103,12 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 **Goal:** YouTube Music radio recommendations with a queue-them button.
 
-- [ ] P4.1 `Recommender` interface and `Recommendation` model.
-- [ ] P4.2 `YTMusicRadioRecommender`: unauthenticated `get_watch_playlist(radio=True)`, threaded, verified field names, 10-minute per-seed cache.
-- [ ] P4.3 Filtering per `SPEC.md` §8 (seed, queued/playing, last 100 plays, normalized duplicates, non-music types, >10 min) and count trimming to `RECOMMEND_COUNT`.
-- [ ] P4.4 Seed selection: explicit arg → now playing → requester's last completed track → error embed.
-- [ ] P4.5 `recommendations` embed and `RecommendView` with a single-use **queue-all** button: permission rules, join-if-needed, lock against double-press, embed transitions to "queued", timeout disables the button.
-- [ ] P4.6 Tests: filtering, seed selection order, view behavior (permission, double-press, timeout) with fakes.
+- [x] P4.1 `Recommender` interface and `Recommendation` model.
+- [x] P4.2 `YTMusicRadioRecommender`: unauthenticated `get_watch_playlist(radio=True)`, threaded, verified field names, 10-minute per-seed cache.
+- [x] P4.3 Filtering per `SPEC.md` §8 (seed, queued/playing, last 100 plays, normalized duplicates, non-music types, >10 min) and count trimming to `RECOMMEND_COUNT`.
+- [x] P4.4 Seed selection: explicit arg → now playing → requester's last completed track → error embed.
+- [x] P4.5 `recommendations` embed and `RecommendView` with a single-use **queue-all** button: permission rules, join-if-needed, lock against double-press, embed transitions to "queued", timeout disables the button.
+- [x] P4.6 Tests: filtering, seed selection order, view behavior (permission, double-press, timeout) with fakes.
 
 **Acceptance criteria**
 - `/recommend` while a song plays returns 5–10 relevant, non-duplicate tracks in one embed. *(manual)*

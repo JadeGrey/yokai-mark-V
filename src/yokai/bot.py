@@ -13,6 +13,7 @@ from yokai.config import Config
 from yokai.errors import YokaiError
 from yokai.health import HealthReport, check_health
 from yokai.music.player import GuildPlayer
+from yokai.music.recommend import YTMusicRadioRecommender
 from yokai.music.resolvers.matcher import TrackMatcher
 from yokai.music.resolvers.ytdlp import YtDlpResolver
 from yokai.music.spotify import (
@@ -53,6 +54,7 @@ class YokaiBot(commands.Bot):
             scraper_provider=scraper_sp,
         )
         self.matcher = TrackMatcher(ytdlp_resolver=self.resolver, db=self.db)
+        self.recommender = YTMusicRadioRecommender()
         self.players: dict[int, GuildPlayer] = {}
 
         # Standard default intents with zero privileged intents

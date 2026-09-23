@@ -15,7 +15,7 @@ from yokai.music.models import LoopMode, Track
 from yokai.music.spotify.urls import parse_spotify_uri_or_url, resolve_spotify_link
 from yokai.theme import quip_bank
 from yokai.ui.embeds import EmbedFactory, send
-from yokai.ui.views import QueuePaginator
+from yokai.ui.views import QueuePaginator, RecommendView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -501,6 +501,142 @@ class MusicCog(commands.Cog, name="Music"):
             context="Audio",
         )
         await send(interaction, embed=embed)
+
+    @app_commands.command(
+        name="recommend",
+        description="Get YouTube Music radio recommendations based on current track or query.",
+    )
+    @app_commands.describe(seed="Optional song title or link to seed recommendations")
+    async def recommend(self, interaction: discord.Interaction, seed: Optional[str] = None) -> None:
+        """Fetch and present radio recommendations with an interactive 'Queue them all' button."""
+        await interaction.response.defer(ephemeral=False)
+        player = self._player(interaction)
+        avatar_url = self.bot.user.display_avatar.url if self.bot.user else None
+
+        # 1. Seed selection hierarchy
+        seed_track: Optional[Track] = None
+
+        if seed and seed.strip():
+            classified = classify_input(seed)
+            if classified.kind == InputKind.SEARCH_QUERY:
+                seed_track = await player.resolver.resolve_query(
+                    classified.clean_target, interaction.user.id
+                )
+            elif classified.kind in (InputKind.YOUTUBE_TRACK, InputKind.YOUTUBE_PLAYLIST):
+                res, _ = await player.resolver.resolve_url(
+                    classified.clean_target, interaction.user.id, max_tracks=1
+                )
+                seed_track = res[0] if isinstance(res, list) else res
+            elif classified.kind in (
+                InputKind.SPOTIFY_TRACK,
+                InputKind.SPOTIFY_ALBUM,
+                InputKind.SPOTIFY_PLAYLIST,
+            ):
+                target = classified.clean_target
+                if "spotify.link" in target:
+                    target = await resolve_spotify_link(target)
+                e_type, e_id = parse_spotify_uri_or_url(target)
+                if e_type == "track":
+                    meta = await self.bot.spotify.resolve_track(e_id)
+                else:
+                    col = (
+                        await self.bot.spotify.resolve_album(e_id)
+                        if e_type == "album"
+                        else await self.bot.spotify.resolve_playlist(e_id, max_tracks=1)
+                    )
+                    if not col.tracks:
+                        embed = EmbedFactory.error(
+                            message=f"No playable tracks in Spotify {e_type}.",
+                            bot_avatar_url=avatar_url,
+                        )
+                        await send(interaction, embed=embed)
+                        return
+                    meta = col.tracks[0]
+
+                seed_track = await self.bot.matcher.match_track(meta, interaction.user.id)
+            else:
+                embed = EmbedFactory.error(
+                    message=classified.error_message or "Unsupported seed input.",
+                    user_hint=classified.user_hint,
+                    bot_avatar_url=avatar_url,
+                )
+                await send(interaction, embed=embed)
+                return
+
+        elif player.current_track:
+            seed_track = player.current_track
+
+        else:
+            # Check user's most recent completed track
+            recent = await self.bot.db.get_recent_completed_track(interaction.user.id)
+            if recent:
+                vid, title, artist = recent
+                seed_track = Track(
+                    video_id=vid,
+                    title=title,
+                    artist=artist,
+                    requester_id=interaction.user.id,
+                    origin="recommendation",
+                )
+
+        if not seed_track:
+            embed = EmbedFactory.warning(
+                title="No Seed Available",
+                description=(
+                    "I need a seed track to generate recommendations. "
+                    "Provide a song name, start playing music, or complete a track first."
+                ),
+                context="Recommendations",
+            )
+            await send(interaction, embed=embed)
+            return
+
+        # 2. Gather excluded video IDs (playing, queued, last 100 plays)
+        exclude_set: set[str] = {seed_track.video_id}
+        if player.current_track:
+            exclude_set.add(player.current_track.video_id)
+        for t in player.queue.upcoming:
+            exclude_set.add(t.video_id)
+
+        recent_played = await self.bot.db.get_recent_played_video_ids(limit=100)
+        exclude_set.update(recent_played)
+
+        # 3. Request recommendations
+        recommendation = await self.bot.recommender.recommend(
+            seed=seed_track,
+            count=self.bot.config.recommend_count,
+            exclude=exclude_set,
+        )
+
+        if not recommendation.tracks:
+            embed = EmbedFactory.warning(
+                title="No Recommendations Found",
+                description=f"Could not discover new radio tracks for **{seed_track.title}**.",
+                context="Recommendations",
+            )
+            await send(interaction, embed=embed)
+            return
+
+        # 4. Render recommendations embed with RecommendView
+        track_tuples = [
+            (t.title, t.artist or "Unknown Artist", t.duration_s) for t in recommendation.tracks
+        ]
+        embed = EmbedFactory.recommendations(
+            tracks=track_tuples,
+            seed_title=seed_track.title,
+            bot_avatar_url=avatar_url,
+        )
+
+        view = RecommendView(
+            player=player,
+            tracks=recommendation.tracks,
+            requester_id=interaction.user.id,
+            seed_title=seed_track.title,
+            bot_avatar_url=avatar_url,
+        )
+        msg = await send(interaction, embed=embed, view=view)
+        if isinstance(msg, discord.Message):
+            view.message = msg
 
 
 async def setup(bot: YokaiBot) -> None:

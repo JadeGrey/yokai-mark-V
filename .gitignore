@@ -29,3 +29,7 @@ logs/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# IDE & Editor files
+.idea/
+.vscode/
