@@ -52,15 +52,15 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 **Goal:** play music from YouTube links and search queries with a working queue.
 
-- [ ] P2.1 Models: `Track`, `StreamInfo`, queue with loop modes, history, size limits.
-- [ ] P2.2 Input classifier and URL allowlist (`SPEC.md` §7.2), fully unit-tested (watch/youtu.be/shorts/music/playlist/RD mix/Spotify/other hosts/garbage).
-- [ ] P2.3 `Resolver` interface and the yt-dlp implementation: threaded, timeout, semaphore, JS runtime configuration, optional cookie file, error mapping to typed errors.
-- [ ] P2.4 `GuildPlayer`: state machine, FFmpeg PCM + volume, reconnect options, prefetch next stream URL, `after` callback handled thread-safely, retry-once on stream failure with a fresh URL.
-- [ ] P2.5 Voice handling: join/move rules, permission checks with specific messages, auto-disconnect timers, kicked/moved cleanup, presence tied to connect/disconnect.
-- [ ] P2.6 Commands: `/play` (links, playlists with cap, search text), `/pause`, `/resume`, `/skip`, `/stop`, `/queue` (paginated), `/nowplaying`, `/remove`, `/clear`, `/shuffle`, `/loop`, `/volume`. All output via embeds.
-- [ ] P2.7 Play-event logging with outcomes `completed | skipped | stopped | error` and `listened_s`.
-- [ ] P2.8 Failure handling: consecutive-failure counter, YouTube health flag, one escalation embed, error ring buffer (used by `/diag` later).
-- [ ] P2.9 Tests with fakes: queue and loop logic, player state transitions, outcome classification, error handling paths, voice-rule checks.
+- [x] P2.1 Models: `Track`, `StreamInfo`, queue with loop modes, history, size limits.
+- [x] P2.2 Input classifier and URL allowlist (`SPEC.md` §7.2), fully unit-tested (watch/youtu.be/shorts/music/playlist/RD mix/Spotify/other hosts/garbage).
+- [x] P2.3 `Resolver` interface and the yt-dlp implementation: threaded, timeout, semaphore, JS runtime configuration, optional cookie file, error mapping to typed errors.
+- [x] P2.4 `GuildPlayer`: state machine, FFmpeg PCM + volume, reconnect options, prefetch next stream URL, `after` callback handled thread-safely, retry-once on stream failure with a fresh URL.
+- [x] P2.5 Voice handling: join/move rules, permission checks with specific messages, auto-disconnect timers, kicked/moved cleanup, presence tied to connect/disconnect.
+- [x] P2.6 Commands: `/play` (links, playlists with cap, search text), `/pause`, `/resume`, `/skip`, `/stop`, `/queue` (paginated), `/nowplaying`, `/remove`, `/clear`, `/shuffle`, `/loop`, `/volume`. All output via embeds.
+- [x] P2.7 Play-event logging with outcomes `completed | skipped | stopped | error` and `listened_s`.
+- [x] P2.8 Failure handling: consecutive-failure counter, YouTube health flag, one escalation embed, error ring buffer (used by `/diag` later).
+- [x] P2.9 Tests with fakes: queue and loop logic, player state transitions, outcome classification, error handling paths, voice-rule checks.
 
 **Acceptance criteria**
 - `/play <youtube url>` and `/play <search text>` produce audio in a voice channel, including inside a DAVE end-to-end-encrypted call. *(manual)*
