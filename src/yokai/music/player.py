@@ -225,6 +225,11 @@ class GuildPlayer:
         # Move to next track
         await self.play_next()
 
+    def maybe_prefetch(self) -> None:
+        """Trigger prefetching of the next track if playback is currently active."""
+        if self.is_playing:
+            self._trigger_prefetch()
+
     def _trigger_prefetch(self) -> None:
         """Schedule prefetching of the next track's stream URL in the background."""
         next_track = self.queue.peek_next()

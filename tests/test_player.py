@@ -242,3 +242,31 @@ async def test_alone_timer_management() -> None:
 
     player.on_voice_member_update()
     assert player._alone_timer is None
+
+
+@pytest.mark.asyncio
+async def test_maybe_prefetch() -> None:
+    mock_bot = MagicMock()
+    mock_bot.config.max_queue_size = 50
+    mock_bot.presence = AsyncMock()
+    resolver = FakeResolver()
+
+    player = GuildPlayer(guild_id=1, bot=mock_bot, resolver=resolver)
+    player.voice_client = FakeVoiceClient()
+    t1 = Track(video_id="v1", title="T1", duration_s=100)
+    t2 = Track(video_id="v2", title="T2", duration_s=100)
+    player.queue.add(t1)
+    player.queue.add(t2)
+
+    # 1. When idle, maybe_prefetch does nothing
+    player.state = PlayerState.IDLE
+    player.maybe_prefetch()
+    assert player._prefetch_task is None
+
+    # 2. When playing, maybe_prefetch triggers prefetch
+    player.state = PlayerState.PLAYING
+    player.maybe_prefetch()
+    assert player._prefetch_task is not None
+    await player._prefetch_task
+    assert player._prefetched is not None
+    assert player._prefetched[0] == "v1"

@@ -179,6 +179,7 @@ class MusicCog(commands.Cog, name="Music"):
                         bot_avatar_url=avatar_url,
                     )
                 else:
+                    player.maybe_prefetch()
                     pos = len(player.queue)
                     embed = EmbedFactory.queued(
                         title=track.title,
@@ -196,6 +197,7 @@ class MusicCog(commands.Cog, name="Music"):
                 player.queue.add(first)
                 await player.play_next()
                 added_rest = player.queue.add_many(rest)
+                player.maybe_prefetch()
                 total_loaded = 1 + added_rest
                 msg = (
                     f"Started playback with **{first.title}** "
@@ -203,6 +205,7 @@ class MusicCog(commands.Cog, name="Music"):
                 )
             else:
                 total_loaded = player.queue.add_many(tracks_to_queue)
+                player.maybe_prefetch()
                 msg = f"Queued **{total_loaded}** tracks from playlist."
 
             embed = EmbedFactory.success(

@@ -160,3 +160,29 @@ async def test_error_mapping_and_health_degradation() -> None:
         await resolver.get_stream(track)
         assert resolver.consecutive_failures == 0
         assert resolver.is_degraded is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_url_caches_stream_info() -> None:
+    single_data = {
+        "id": "vid_cached",
+        "title": "Cached Track",
+        "uploader": "Solo Artist",
+        "duration": 180,
+        "url": "https://googlevideo.com/playback_cached",
+        "http_headers": {"User-Agent": "FastAgent"},
+    }
+    resolver = YtDlpResolver()
+
+    # 1. Resolve URL extracts both metadata and direct audio stream
+    with patch.object(yt_dlp.YoutubeDL, "extract_info", return_value=single_data) as mock_extract:
+        track, _ = await resolver.resolve_url("https://www.youtube.com/watch?v=vid_cached", 999)
+        assert isinstance(track, Track)
+        assert mock_extract.call_count == 1
+
+    # 2. Subsequent get_stream should hit memory cache without calling extract_info again
+    with patch.object(yt_dlp.YoutubeDL, "extract_info") as mock_extract_again:
+        stream_info = await resolver.get_stream(track)
+        assert stream_info.url == "https://googlevideo.com/playback_cached"
+        assert stream_info.http_headers["User-Agent"] == "FastAgent"
+        mock_extract_again.assert_not_called()

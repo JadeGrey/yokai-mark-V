@@ -48,6 +48,9 @@ class YtDlpResolver(Resolver):
         self.is_degraded = False
         self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
 
+        # Short-lived in-memory stream cache: video_id -> (StreamInfo, expires_at)
+        self._stream_cache: dict[str, tuple[StreamInfo, float]] = {}
+
     def _get_base_opts(self) -> dict[str, Any]:
         """Construct standard yt-dlp execution options."""
         js_config: dict[str, Any] = {}
@@ -263,6 +266,15 @@ class YtDlpResolver(Resolver):
             artist = data.get("uploader") or data.get("channel") or data.get("artist")
             thumb = data.get("thumbnail")
 
+            # Cache stream info if direct audio URL was resolved with metadata
+            stream_url = data.get("url")
+            if stream_url:
+                headers = data.get("http_headers") or {}
+                self._stream_cache[vid] = (
+                    StreamInfo(url=stream_url, http_headers=headers, expires_at=time.time() + 1800),
+                    time.time() + 1800,
+                )
+
             self._record_success()
             return (
                 Track(
@@ -279,6 +291,15 @@ class YtDlpResolver(Resolver):
 
     async def get_stream(self, track: Track) -> StreamInfo:
         """Fetch fresh playback stream URL and HTTP headers for FFmpeg."""
+        # 1. Fast cache hit from resolve_url or recent extraction
+        cached = self._stream_cache.get(track.video_id)
+        if cached:
+            s_info, exp = cached
+            if time.time() < exp:
+                logger.debug("Stream cache hit for track %s", track.video_id)
+                return s_info
+            del self._stream_cache[track.video_id]
+
         async with self._semaphore:
             opts = self._get_base_opts()
             opts["noplaylist"] = True
@@ -309,8 +330,10 @@ class YtDlpResolver(Resolver):
 
             headers = data.get("http_headers") or {}
             self._record_success()
-            return StreamInfo(
+            info = StreamInfo(
                 url=stream_url,
                 http_headers=headers,
-                expires_at=time.time() + 3600,  # rough 1 hour validity hint
+                expires_at=time.time() + 1800,
             )
+            self._stream_cache[track.video_id] = (info, time.time() + 1800)
+            return info
