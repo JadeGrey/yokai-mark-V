@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import discord
 
@@ -77,3 +77,56 @@ class BaseView(discord.ui.View):
                 await interaction.followup.send(embed=err_embed, ephemeral=True)
         except Exception as exc:
             logger.error("Failed to notify user of view error: %s", exc)
+
+
+class QueuePaginator(BaseView):
+    """Interactive paginator for queue pages."""
+
+    def __init__(
+        self,
+        queue: Any,
+        author_id: int,
+        initial_page: int = 1,
+        bot_avatar_url: Optional[str] = None,
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(allowed_user_ids=[author_id], timeout=timeout)
+        self.queue = queue
+        self.current_page = initial_page
+        self.bot_avatar_url = bot_avatar_url
+        self._update_buttons()
+
+    def _update_buttons(self) -> None:
+        _, total_pages, _ = self.queue.get_page(self.current_page)
+        self.prev_button.disabled = self.current_page <= 1
+        self.next_button.disabled = self.current_page >= total_pages
+
+    def build_embed(self) -> discord.Embed:
+        tracks, total_pages, total_tracks = self.queue.get_page(self.current_page)
+        return EmbedFactory.queue_page(
+            tracks=[(pos, t.title, t.artist, t.duration_s) for pos, t in tracks],
+            page=self.current_page,
+            total_pages=total_pages,
+            total_tracks=total_tracks,
+            loop_mode=self.queue.loop_mode.value,
+            bot_avatar_url=self.bot_avatar_url,
+        )
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if self.current_page > 1:
+            self.current_page -= 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        _, total_pages, _ = self.queue.get_page(self.current_page)
+        if self.current_page < total_pages:
+            self.current_page += 1
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
