@@ -12,13 +12,13 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 ## Phase 0 — Owner prerequisites (done by the owner, not the agent)
 
-- [ ] O1. Create the Discord application and bot user; copy the token. Enable **no** privileged intents.
-- [ ] O2. Set the bot's name to Yokai and upload the avatar in the Developer Portal.
-- [ ] O3. Enable Developer Mode in Discord; copy the server ID (`GUILD_ID`) and your user ID (`OWNER_ID`).
-- [ ] O4. Invite the bot with scopes `bot` + `applications.commands` and permissions: View Channels, Send Messages, Embed Links, Connect, Speak.
-- [ ] O5. Install Python 3.12+, FFmpeg, and Deno; confirm `python --version`, `ffmpeg -version`, and `deno --version` work in PowerShell.
+- [x] O1. Create the Discord application and bot user; copy the token. Enable **no** privileged intents.
+- [x] O2. Set the bot's name to Yokai and upload the avatar in the Developer Portal.
+- [x] O3. Enable Developer Mode in Discord; copy the server ID (`GUILD_ID`) and your user ID (`OWNER_ID`).
+- [x] O4. Invite the bot with scopes `bot` + `applications.commands` and permissions: View Channels, Send Messages, Embed Links, Connect, Speak.
+- [x] O5. Install Python 3.12+, FFmpeg, and Deno; confirm `python --version`, `ffmpeg -version`, and `deno --version` work in PowerShell.
 - [ ] O6. (Optional, for the official Spotify provider) Create a Spotify developer app. The app owner needs Spotify Premium. Copy the client ID and secret. Skip this to run scraper-only.
-- [ ] O7. Create `.env` from `.env.example` once Phase 1 produces it.
+- [x] O7. Create `.env` from `.env.example` once Phase 1 produces it.
 
 ---
 
@@ -26,17 +26,17 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 **Goal:** a bot that starts, logs in, shows the right presence, and has the shared building blocks every later feature uses.
 
-- [ ] P1.1 Project skeleton: `pyproject.toml` (runtime + dev extras per `SPEC.md` §11), `src/yokai/` layout, `.gitignore` (`.env`, `data/`, `logs/`, `.venv/`), `.env.example` with every variable, short `README.md`.
-- [ ] P1.2 `config.py`: load and validate environment variables; clear error messages for missing required values.
-- [ ] P1.3 Logging: rotating file in `logs/` plus console; token and cookie redaction.
-- [ ] P1.4 Startup health checks: `davey` importable, `ffmpeg` and `deno` found (versions logged), yt-dlp version and release age logged. Failures produce clear log lines; missing FFmpeg or `davey` blocks voice features but not startup.
-- [ ] P1.5 `bot.py` and `__main__.py`: `Bot` subclass with default intents (no privileged), `allowed_mentions=none`, initial presence idle + Watching "for plant", guild-scoped command sync in `setup_hook`, cog auto-loading, graceful shutdown.
-- [ ] P1.6 Typed errors in `errors.py` per `SPEC.md` §7.7.
-- [ ] P1.7 `theme.py` and the **universal embed system** (`ui/embeds.py`, `ui/views.py`): all builders in `SPEC.md` §5, `clamp()` helpers, `send()` helper, `BaseView`, quip bank with no-repeat selection.
-- [ ] P1.8 SQLite layer (`storage/`): connection management, WAL, `PRAGMA user_version` migrations, tables from `SPEC.md` §10, small repository functions.
-- [ ] P1.9 Central command logging hook writing to `command_log`.
-- [ ] P1.10 `PresenceManager` state machine (idempotent), unit-tested with a fake client.
-- [ ] P1.11 Temporary `/ping` stub or hello command to prove the embed system and hook work end-to-end (replaced in Phase 5).
+- [x] P1.1 Project skeleton: `pyproject.toml` (runtime + dev extras per `SPEC.md` §11), `src/yokai/` layout, `.gitignore` (`.env`, `data/`, `logs/`, `.venv/`), `.env.example` with every variable, short `README.md`.
+- [x] P1.2 `config.py`: load and validate environment variables; clear error messages for missing required values.
+- [x] P1.3 Logging: rotating file in `logs/` plus console; token and cookie redaction.
+- [x] P1.4 Startup health checks: `davey` importable, `ffmpeg` and `deno` found (versions logged), yt-dlp version and release age logged. Failures produce clear log lines; missing FFmpeg or `davey` blocks voice features but not startup.
+- [x] P1.5 `bot.py` and `__main__.py`: `Bot` subclass with default intents (no privileged), `allowed_mentions=none`, initial presence idle + Watching "for plant", guild-scoped command sync in `setup_hook`, cog auto-loading, graceful shutdown.
+- [x] P1.6 Typed errors in `errors.py` per `SPEC.md` §7.7.
+- [x] P1.7 `theme.py` and the **universal embed system** (`ui/embeds.py`, `ui/views.py`): all builders in `SPEC.md` §5, `clamp()` helpers, `send()` helper, `BaseView`, quip bank with no-repeat selection.
+- [x] P1.8 SQLite layer (`storage/`): connection management, WAL, `PRAGMA user_version` migrations, tables from `SPEC.md` §10, small repository functions.
+- [x] P1.9 Central command logging hook writing to `command_log`.
+- [x] P1.10 `PresenceManager` state machine (idempotent), unit-tested with a fake client.
+- [x] P1.11 Temporary `/ping` stub or hello command to prove the embed system and hook work end-to-end (replaced in Phase 5).
 
 **Acceptance criteria**
 - `python -m yokai` logs in; the bot shows **idle** and **Watching for plant**. *(manual)*
