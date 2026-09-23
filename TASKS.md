@@ -140,11 +140,12 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 ## Phase 6 — Hardening and polish
 
-- [ ] P6.1 `run.ps1` (activate venv, restart on crash with delay); README covers setup, `.env`, running, updating yt-dlp, and the note that the bot is offline while the PC sleeps.
-- [ ] P6.2 Persona pass: read every user-facing string; trim quips that appear too often; confirm at most one quip and one emoji per embed; confirm errors are plain and useful.
-- [ ] P6.3 Rate-limit and concurrency review: presence updates, followups, extraction semaphore, double-invocation of `/play`.
-- [ ] P6.4 Log review: no secrets, useful context, sensible levels.
-- [ ] P6.5 Run the manual QA checklist below and record results in `QA.md` (short).
+- [x] P6.1 `run.ps1` (activate venv, restart on crash with delay); README covers setup, `.env`, running, updating yt-dlp, and the note that the bot is offline while the PC sleeps.
+- [x] P6.2 Persona pass: read every user-facing string; trim quips that appear too often; confirm at most one quip and one emoji per embed; confirm errors are plain and useful.
+- [x] P6.3 Rate-limit and concurrency review: presence updates, followups, extraction semaphore, double-invocation of `/play`.
+- [x] P6.4 Log review: no secrets, useful context, sensible levels.
+- [x] P6.5 Run the manual QA checklist below and record results in `QA.md` (short).
+
 
 **Manual QA checklist (owner and agent together)**
 1. Fresh start → idle + Watching for plant.

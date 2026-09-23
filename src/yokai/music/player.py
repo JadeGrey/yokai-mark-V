@@ -61,6 +61,9 @@ class GuildPlayer:
         # Escalation flag to notify text channel only once per failure burst
         self._escalated: bool = False
 
+        # Concurrency lock ensuring serialized queue transitions
+        self._play_lock: asyncio.Lock = asyncio.Lock()
+
     @property
     def is_playing(self) -> bool:
         return self.state == PlayerState.PLAYING and self.voice_client is not None
@@ -107,7 +110,12 @@ class GuildPlayer:
             raise VoiceError(f"Could not connect to voice channel #{channel.name}: {exc}") from exc
 
     async def play_next(self) -> None:
-        """Advance queue and start playback of the next track."""
+        """Advance queue and start playback of the next track with concurrency protection."""
+        async with self._play_lock:
+            await self._play_next_inner()
+
+    async def _play_next_inner(self) -> None:
+        """Internal queue advancement without re-acquiring _play_lock."""
         self._cancel_idle_timer()
 
         if not self.voice_client or not self.voice_client.is_connected():
@@ -163,11 +171,11 @@ class GuildPlayer:
                                 await self.text_channel.send(embed=warn_embed)
                             except Exception:
                                 pass
-                        await self.play_next()
+                        await self._play_next_inner()
                         return
                 except Exception as exc:
                     logger.error("Error matching track %s: %s", track.spotify_meta.title, exc)
-                    await self.play_next()
+                    await self._play_next_inner()
                     return
 
         stream_info: Optional[StreamInfo] = None
@@ -261,7 +269,7 @@ class GuildPlayer:
                     logger.debug("Could not send escalation warning: %s", send_err)
 
         # Move to next track
-        await self.play_next()
+        await self._play_next_inner()
 
     def maybe_prefetch(self) -> None:
         """Trigger prefetching of the next track if playback is currently active."""

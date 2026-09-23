@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 import discord
 
+from yokai.music.models import PlayerState
 from yokai.theme import quip_bank
 from yokai.ui.embeds import EmbedFactory
 
@@ -218,7 +219,7 @@ class RecommendView(BaseView):
             if not self.tracks:
                 return
 
-            if not self.player.is_playing and not self.player.is_paused:
+            if self.player.state == PlayerState.IDLE:
                 first = self.tracks[0]
                 rest = self.tracks[1:]
                 self.player.queue.add(first)

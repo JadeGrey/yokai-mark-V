@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from yokai.errors import VoiceChannelError, VoicePermissionError
 from yokai.music.classifier import InputKind, classify_input
-from yokai.music.models import LoopMode, Track
+from yokai.music.models import LoopMode, PlayerState, Track
 from yokai.music.spotify.urls import parse_spotify_uri_or_url, resolve_spotify_link
 from yokai.theme import quip_bank
 from yokai.ui.embeds import EmbedFactory, send
@@ -206,7 +206,7 @@ class MusicCog(commands.Cog, name="Music"):
         # 4. Enqueue and start playback
         if not is_playlist:
             track = tracks_to_queue[0]
-            if not player.is_playing and not player.is_paused:
+            if player.state == PlayerState.IDLE:
                 player.queue.add(track)
                 await player.play_next()
                 embed = EmbedFactory.now_playing(
@@ -241,10 +241,11 @@ class MusicCog(commands.Cog, name="Music"):
             # Playlist queueing: start first immediately if idle
             first = tracks_to_queue[0]
             rest = tracks_to_queue[1:]
-            if not player.is_playing and not player.is_paused:
+            if player.state == PlayerState.IDLE:
                 player.queue.add(first)
                 await player.play_next()
                 added_rest = player.queue.add_many(rest)
+
                 player.maybe_prefetch()
                 total_loaded = 1 + added_rest
                 msg = (
