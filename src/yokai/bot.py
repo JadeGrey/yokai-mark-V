@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import collections
 import logging
+import time
 from typing import Optional
 
 import discord
@@ -56,6 +58,8 @@ class YokaiBot(commands.Bot):
         self.matcher = TrackMatcher(ytdlp_resolver=self.resolver, db=self.db)
         self.recommender = YTMusicRadioRecommender()
         self.players: dict[int, GuildPlayer] = {}
+        self.start_time = time.time()
+        self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
 
         # Standard default intents with zero privileged intents
         intents = discord.Intents.default()
@@ -140,6 +144,9 @@ class YokaiBot(commands.Bot):
             await self.db.log_command(interaction.user.id, cmd_name)
         except Exception as db_exc:
             logger.error("Failed to record failed command to db: %s", db_exc)
+
+        err_msg = str(cause).splitlines()[0] if str(cause) else type(cause).__name__
+        self.error_ring_buffer.append(f"/{cmd_name}: {type(cause).__name__}: {err_msg}")
 
         avatar_url = str(self.user.display_avatar.url) if self.user else None
 

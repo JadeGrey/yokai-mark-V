@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
+import sys
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 import discord
@@ -238,3 +240,86 @@ class RecommendView(BaseView):
                 bot_avatar_url=self.bot_avatar_url,
             )
             await interaction.response.edit_message(embed=embed, view=self)
+
+
+class DiagView(BaseView):
+    """Owner-only diagnostic view featuring an in-place yt-dlp package updater."""
+
+    def __init__(
+        self,
+        owner_id: int,
+        bot_avatar_url: Optional[str] = None,
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(allowed_user_ids=[owner_id], timeout=timeout)
+        self.owner_id = owner_id
+        self.bot_avatar_url = bot_avatar_url
+        self._lock = asyncio.Lock()
+        self._updated = False
+
+    @discord.ui.button(label="Update yt-dlp", style=discord.ButtonStyle.primary, emoji="🔄")
+    async def update_ytdlp_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        async with self._lock:
+            if self._updated:
+                return
+            self._updated = True
+
+            # Defer followup because pip install takes a few seconds
+            await interaction.response.defer(ephemeral=True)
+
+            self.disable_all_items()
+            if self.message:
+                try:
+                    await self.message.edit(view=self)
+                except Exception:
+                    pass
+
+            def _run_pip_update() -> subprocess.CompletedProcess[str]:
+                cmd = [sys.executable, "-m", "pip", "install", "-U", "yt-dlp[default]"]
+                return subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=False,
+                )
+
+            try:
+                proc = await asyncio.to_thread(_run_pip_update)
+                if proc.returncode == 0:
+                    embed = EmbedFactory.success(
+                        title="yt-dlp Updated",
+                        description=(
+                            "yt-dlp was successfully updated to the latest release.\n\n"
+                            "⚠️ **Restart Required:** Please restart the Yokai process "
+                            "to load the updated package into memory."
+                        ),
+                        context="Maintenance",
+                        bot_avatar_url=self.bot_avatar_url,
+                    )
+
+                else:
+                    err_lines = (
+                        (proc.stderr or proc.stdout or "Unknown pip error").strip().splitlines()
+                    )
+                    last_err = err_lines[-1] if err_lines else f"Exit code {proc.returncode}"
+                    embed = EmbedFactory.error(
+                        message=f"Failed to update yt-dlp: {last_err}",
+                        user_hint="Check host environment and pip permissions.",
+                        context="Maintenance",
+                        bot_avatar_url=self.bot_avatar_url,
+                        include_quip=False,
+                    )
+            except Exception as exc:
+                logger.error("Exception occurred while updating yt-dlp: %s", exc)
+                embed = EmbedFactory.error(
+                    message=f"Failed to execute pip update: {exc}",
+                    user_hint="Check host environment permissions.",
+                    context="Maintenance",
+                    bot_avatar_url=self.bot_avatar_url,
+                    include_quip=False,
+                )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)

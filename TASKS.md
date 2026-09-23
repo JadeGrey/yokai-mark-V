@@ -122,11 +122,12 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 ## Phase 5 — Utility and troubleshooting commands
 
-- [ ] P5.1 `/ping`: gateway, REST round-trip, voice, resolver (rolling average of last 10), database; status color from worst latency; NaN/not-ready safe.
-- [ ] P5.2 `/usage`: top 10 by commands, tracks requested per user, top 5 commands, period option; mentions inside the embed.
-- [ ] P5.3 `/about`: fields and disclaimer per `SPEC.md` §9.
-- [ ] P5.4 `/diag` (owner-only, ephemeral): versions, DAVE status, FFmpeg/Deno, yt-dlp age, YouTube health, Spotify provider status, ytmusicapi version, DB size, last 20 sanitized errors, **Update yt-dlp** button (argument-list subprocess, no shell, tells the owner to restart).
-- [ ] P5.5 Tests: usage aggregation queries (period boundaries, ties, empty data), ping formatting, owner check on `/diag`.
+- [x] P5.1 `/ping`: gateway, REST round-trip, voice, resolver (rolling average of last 10), database; status color from worst latency; NaN/not-ready safe.
+- [x] P5.2 `/usage`: top 10 by commands, tracks requested per user, top 5 commands, period option; mentions inside the embed.
+- [x] P5.3 `/about`: fields and disclaimer per `SPEC.md` §9.
+- [x] P5.4 `/diag` (owner-only, ephemeral): versions, DAVE status, FFmpeg/Deno, yt-dlp age, YouTube health, Spotify provider status, ytmusicapi version, DB size, last 20 sanitized errors, **Update yt-dlp** button (argument-list subprocess, no shell, tells the owner to restart).
+- [x] P5.5 Tests: usage aggregation queries (period boundaries, ties, empty data), ping formatting, owner check on `/diag`.
+
 
 **Acceptance criteria**
 - All four commands render correctly in themed embeds and stay within embed limits. *(manual)*

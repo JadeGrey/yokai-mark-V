@@ -271,6 +271,7 @@ class EmbedFactory:
         rest_ms: Optional[float],
         db_ms: Optional[float],
         voice_ms: Optional[float] = None,
+        voice_avg_ms: Optional[float] = None,
         resolver_ms: Optional[float] = None,
         bot_avatar_url: Optional[str] = None,
     ) -> discord.Embed:
@@ -303,8 +304,18 @@ class EmbedFactory:
         embed.add_field(name="Gateway (WS)", value=_fmt(gateway_ms), inline=True)
         embed.add_field(name="REST API", value=_fmt(rest_ms), inline=True)
         embed.add_field(name="Database", value=_fmt(db_ms), inline=True)
-        embed.add_field(name="Voice", value=_fmt(voice_ms), inline=True)
-        embed.add_field(name="Resolver", value=_fmt(resolver_ms), inline=True)
+
+        if voice_ms is not None:
+            if voice_avg_ms is not None:
+                voice_val = f"`{voice_ms:.1f} ms` (avg `{voice_avg_ms:.1f} ms`)"
+            else:
+                voice_val = f"`{voice_ms:.1f} ms`"
+        else:
+            voice_val = "*Not connected*"
+        embed.add_field(name="Voice", value=voice_val, inline=True)
+
+        resolver_val = f"`{resolver_ms:.1f} ms`" if resolver_ms is not None else "*No data yet*"
+        embed.add_field(name="Resolver", value=resolver_val, inline=True)
 
         return embed
 
@@ -403,8 +414,23 @@ class EmbedFactory:
             embed.add_field(name=clamp(key, 50), value=clamp(str(val), 200), inline=True)
 
         if recent_errors:
-            err_summary = "\n".join(f"• {clamp(e, 100)}" for e in recent_errors[-5:])
-            embed.add_field(name="Recent Exceptions", value=clamp(err_summary, 1000), inline=False)
+            lines: list[str] = []
+            char_count = 0
+            for err in recent_errors[-20:]:
+                line = f"• {clamp(err, 120)}"
+                if char_count + len(line) + 1 > 1000:
+                    lines.append("• ... (truncated)")
+                    break
+                lines.append(line)
+                char_count += len(line) + 1
+
+            embed.add_field(
+                name=f"Recent Exceptions ({len(recent_errors)})",
+                value="\n".join(lines) if lines else "*No errors recorded.*",
+                inline=False,
+            )
+        else:
+            embed.add_field(name="Recent Exceptions", value="*No errors recorded.*", inline=False)
 
         return embed
 

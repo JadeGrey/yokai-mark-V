@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from yokai.music.models import StreamInfo, Track
 
@@ -30,3 +31,7 @@ class Resolver(ABC):
     async def get_stream(self, track: Track) -> StreamInfo:
         """Fetch fresh direct playback audio stream URL and HTTP headers for FFmpeg."""
         ...
+
+    def get_average_latency(self) -> Optional[float]:
+        """Return rolling average resolution latency in milliseconds, or None if no data."""
+        return None

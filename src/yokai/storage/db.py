@@ -161,7 +161,7 @@ class Database:
         FROM command_log
         {where_cmd}
         GROUP BY user_id
-        ORDER BY cmd_count DESC
+        ORDER BY cmd_count DESC, user_id ASC
         LIMIT 10;
         """
         async with self.conn.execute(user_query, params) as cursor:
@@ -186,7 +186,7 @@ class Database:
         FROM command_log
         {where_cmd}
         GROUP BY command
-        ORDER BY count DESC
+        ORDER BY count DESC, command ASC
         LIMIT 5;
         """
         async with self.conn.execute(cmd_query, params) as cursor:

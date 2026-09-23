@@ -47,6 +47,7 @@ class YtDlpResolver(Resolver):
         self.consecutive_failures = 0
         self.is_degraded = False
         self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
+        self.resolve_latencies: collections.deque[float] = collections.deque(maxlen=10)
 
         # Short-lived in-memory stream cache: video_id -> (StreamInfo, expires_at)
         self._stream_cache: dict[str, tuple[StreamInfo, float]] = {}
@@ -126,6 +127,7 @@ class YtDlpResolver(Resolver):
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     return ydl.extract_info(search_term, download=False) or {}
 
+            start_time = time.perf_counter()
             try:
                 data = await asyncio.wait_for(
                     asyncio.to_thread(_search),
@@ -156,6 +158,8 @@ class YtDlpResolver(Resolver):
                 thumb = entry.get("thumbnail")
 
                 self._record_success()
+                self.resolve_latencies.append((time.perf_counter() - start_time) * 1000.0)
+
                 return Track(
                     video_id=vid,
                     title=title,
@@ -210,6 +214,7 @@ class YtDlpResolver(Resolver):
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     return ydl.extract_info(url, download=False) or {}
 
+            start_time = time.perf_counter()
             try:
                 data = await asyncio.wait_for(
                     asyncio.to_thread(_extract),
@@ -264,6 +269,7 @@ class YtDlpResolver(Resolver):
                     )
 
                 self._record_success()
+                self.resolve_latencies.append((time.perf_counter() - start_time) * 1000.0)
                 return tracks, True
 
             # Single track
@@ -298,6 +304,7 @@ class YtDlpResolver(Resolver):
                 )
 
             self._record_success()
+            self.resolve_latencies.append((time.perf_counter() - start_time) * 1000.0)
             return (
                 Track(
                     video_id=vid,
@@ -359,3 +366,9 @@ class YtDlpResolver(Resolver):
             )
             self._stream_cache[track.video_id] = (info, time.time() + 1800)
             return info
+
+    def get_average_latency(self) -> Optional[float]:
+        """Return rolling average resolution latency in milliseconds, or None if no data."""
+        if not self.resolve_latencies:
+            return None
+        return sum(self.resolve_latencies) / len(self.resolve_latencies)
