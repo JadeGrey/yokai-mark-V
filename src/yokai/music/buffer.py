@@ -57,9 +57,13 @@ async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
         proc.kill()
         await proc.wait()
         raise
+    detail = stderr.decode(errors="replace").strip()
     if proc.returncode != 0:
-        detail = stderr.decode(errors="replace")[:200]
-        raise RuntimeError(f"ffmpeg exited {proc.returncode}: {detail}")
+        raise RuntimeError(f"ffmpeg exited {proc.returncode}: {detail[:200]}")
+    if detail:
+        # With `-loglevel error`, any output means a read failed; FFmpeg can still exit 0
+        # after a mid-stream error, leaving a truncated file.
+        raise RuntimeError(f"ffmpeg reported errors: {detail[:200]}")
 
 
 class AudioBuffer:
@@ -80,6 +84,7 @@ class AudioBuffer:
         self._semaphore = asyncio.Semaphore(1)
         self._inflight: dict[str, asyncio.Task[Optional[Path]]] = {}
         self._protected: set[str] = set()
+        self._discarded: set[str] = set()  # discarded files that could not be deleted yet
 
     @property
     def enabled(self) -> bool:
@@ -109,13 +114,33 @@ class AudioBuffer:
     def get(self, video_id: str) -> Optional[Path]:
         """Return the finished file for a video (and mark it recently used), or None."""
         path = self.path_for(video_id)
-        if path is None or not path.is_file():
+        if path is None:
+            return None
+        if video_id in self._discarded:
+            self._unlink_quietly(path)
+            if not path.exists():
+                self._discarded.discard(video_id)
+            return None
+        if not path.is_file():
             return None
         try:
             os.utime(path)
         except OSError:
             return None
         return path
+
+    def discard(self, video_id: str) -> None:
+        """Delete a video's finished file (e.g., it ended early, so it may be truncated).
+
+        On Windows the file can still be open by the FFmpeg process that just played it; then
+        it is remembered as discarded, never served again, and deleted on a later `get`.
+        """
+        path = self.path_for(video_id)
+        if path is None:
+            return
+        self._unlink_quietly(path)
+        if path.exists():
+            self._discarded.add(video_id)
 
     def protect(self, video_ids: Iterable[str]) -> None:
         """Never evict these videos (the current and upcoming tracks)."""
@@ -144,6 +169,7 @@ class AudioBuffer:
                 self.directory.mkdir(parents=True, exist_ok=True)
                 await self._downloader(url, part)
                 os.replace(part, dest)
+                self._discarded.discard(video_id)  # the old file was replaced by a fresh one
             except asyncio.CancelledError:
                 self._unlink_quietly(part)
                 raise
@@ -184,3 +210,4 @@ class AudioBuffer:
         await asyncio.gather(*tasks, return_exceptions=True)
         self._inflight.clear()
         await asyncio.to_thread(self._reset_directory)
+        self._discarded.clear()

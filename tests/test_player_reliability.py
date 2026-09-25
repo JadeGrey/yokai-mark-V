@@ -646,6 +646,82 @@ async def test_buffer_failure_does_not_block_playback(ffmpeg, tmp_path: Path) ->
     assert ffmpeg.call_args_list[-1].args[0].startswith("http://stream.test/")
 
 
+def buffered_player(tmp_path: Path, *video_ids: str) -> tuple[GuildPlayer, FakeVoiceClient, Path]:
+    """A player whose buffer already holds finished files for `video_ids`."""
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for video_id in video_ids:
+        (cache / f"{video_id}.mka").write_bytes(b"audio")
+    player, vc, _bot = make_player()
+    player.buffer = AudioBuffer(cache, 10_000_000)
+    return player, vc, cache
+
+
+async def test_resume_does_not_replay_the_buffer_file(ffmpeg, tmp_path: Path) -> None:
+    player, vc, cache = buffered_player(tmp_path, "track_a1")
+    player.queue.add(make_track("track_a1"))
+    await player.play_next()
+    assert ffmpeg.call_args_list[-1].args[0] == str(cache / "track_a1.mka")
+
+    age_playback(player, 60)
+    vc.finish()  # a (possibly truncated) local file ended at 60 s of 180
+    await settle()
+
+    last_call = ffmpeg.call_args_list[-1]
+    assert last_call.args[0] == "http://stream.test/track_a1"
+    assert "-ss 60" in last_call.kwargs["before_options"]
+    assert not (cache / "track_a1.mka").exists()  # the bad file is gone for later plays
+
+
+async def test_resume_of_a_url_source_ignores_a_buffer_file(ffmpeg, tmp_path: Path) -> None:
+    """A file finished while the track played from its URL: a seek into it is not trusted."""
+    player, vc, cache = buffered_player(tmp_path)
+    player.queue.add(make_track("track_a1"))
+    await player.play_next()
+    assert ffmpeg.call_args_list[-1].args[0] == "http://stream.test/track_a1"
+    (cache / "track_a1.mka").write_bytes(b"audio")
+
+    age_playback(player, 60)
+    vc.finish()
+    await settle()
+
+    assert ffmpeg.call_args_list[-1].args[0] == "http://stream.test/track_a1"
+    assert "-ss 60" in ffmpeg.call_args_list[-1].kwargs["before_options"]
+
+
+async def test_instant_end_of_a_buffer_file_deletes_it_and_uses_the_url(
+    ffmpeg, tmp_path: Path
+) -> None:
+    player, vc, cache = buffered_player(tmp_path, "track_a1")
+    player.queue.add(make_track("track_a1"))
+    await player.play_next()
+
+    vc.finish()  # the file "ends" at 0 s: a bad file, retried from offset 0
+    await settle()
+
+    assert ffmpeg.call_args_list[-1].args[0] == "http://stream.test/track_a1"
+    assert not (cache / "track_a1.mka").exists()
+
+
+async def test_second_stream_attempt_skips_the_buffer_file(ffmpeg, tmp_path: Path) -> None:
+    player, _vc, cache = buffered_player(tmp_path, "track_a1")
+    player.queue.add(make_track("track_a1"))
+    real_factory = ffmpeg.side_effect
+    calls: list[object] = []
+
+    def fail_first(*args: object, **kwargs: object) -> RecordingSource:
+        calls.append(args[0])
+        if len(calls) == 1:
+            raise RuntimeError("ffmpeg could not start")
+        return real_factory(*args, **kwargs)
+
+    ffmpeg.side_effect = fail_first
+    await player.play_next()
+
+    assert calls == [str(cache / "track_a1.mka"), "http://stream.test/track_a1"]
+    assert player.state == PlayerState.PLAYING
+
+
 async def test_stop_clears_the_buffer(ffmpeg, tmp_path: Path) -> None:
     buffer = AudioBuffer(tmp_path / "cache", 10_000_000)
     buffer.clear = AsyncMock()  # type: ignore[method-assign]

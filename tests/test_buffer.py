@@ -298,6 +298,80 @@ async def test_ffmpeg_download_non_zero_exit(
 
 
 @pytest.mark.asyncio
+async def test_ffmpeg_download_stderr_with_zero_exit_is_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With -loglevel error, any stderr output means the copy may be truncated."""
+    fake_proc = AsyncMock()
+    fake_proc.communicate = AsyncMock(return_value=(b"", b"Error in the pull function."))
+    fake_proc.returncode = 0
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return fake_proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    with pytest.raises(RuntimeError) as exc_info:
+        await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+    assert "Error in the pull function." in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_download_reporting_errors_leaves_no_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        Path(args[-1]).write_bytes(b"truncated")  # FFmpeg wrote a partial .part file
+        proc = AsyncMock()
+        proc.communicate = AsyncMock(return_value=(b"", b"Connection reset by peer"))
+        proc.returncode = 0
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    buffer = AudioBuffer(tmp_path, 10_000)  # default downloader: ffmpeg_download
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    assert buffer.get("aaaaaaaa") is None
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.asyncio
+async def test_discard_deletes_a_finished_file_quietly(tmp_path: Path) -> None:
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=make_downloader())
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    assert buffer.get("aaaaaaaa") is not None
+
+    buffer.discard("aaaaaaaa")
+    assert buffer.get("aaaaaaaa") is None
+    assert list(tmp_path.iterdir()) == []
+    buffer.discard("aaaaaaaa")  # already gone: no error
+    buffer.discard("../evil")  # unsafe id: ignored
+
+
+@pytest.mark.asyncio
+async def test_discarded_file_still_in_use_is_never_served(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On Windows the FFmpeg that just played the file may still hold it open."""
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=make_downloader())
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    orig_unlink = Path.unlink
+
+    def locked_unlink(self: Path, missing_ok: bool = False) -> None:
+        raise PermissionError("file in use")
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    buffer.discard("aaaaaaaa")  # must not raise
+    assert (tmp_path / "aaaaaaaa.mka").exists()
+    assert buffer.get("aaaaaaaa") is None
+
+    monkeypatch.setattr(Path, "unlink", orig_unlink)  # FFmpeg exited: the file is free
+    assert buffer.get("aaaaaaaa") is None
+    assert not (tmp_path / "aaaaaaaa.mka").exists()
+
+
+@pytest.mark.asyncio
 async def test_ffmpeg_download_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_proc = AsyncMock()
 

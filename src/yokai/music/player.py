@@ -50,6 +50,7 @@ class _Prepared:
 
     track: Track
     source: discord.PCMVolumeTransformer
+    from_file: bool = False
 
 
 class GuildPlayer:
@@ -76,6 +77,7 @@ class GuildPlayer:
         # Playback volume (0.0 to 1.0)
         self.volume: float = 0.5
         self._current_source: Optional[discord.PCMVolumeTransformer] = None
+        self._current_from_file: bool = False  # current source reads a local buffer file
 
         # Elapsed timing (monotonic clock minus paused time, plus a resume offset)
         self._track_start_time: float = 0.0
@@ -228,13 +230,16 @@ class GuildPlayer:
     async def _advance_worker(self, generation: int, track: Optional[Track], start_s: int) -> None:
         """Load `track` (or, on failure, the following ones) and start playing it."""
         source: Optional[discord.PCMVolumeTransformer] = None
+        from_file = False
         try:
             while track is not None and generation == self._generation:
                 try:
                     with StageTimer("track_load", video=track.video_id, resume_s=start_s):
-                        source = self._take_prepared(track) if start_s == 0 else None
-                        if source is None:
-                            source = await self._prepare_source(track, start_s)
+                        prepared = self._take_prepared(track) if start_s == 0 else None
+                        if prepared is not None:
+                            source, from_file = prepared.source, prepared.from_file
+                        else:
+                            source, from_file = await self._prepare_source(track, start_s)
                 except Exception as exc:
                     if generation != self._generation:
                         return
@@ -249,7 +254,7 @@ class GuildPlayer:
                 if generation != self._generation:
                     return  # superseded while loading; `finally` discards the source
                 ready, source = source, None
-                self._play_source(generation, track, ready, start_s)
+                self._play_source(generation, track, ready, start_s, from_file)
                 return
         finally:
             if source is not None:
@@ -273,9 +278,9 @@ class GuildPlayer:
         track.origin = "import"
         track.is_pending_match = False
 
-    async def _stream_target(self, track: Track) -> tuple[str, bool]:
+    async def _stream_target(self, track: Track, use_buffer: bool = True) -> tuple[str, bool]:
         """Return (FFmpeg input, is_local_file): buffer file, prefetched URL, or fresh URL."""
-        if self.buffer is not None:
+        if use_buffer and self.buffer is not None:
             path = self.buffer.get(track.video_id)
             if path is not None:
                 return str(path), True
@@ -305,14 +310,21 @@ class GuildPlayer:
         )
         return discord.PCMVolumeTransformer(source, volume=self.volume)
 
-    async def _prepare_source(self, track: Track, start_s: int) -> discord.PCMVolumeTransformer:
-        """Match if needed, find a stream, start FFmpeg. Two attempts, each time-limited."""
+    async def _prepare_source(
+        self, track: Track, start_s: int
+    ) -> tuple[discord.PCMVolumeTransformer, bool]:
+        """Match if needed, find a stream, start FFmpeg. Two attempts, each time-limited.
+
+        Returns (source, from_file). A resume (`start_s > 0`) or a retry never uses the local
+        buffer file: a file that ended early is likely truncated, so seeking in it is useless.
+        """
         await self._ensure_matched(track)
         error: Exception = RuntimeError("no stream attempt was made")
         for attempt in (1, 2):
             try:
-                target, is_file = await self._stream_target(track)
-                return self._build_source(target, is_file, start_s)
+                use_buffer = start_s == 0 and attempt == 1
+                target, is_file = await self._stream_target(track, use_buffer=use_buffer)
+                return self._build_source(target, is_file, start_s), is_file
             except Exception as exc:
                 error = exc
                 logger.warning("Stream attempt %d failed for %s: %s", attempt, track.video_id, exc)
@@ -320,12 +332,12 @@ class GuildPlayer:
                 self.resolver.invalidate_stream(track.video_id)
         raise error
 
-    def _take_prepared(self, track: Track) -> Optional[discord.PCMVolumeTransformer]:
+    def _take_prepared(self, track: Track) -> Optional[_Prepared]:
         prepared, self._prepared = self._prepared, None
         if prepared is None:
             return None
         if prepared.track is track:
-            return prepared.source
+            return prepared
         self._discard_source(prepared.source)
         return None
 
@@ -335,6 +347,7 @@ class GuildPlayer:
         track: Track,
         source: discord.PCMVolumeTransformer,
         start_s: int,
+        from_file: bool = False,
     ) -> None:
         vc = self.voice_client
         if vc is None or not vc.is_connected():
@@ -362,6 +375,7 @@ class GuildPlayer:
                 pass  # event loop already closed (shutdown)
 
         self._current_source = source
+        self._current_from_file = from_file
         self._track_start_time = time.monotonic()
         self._paused_duration = 0.0
         self._pause_start_time = 0.0
@@ -426,6 +440,11 @@ class GuildPlayer:
             premature = listened - self._track_offset >= RESUMED_END_GRACE_S
         if error is not None:
             logger.error("Track %s ended with error: %s", track.video_id, error)
+        if (error is not None or premature) and self._current_from_file:
+            # The network cannot cut off a local file, so the file itself is bad (truncated).
+            self._current_from_file = False
+            if self.buffer is not None:
+                self.buffer.discard(track.video_id)
 
         if (error is not None or premature) and self._resume_attempts < MAX_RESUME_ATTEMPTS:
             self._resume_attempts += 1
@@ -583,7 +602,7 @@ class GuildPlayer:
 
     async def _prebuild_next(self, upcoming: Track, generation: int) -> None:
         try:
-            source = await self._prepare_source(upcoming, 0)
+            source, from_file = await self._prepare_source(upcoming, 0)
         except Exception as exc:
             logger.debug("Pre-build of %s failed: %s", upcoming.video_id, exc)
             return
@@ -596,7 +615,7 @@ class GuildPlayer:
         ):
             self._discard_source(source)
             return
-        self._prepared = _Prepared(upcoming, source)
+        self._prepared = _Prepared(upcoming, source, from_file)
 
     # --------------------------------------------------------------------- watchdog
 
