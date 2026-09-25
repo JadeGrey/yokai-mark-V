@@ -1,22 +1,52 @@
-"""Guild audio player state machine, voice streaming, prefetching, and lifecycle management."""
+"""Guild audio player: generation-tagged state machine, watchdog and gapless pre-spawn.
+
+How races are avoided (see docs/superpowers/plans/2026-09-24-music-core-plan.md, Task 9):
+
+* Every playback intent (start, skip, stop, resume) increments `_generation`. The voice
+  `after` callback carries the generation it was created in, and a callback from an older
+  generation is ignored, so our own `voice_client.stop()` can never advance the queue twice.
+* At most one `_advance_task` is alive. It is cancellable, so skip and stop always work even
+  when a stream lookup is stuck. There is no lock.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Coroutine, Optional
 
 import discord
 
-from yokai.errors import VoiceError
+from yokai.errors import UnmatchedTrackError, VoiceError, YokaiError
+from yokai.music.buffer import AudioBuffer
 from yokai.music.models import LoopMode, MusicQueue, PlayerState, StreamInfo, Track
 from yokai.music.resolvers.base import Resolver
+from yokai.music.timing import StageTimer
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
 
 logger = logging.getLogger(__name__)
+
+STREAM_ATTEMPT_TIMEOUT_S = 20.0  # one stream lookup; a track gets two attempts
+LOAD_WATCHDOG_S = 60.0  # backstop: LOADING this long means something is wedged
+WATCHDOG_INTERVAL_S = 2.0
+WATCHDOG_SILENT_TICKS = 2  # consecutive "PLAYING but voice idle" ticks before recovery
+PREBUILD_LEAD_S = 8  # start the next FFmpeg this many seconds before the track ends
+PREMATURE_END_MARGIN_S = 10  # ending this far before the known duration counts as cut off
+MAX_RESUME_ATTEMPTS = 2
+PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
+FFMPEG_BEFORE_OPTIONS = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+
+
+@dataclass(slots=True)
+class _Prepared:
+    """An FFmpeg-backed source built ahead of time for a specific queued track."""
+
+    track: Track
+    source: discord.PCMVolumeTransformer
 
 
 class GuildPlayer:
@@ -27,10 +57,12 @@ class GuildPlayer:
         guild_id: int,
         bot: YokaiBot,
         resolver: Resolver,
+        buffer: Optional[AudioBuffer] = None,
     ) -> None:
         self.guild_id = guild_id
         self.bot = bot
         self.resolver = resolver
+        self.buffer = buffer
         self.queue = MusicQueue(max_size=bot.config.max_queue_size)
 
         self.state: PlayerState = PlayerState.IDLE
@@ -42,27 +74,36 @@ class GuildPlayer:
         self.volume: float = 0.5
         self._current_source: Optional[discord.PCMVolumeTransformer] = None
 
-        # Playback elapsed timing
+        # Elapsed timing (monotonic clock minus paused time, plus a resume offset)
         self._track_start_time: float = 0.0
         self._paused_duration: float = 0.0
         self._pause_start_time: float = 0.0
+        self._track_offset: int = 0
 
-        # Prefetch cache: (video_id, StreamInfo)
+        # Concurrency control
+        self._generation: int = 0
+        self._advance_task: Optional[asyncio.Task[None]] = None
+        self._watchdog_task: Optional[asyncio.Task[None]] = None
+        self._background: set[asyncio.Task[Any]] = set()
+        self._loading_since: float = 0.0
+        self._silent_ticks: int = 0
+        self._resume_attempts: int = 0
+        self._last_finish_at: Optional[float] = None
+        self._failure_notified: bool = False
+
+        # Gapless: an FFmpeg source already started for the head of the queue
+        self._prepared: Optional[_Prepared] = None
+        self._prebuilding: bool = False
+
+        # Prefetch cache: (video_id, StreamInfo) for the head of the queue
         self._prefetched: Optional[tuple[str, StreamInfo]] = None
         self._prefetch_task: Optional[asyncio.Task[None]] = None
-
-        # Retry tracking
-        self._retry_attempted: bool = False
 
         # Disconnect timers
         self._alone_timer: Optional[asyncio.TimerHandle] = None
         self._idle_timer: Optional[asyncio.TimerHandle] = None
 
-        # Escalation flag to notify text channel only once per failure burst
-        self._escalated: bool = False
-
-        # Concurrency lock ensuring serialized queue transitions
-        self._play_lock: asyncio.Lock = asyncio.Lock()
+    # ------------------------------------------------------------------ properties
 
     @property
     def is_playing(self) -> bool:
@@ -74,19 +115,17 @@ class GuildPlayer:
 
     @property
     def elapsed_seconds(self) -> int:
-        """Calculate elapsed playback time in seconds, accounting for pause intervals."""
+        """Elapsed playback time in seconds, accounting for pauses and resume offsets."""
         if self.state in (PlayerState.IDLE, PlayerState.LOADING):
             return 0
-        now = time.monotonic()
-        if self.state == PlayerState.PAUSED:
-            elapsed = self._pause_start_time - self._track_start_time - self._paused_duration
-        else:
-            elapsed = now - self._track_start_time - self._paused_duration
-        return max(0, int(elapsed))
+        now = self._pause_start_time if self.state == PlayerState.PAUSED else time.monotonic()
+        elapsed = now - self._track_start_time - self._paused_duration
+        return max(0, int(elapsed) + self._track_offset)
+
+    # ------------------------------------------------------------------ connection
 
     async def connect(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
         """Connect to the specified voice channel or move to it if already connected."""
-        # Cancel any pending disconnect timers
         self._cancel_alone_timer()
         self._cancel_idle_timer()
 
@@ -102,252 +141,326 @@ class GuildPlayer:
 
         logger.info("Connecting to voice channel #%s (%d)", channel.name, channel.id)
         try:
-            self.voice_client = await channel.connect(reconnect=True, timeout=20.0)
+            with StageTimer("voice_connect", channel=channel.id):
+                self.voice_client = await channel.connect(reconnect=True, timeout=20.0)
             await self.bot.presence.set_active()
-            return self.voice_client
         except Exception as exc:
             logger.error("Failed to connect to voice channel #%s: %s", channel.name, exc)
             raise VoiceError(f"Could not connect to voice channel #{channel.name}: {exc}") from exc
 
-    async def play_next(self) -> None:
-        """Advance queue and start playback of the next track with concurrency protection."""
-        async with self._play_lock:
-            await self._play_next_inner()
+        self._ensure_watchdog()
+        # Leave again if nothing ever gets queued; starting playback cancels this timer.
+        self._start_idle_timer()
+        return self.voice_client
 
-    async def _play_next_inner(self) -> None:
-        """Internal queue advancement without re-acquiring _play_lock."""
+    # --------------------------------------------------------------------- helpers
+
+    def _spawn(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+        """Run a coroutine in the background, keeping a reference until it finishes."""
+        task = asyncio.get_running_loop().create_task(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+        return task
+
+    @staticmethod
+    def _discard_source(source: discord.AudioSource) -> None:
+        try:
+            source.cleanup()
+        except Exception as exc:
+            logger.debug("Error cleaning up audio source: %s", exc)
+
+    # ------------------------------------------------------------ starting playback
+
+    async def play_next(self) -> None:
+        """Start playback if idle, or wait for the advance already in flight."""
+        task = self._advance_task
+        if task is not None and not task.done():
+            await asyncio.wait({task})
+            return
+        if self.state in (PlayerState.PLAYING, PlayerState.PAUSED):
+            return
+        await asyncio.wait({self._begin_advance()})
+
+    def _pop_next_track(self) -> Optional[Track]:
+        """Pop the next track and make it current (synchronously, so state is never stale)."""
+        track = self.queue.pop_next()
+        self.current_track = track
+        self._resume_attempts = 0
+        if track is not None:
+            self.state = PlayerState.LOADING
+            self._loading_since = time.monotonic()
+            self._silent_ticks = 0
+        return track
+
+    def _begin_advance(self, resume: Optional[tuple[Track, int]] = None) -> asyncio.Task[None]:
+        """Invalidate in-flight work and start the single worker that plays the next track."""
+        self._generation += 1
+        generation = self._generation
+        if self._advance_task is not None and not self._advance_task.done():
+            self._advance_task.cancel()
         self._cancel_idle_timer()
 
-        if not self.voice_client or not self.voice_client.is_connected():
-            logger.warning("play_next called without active voice connection.")
-            self.state = PlayerState.IDLE
-            self._start_idle_timer()
-            return
-
-        track = self.queue.pop_next()
-        if not track:
-            logger.info("Queue is empty. Player entering IDLE state.")
-            self.state = PlayerState.IDLE
-            self.current_track = None
-            self._start_idle_timer()
-            return
-
-        self.current_track = track
-        self.state = PlayerState.LOADING
-        self._retry_attempted = False
-
-        await self._start_playback(track)
-
-    async def _start_playback(self, track: Track) -> None:
-        """Resolve stream info and invoke FFmpeg playback."""
-        # 0. Lazy match Spotify tracks if pending
-        if track.is_pending_match and track.spotify_meta:
-            matcher = getattr(self.bot, "matcher", None)
-            if matcher:
-                try:
-                    matched = await matcher.match_track(track.spotify_meta, track.requester_id)
-                    if matched:
-                        track.video_id = matched.video_id
-                        track.title = matched.title
-                        track.artist = matched.artist
-                        track.duration_s = matched.duration_s
-                        track.thumbnail_url = matched.thumbnail_url
-                        track.origin = "import"
-                        track.is_pending_match = False
-                    else:
-                        logger.warning("Unmatched Spotify track: %s", track.spotify_meta.title)
-                        if self.text_channel:
-                            from yokai.ui.embeds import EmbedFactory
-
-                            warn_embed = EmbedFactory.warning(
-                                title="Track Skipped (Unmatched)",
-                                description=(
-                                    "Could not find a confident YouTube match for "
-                                    f"**{track.spotify_meta.title}**."
-                                ),
-                                context="Auto-Skip",
-                            )
-                            try:
-                                await self.text_channel.send(embed=warn_embed)
-                            except Exception:
-                                pass
-                        await self._play_next_inner()
-                        return
-                except Exception as exc:
-                    logger.error("Error matching track %s: %s", track.spotify_meta.title, exc)
-                    await self._play_next_inner()
-                    return
-
-        stream_info: Optional[StreamInfo] = None
-
-        # 1. Check if prefetched
-        if self._prefetched and self._prefetched[0] == track.video_id:
-            logger.debug("Prefetch cache hit for track %s", track.video_id)
-            stream_info = self._prefetched[1]
-            self._prefetched = None
+        if resume is not None:
+            track: Optional[Track] = resume[0]
+            start_s = resume[1]
         else:
-            try:
-                stream_info = await self.resolver.get_stream(track)
-            except Exception as exc:
-                logger.error("Failed to get stream for track %s: %s", track.video_id, exc)
-                await self._handle_stream_failure(track, exc)
-                return
+            track = self._pop_next_track()
+            start_s = 0
+            if track is None:
+                self._enter_idle()
 
-        # 2. Configure FFmpeg source
+        self._advance_task = asyncio.get_running_loop().create_task(
+            self._advance_worker(generation, track, start_s)
+        )
+        return self._advance_task
+
+    def _enter_idle(self) -> None:
+        logger.info("Queue is empty. Player entering IDLE state.")
+        self.state = PlayerState.IDLE
+        self.current_track = None
+        self._current_source = None
+        self._start_idle_timer()
+
+    async def _advance_worker(self, generation: int, track: Optional[Track], start_s: int) -> None:
+        """Load `track` (or, on failure, the following ones) and start playing it."""
+        source: Optional[discord.PCMVolumeTransformer] = None
         try:
-            ffmpeg_exec = str(self.bot.config.ffmpeg_path) if self.bot.config.ffmpeg_path else None
-            before_args = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
-
-            ffmpeg_source = discord.FFmpegPCMAudio(
-                source=stream_info.url,
-                executable=ffmpeg_exec or "ffmpeg",
-                before_options=before_args,
-                options="-vn",
-            )
-            volume_transformer = discord.PCMVolumeTransformer(ffmpeg_source, volume=self.volume)
-            self._current_source = volume_transformer
-
-            # Reset timing counters
-            self._track_start_time = time.monotonic()
-            self._paused_duration = 0.0
-            self._pause_start_time = 0.0
-
-            def _after(err: Optional[Exception]) -> None:
-                asyncio.run_coroutine_threadsafe(
-                    self._on_track_end(track, err),
-                    self.bot.loop,
-                )
-
-            if self.voice_client and self.voice_client.is_connected():
-                self.voice_client.play(volume_transformer, after=_after)
-                self.state = PlayerState.PLAYING
-                logger.info("Playback started: %s (%s)", track.title, track.video_id)
-                self._trigger_prefetch()
-            else:
-                logger.warning("Voice client disconnected right before play()")
-                self.state = PlayerState.IDLE
-                self._start_idle_timer()
-
-        except Exception as exc:
-            logger.error("FFmpeg error starting playback for %s: %s", track.video_id, exc)
-            await self._handle_stream_failure(track, exc)
-
-    async def _handle_stream_failure(self, track: Track, exc: Exception) -> None:
-        """Retry playback once with fresh stream URL or advance to next track."""
-        if not self._retry_attempted:
-            logger.info("Retrying playback once for track %s...", track.video_id)
-            self._retry_attempted = True
-            self._prefetched = None
-            try:
-                fresh_stream = await self.resolver.get_stream(track)
-                self._prefetched = (track.video_id, fresh_stream)
-                await self._start_playback(track)
-                return
-            except Exception as retry_exc:
-                logger.error("Retry failed for track %s: %s", track.video_id, retry_exc)
-
-        # Record error outcome
-        await self._record_event(track, outcome="error", listened_s=0)
-
-        # Notify escalation if YouTube health is degraded
-        if getattr(self.resolver, "is_degraded", False) and not self._escalated:
-            self._escalated = True
-            if self.text_channel:
-                from yokai.ui.embeds import EmbedFactory
-
-                warn_embed = EmbedFactory.warning(
-                    title="YouTube Connection Degraded",
-                    description=(
-                        "YouTube is giving me trouble resolving audio formats. "
-                        "The owner can check `/diag`."
-                    ),
-                    context="Health Notice",
-                )
+            while track is not None and generation == self._generation:
                 try:
-                    await self.text_channel.send(embed=warn_embed)
-                except Exception as send_err:
-                    logger.debug("Could not send escalation warning: %s", send_err)
+                    with StageTimer("track_load", video=track.video_id, resume_s=start_s):
+                        source = self._take_prepared(track) if start_s == 0 else None
+                        if source is None:
+                            source = await self._prepare_source(track, start_s)
+                except Exception as exc:
+                    if generation != self._generation:
+                        return
+                    await self._on_load_failed(track, exc)
+                    if generation != self._generation:
+                        return
+                    track, start_s = self._pop_next_track(), 0
+                    if track is None:
+                        self._enter_idle()
+                    continue
 
-        # Move to next track
-        await self._play_next_inner()
+                if generation != self._generation:
+                    return  # superseded while loading; `finally` discards the source
+                ready, source = source, None
+                self._play_source(generation, track, ready, start_s)
+                return
+        finally:
+            if source is not None:
+                self._discard_source(source)
 
-    def maybe_prefetch(self) -> None:
-        """Trigger prefetching of the next track if playback is currently active."""
-        if self.is_playing:
-            self._trigger_prefetch()
+    async def _ensure_matched(self, track: Track) -> None:
+        """Lazily match an imported Spotify track to a YouTube video just before it is needed."""
+        if not (track.is_pending_match and track.spotify_meta):
+            return
+        matcher = getattr(self.bot, "matcher", None)
+        matched = (
+            await matcher.match_track(track.spotify_meta, track.requester_id) if matcher else None
+        )
+        if matched is None:
+            raise UnmatchedTrackError(track.spotify_meta.title)
+        track.video_id = matched.video_id
+        track.title = matched.title
+        track.artist = matched.artist
+        track.duration_s = matched.duration_s
+        track.thumbnail_url = matched.thumbnail_url
+        track.origin = "import"
+        track.is_pending_match = False
 
-    def _trigger_prefetch(self) -> None:
-        """Schedule prefetching of the next track's stream URL in the background."""
-        next_track = self.queue.peek_next()
-        if not next_track or (self._prefetched and self._prefetched[0] == next_track.video_id):
+    async def _stream_target(self, track: Track) -> tuple[str, bool]:
+        """Return (FFmpeg input, is_local_file): buffer file, prefetched URL, or fresh URL."""
+        if self.buffer is not None:
+            path = self.buffer.get(track.video_id)
+            if path is not None:
+                return str(path), True
+        prefetched = self._prefetched
+        if prefetched is not None and prefetched[0] == track.video_id:
+            self._prefetched = None
+            expires_at = prefetched[1].expires_at
+            if expires_at is None or expires_at > time.time():
+                return prefetched[1].url, False
+        info = await asyncio.wait_for(
+            self.resolver.get_stream(track), timeout=STREAM_ATTEMPT_TIMEOUT_S
+        )
+        return info.url, False
+
+    def _build_source(
+        self, target: str, is_file: bool, start_s: int
+    ) -> discord.PCMVolumeTransformer:
+        ffmpeg_exec = str(self.bot.config.ffmpeg_path) if self.bot.config.ffmpeg_path else "ffmpeg"
+        before = "" if is_file else FFMPEG_BEFORE_OPTIONS
+        if start_s > 0:
+            before = f"{before} -ss {start_s}".strip()
+        source = discord.FFmpegPCMAudio(
+            target,
+            executable=ffmpeg_exec,
+            before_options=before or None,
+            options="-vn",
+        )
+        return discord.PCMVolumeTransformer(source, volume=self.volume)
+
+    async def _prepare_source(self, track: Track, start_s: int) -> discord.PCMVolumeTransformer:
+        """Match if needed, find a stream, start FFmpeg. Two attempts, each time-limited."""
+        await self._ensure_matched(track)
+        error: Exception = RuntimeError("no stream attempt was made")
+        for attempt in (1, 2):
+            try:
+                target, is_file = await self._stream_target(track)
+                return self._build_source(target, is_file, start_s)
+            except Exception as exc:
+                error = exc
+                logger.warning("Stream attempt %d failed for %s: %s", attempt, track.video_id, exc)
+                self._prefetched = None
+                self.resolver.invalidate_stream(track.video_id)
+        raise error
+
+    def _take_prepared(self, track: Track) -> Optional[discord.PCMVolumeTransformer]:
+        prepared, self._prepared = self._prepared, None
+        if prepared is None:
+            return None
+        if prepared.track is track:
+            return prepared.source
+        self._discard_source(prepared.source)
+        return None
+
+    def _play_source(
+        self,
+        generation: int,
+        track: Track,
+        source: discord.PCMVolumeTransformer,
+        start_s: int,
+    ) -> None:
+        vc = self.voice_client
+        if vc is None or not vc.is_connected():
+            logger.warning("Voice client disconnected right before play()")
+            self._discard_source(source)
+            self._enter_idle()
             return
 
-        async def _do_prefetch(track: Track) -> None:
+        loop = asyncio.get_running_loop()
+
+        def _after(error: Optional[Exception]) -> None:
             try:
-                if track.is_pending_match and track.spotify_meta:
-                    matcher = getattr(self.bot, "matcher", None)
-                    if matcher:
-                        matched = await matcher.match_track(track.spotify_meta, track.requester_id)
-                        if matched:
-                            track.video_id = matched.video_id
-                            track.title = matched.title
-                            track.artist = matched.artist
-                            track.duration_s = matched.duration_s
-                            track.thumbnail_url = matched.thumbnail_url
-                            track.origin = "import"
-                            track.is_pending_match = False
-                info = await self.resolver.get_stream(track)
-                self._prefetched = (track.video_id, info)
-                logger.debug("Prefetched stream URL for %s", track.video_id)
-            except Exception as exc:
-                logger.debug("Prefetch failed for %s: %s", track.video_id, exc)
+                loop.call_soon_threadsafe(self._on_source_finished, generation, track, error)
+            except RuntimeError:
+                pass  # event loop already closed (shutdown)
 
-        if self._prefetch_task and not self._prefetch_task.done():
-            self._prefetch_task.cancel()
+        self._current_source = source
+        self._track_start_time = time.monotonic()
+        self._paused_duration = 0.0
+        self._pause_start_time = 0.0
+        self._track_offset = start_s
+        vc.play(source, after=_after)
+        self.state = PlayerState.PLAYING
+        self._silent_ticks = 0
+        self._failure_notified = False
 
-        self._prefetch_task = asyncio.create_task(_do_prefetch(next_track))
+        if self._last_finish_at is not None:
+            gap_ms = (time.perf_counter() - self._last_finish_at) * 1000.0
+            logger.info("stage=track_gap ms=%.0f status=ok video=%s", gap_ms, track.video_id)
+            self._last_finish_at = None
+        logger.info("Playback started: %s (%s)", track.title, track.video_id)
+        self._trigger_prefetch()
 
-    async def _on_track_end(self, track: Track, error: Optional[Exception]) -> None:
-        """Handle track completion, determine outcome, update loops, and advance."""
-        listened = self.elapsed_seconds
+    # ----------------------------------------------------------- track end handling
 
-        if error:
-            logger.error("Track %s ended with error: %s", track.video_id, error)
-            # If error happened early in track, attempt retry once
-            if listened < 5 and not self._retry_attempted:
-                await self._handle_stream_failure(track, error)
-                return
-            outcome = "error"
-        else:
-            # Check completed threshold (90% or natural end)
-            if track.duration_s > 0 and listened >= int(0.9 * track.duration_s):
-                outcome = "completed"
-            elif self.state == PlayerState.IDLE:
-                outcome = "stopped"
-            else:
-                outcome = "completed"
-
-        await self._record_event(track, outcome=outcome, listened_s=listened)
+    def _retire_current(self, outcome: str, listened: Optional[int] = None) -> Optional[Track]:
+        """Record how the current track ended and apply loop rules. Synchronous."""
+        track = self.current_track
+        if track is None:
+            return None
+        if listened is None:
+            listened = self.elapsed_seconds
+        self.current_track = None
+        self._current_source = None
+        self._spawn(self._record_event(track, outcome=outcome, listened_s=listened))
         self.queue.record_history(track)
 
-        # Handle loop modes
-        if self.queue.loop_mode == LoopMode.TRACK:
-            self.queue.add(track)  # Re-enqueue
-        elif self.queue.loop_mode == LoopMode.QUEUE:
+        mode = self.queue.loop_mode
+        if mode == LoopMode.TRACK and outcome == "completed":
+            self.queue.push_front(track)
+        elif mode == LoopMode.QUEUE and outcome in ("completed", "skipped"):
             self.queue.add(track)
+        return track
 
-        # Continue queue
-        await self.play_next()
+    def _on_source_finished(
+        self, generation: int, track: Track, error: Optional[BaseException]
+    ) -> None:
+        """Voice `after` callback, delivered on the event loop. Ignores stale generations."""
+        if generation != self._generation or self.current_track is not track:
+            return
+
+        listened = self.elapsed_seconds
+        premature = (
+            error is None
+            and track.duration_s > 0
+            and listened < track.duration_s - PREMATURE_END_MARGIN_S
+        )
+        if error is not None:
+            logger.error("Track %s ended with error: %s", track.video_id, error)
+
+        if (error is not None or premature) and self._resume_attempts < MAX_RESUME_ATTEMPTS:
+            self._resume_attempts += 1
+            logger.warning(
+                "Track %s ended early at %ds of %ds; resuming (attempt %d).",
+                track.video_id,
+                listened,
+                track.duration_s,
+                self._resume_attempts,
+            )
+            self.resolver.invalidate_stream(track.video_id)
+            self._generation += 1
+            generation = self._generation
+            self.state = PlayerState.LOADING
+            self._loading_since = time.monotonic()
+            if self._advance_task is not None and not self._advance_task.done():
+                self._advance_task.cancel()
+            self._advance_task = asyncio.get_running_loop().create_task(
+                self._advance_worker(generation, track, listened)
+            )
+            return
+
+        self._last_finish_at = time.perf_counter()
+        outcome = "error" if error is not None or premature else "completed"
+        self._retire_current(outcome, listened=listened)
+        self._begin_advance()
+
+    async def _on_load_failed(self, track: Track, exc: BaseException) -> None:
+        logger.error("Could not load %s (%s): %s", track.title, track.video_id, exc)
+        self._retire_current("error", listened=0)
+        await self._notify_failure(track, exc)
+
+    async def _notify_failure(self, track: Track, exc: BaseException) -> None:
+        """Tell the channel once per failure burst (a successful track resets the burst)."""
+        if self._failure_notified or self.text_channel is None:
+            return
+        self._failure_notified = True
+
+        from yokai.ui.embeds import EmbedFactory
+
+        reason = (
+            exc.message if isinstance(exc, YokaiError) else "The audio stream could not be loaded."
+        )
+        description = f"Skipping **{track.title}**. {reason}"
+        if getattr(self.resolver, "is_degraded", False) is True:
+            description += "\nYouTube is giving me trouble. The owner can check `/diag`."
+        embed = EmbedFactory.warning(
+            title="Track Skipped", description=description, context="Playback"
+        )
+        try:
+            await self.text_channel.send(embed=embed)
+        except discord.HTTPException as send_err:
+            logger.debug("Could not send failure notice: %s", send_err)
 
     async def _record_event(self, track: Track, outcome: str, listened_s: int) -> None:
         """Log playback event to SQLite play_events table (YouTube-derived fields only)."""
-        # Strictly guard against persisting Spotify-derived fields or dummy IDs into analytics
         if track.is_pending_match or track.video_id.startswith("sp:"):
             logger.debug(
                 "Skipping play_events logging for unmatched/Spotify entity %s", track.video_id
             )
             return
-
         try:
             await self.bot.db.record_play_event(
                 user_id=track.requester_id,
@@ -361,6 +474,136 @@ class GuildPlayer:
             )
         except Exception as exc:
             logger.error("Failed to record play event for %s: %s", track.video_id, exc)
+
+    # ------------------------------------------------------------ prefetch / buffer
+
+    def warm_stream(self, track: Track) -> None:
+        """Start extracting a track's stream URL now so playback can join the work in flight."""
+        if track.is_pending_match:
+            return
+
+        async def _warm() -> None:
+            try:
+                await self.resolver.get_stream(track)
+            except Exception as exc:
+                logger.debug("Stream warm-up failed for %s: %s", track.video_id, exc)
+
+        self._spawn(_warm())
+
+    def maybe_prefetch(self) -> None:
+        """Trigger prefetching of upcoming tracks if playback is currently active."""
+        if self.is_playing:
+            self._trigger_prefetch()
+
+    def _trigger_prefetch(self) -> None:
+        upcoming = list(self.queue.upcoming[:PREFETCH_DEPTH])
+        if not upcoming:
+            return
+        if self._prefetch_task is not None and not self._prefetch_task.done():
+            self._prefetch_task.cancel()
+        self._prefetch_task = asyncio.get_running_loop().create_task(self._do_prefetch(upcoming))
+
+    async def _do_prefetch(self, tracks: list[Track]) -> None:
+        if self.buffer is not None:
+            keep = {t.video_id for t in tracks}
+            if self.current_track is not None:
+                keep.add(self.current_track.video_id)
+            self.buffer.protect(keep)
+        for index, track in enumerate(tracks):
+            try:
+                await self._ensure_matched(track)
+                info = await self.resolver.get_stream(track, background=True)
+            except Exception as exc:
+                logger.debug("Prefetch failed for %s: %s", track.video_id, exc)
+                continue
+            if index == 0:
+                self._prefetched = (track.video_id, info)
+            if self.buffer is not None:
+                self.buffer.schedule(track, info)
+            logger.debug("Prefetched %s", track.video_id)
+
+    def _maybe_prebuild_next(self) -> None:
+        """Start the next track's FFmpeg process shortly before the current one ends."""
+        track = self.current_track
+        if (
+            track is None
+            or track.duration_s <= 0
+            or self._prebuilding
+            or self._prepared is not None
+            or self.queue.loop_mode == LoopMode.TRACK
+        ):
+            return
+        if track.duration_s - self.elapsed_seconds > PREBUILD_LEAD_S:
+            return
+        upcoming = self.queue.peek_next()
+        if upcoming is None:
+            return
+        self._prebuilding = True
+        self._spawn(self._prebuild_next(upcoming, self._generation))
+
+    async def _prebuild_next(self, upcoming: Track, generation: int) -> None:
+        try:
+            source = await self._prepare_source(upcoming, 0)
+        except Exception as exc:
+            logger.debug("Pre-build of %s failed: %s", upcoming.video_id, exc)
+            return
+        finally:
+            self._prebuilding = False
+        if (
+            generation != self._generation
+            or self.queue.peek_next() is not upcoming
+            or self._prepared is not None
+        ):
+            self._discard_source(source)
+            return
+        self._prepared = _Prepared(upcoming, source)
+
+    # --------------------------------------------------------------------- watchdog
+
+    def _ensure_watchdog(self) -> None:
+        if self._watchdog_task is None or self._watchdog_task.done():
+            self._watchdog_task = asyncio.get_running_loop().create_task(self._watchdog_loop())
+
+    async def _watchdog_loop(self) -> None:
+        while True:
+            await asyncio.sleep(WATCHDOG_INTERVAL_S)
+            try:
+                self._watchdog_tick(time.monotonic())
+            except Exception:
+                logger.exception("Player watchdog tick failed")
+
+    def _watchdog_tick(self, now: float) -> None:
+        """One synchronous health check: stuck loads, silent voice, stale/pre-built sources."""
+        if self.state == PlayerState.LOADING and now - self._loading_since > LOAD_WATCHDOG_S:
+            logger.error("Loading exceeded %.0fs; abandoning the current track.", LOAD_WATCHDOG_S)
+            self._retire_current("error", listened=0)
+            self._begin_advance()
+            return
+
+        if self._prepared is not None and self._prepared.track is not self.queue.peek_next():
+            stale, self._prepared = self._prepared, None
+            self._discard_source(stale.source)
+
+        vc = self.voice_client
+        track = self.current_track
+        if self.state != PlayerState.PLAYING or vc is None or track is None:
+            self._silent_ticks = 0
+            return
+
+        if not vc.is_playing() and not vc.is_paused():
+            self._silent_ticks += 1
+            if self._silent_ticks >= WATCHDOG_SILENT_TICKS:
+                self._silent_ticks = 0
+                logger.warning("Voice went silent during %s; recovering.", track.video_id)
+                self._on_source_finished(
+                    self._generation, track, RuntimeError("voice client went silent")
+                )
+            return
+
+        self._silent_ticks = 0
+        self._maybe_prebuild_next()
+
+    # --------------------------------------------------------------------- controls
 
     def pause(self) -> bool:
         """Pause playback."""
@@ -381,47 +624,70 @@ class GuildPlayer:
         return False
 
     async def skip(self) -> Optional[Track]:
-        """Skip current playing track and return it."""
-        if not self.current_track:
+        """Skip the current track (even one that is still loading) and return it."""
+        skipped = self._retire_current("skipped")
+        if skipped is None:
             return None
-        skipped = self.current_track
-        listened = self.elapsed_seconds
-        await self._record_event(skipped, outcome="skipped", listened_s=listened)
-
-        if self.voice_client and self.voice_client.is_playing():
-            # Stopping voice_client triggers _after callback
-            self.voice_client.stop()
-        else:
-            await self.play_next()
-
+        vc = self.voice_client
+        if vc is not None and (vc.is_playing() or vc.is_paused()):
+            vc.stop()  # its `after` callback is stale by the time it runs: _begin_advance bumps
+        self._begin_advance()
         return skipped
 
     async def stop(self) -> None:
-        """Stop playback, clear queue, disconnect voice client, and reset presence."""
+        """Stop playback, clear the queue, disconnect voice, wipe the buffer, reset presence."""
         logger.info("Stopping player and clearing queue.")
-        self.queue.clear()
+        self._generation += 1  # every pending callback and worker is now stale
+        if self._advance_task is not None and not self._advance_task.done():
+            self._advance_task.cancel()
+        self._advance_task = None
+
+        track = self.current_track
+        if track is not None:
+            self._spawn(
+                self._record_event(track, outcome="stopped", listened_s=self.elapsed_seconds)
+            )
         self.current_track = None
+        self._current_source = None
+        self.queue.clear()
         self.state = PlayerState.IDLE
+
+        self._prefetched = None
+        if self._prefetch_task is not None and not self._prefetch_task.done():
+            self._prefetch_task.cancel()
+        prepared, self._prepared = self._prepared, None
+        if prepared is not None:
+            self._discard_source(prepared.source)
+        self._prebuilding = False
 
         self._cancel_alone_timer()
         self._cancel_idle_timer()
+        if self._watchdog_task is not None and not self._watchdog_task.done():
+            self._watchdog_task.cancel()
+        self._watchdog_task = None
 
-        if self.voice_client:
-            if self.voice_client.is_playing() or self.voice_client.is_paused():
-                self.voice_client.stop()
-            if self.voice_client.is_connected():
-                await self.voice_client.disconnect(force=True)
-            self.voice_client = None
+        vc, self.voice_client = self.voice_client, None
+        if vc is not None:
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+            if vc.is_connected():
+                await vc.disconnect(force=True)
 
+        if self.buffer is not None:
+            await self.buffer.clear()
         await self.bot.presence.set_idle()
 
     def set_volume(self, level: int) -> int:
-        """Set volume level (0-100) and adjust active transformer."""
+        """Set volume level (0-100) and adjust active and pre-built transformers."""
         clamped = min(max(level, 0), 100)
         self.volume = clamped / 100.0
         if self._current_source:
             self._current_source.volume = self.volume
+        if self._prepared is not None:
+            self._prepared.source.volume = self.volume
         return clamped
+
+    # ------------------------------------------------------------ voice occupancy
 
     def on_voice_member_update(self) -> None:
         """Evaluate channel occupancy to start or cancel alone disconnect timer."""
@@ -432,7 +698,6 @@ class GuildPlayer:
         if not isinstance(channel, discord.VoiceChannel):
             return
 
-        # Count non-bot members
         humans = [m for m in channel.members if not m.bot]
         if not humans:
             self._start_alone_timer()
@@ -445,7 +710,7 @@ class GuildPlayer:
             delay = float(self.bot.config.alone_disconnect_seconds)
             logger.info(
                 "Alone in voice channel #%s. Disconnect timer set (%ds).",
-                self.voice_client.channel.name,
+                self.voice_client.channel.name if self.voice_client else "?",
                 delay,
             )
             self._alone_timer = self.bot.loop.call_later(

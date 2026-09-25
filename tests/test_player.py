@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
@@ -108,6 +109,15 @@ class FakeVoiceClient:
             self._after = None
             cb(None)
 
+    def finish(self, error: Optional[Exception] = None) -> None:
+        """Simulate the audio source ending on its own (natural end or error)."""
+        self._playing = False
+        self._paused = False
+        if self._after:
+            callback = self._after
+            self._after = None
+            callback(error)
+
     async def disconnect(self, *, force: bool = False) -> None:
         self._playing = False
 
@@ -144,7 +154,7 @@ async def test_player_state_transitions_and_controls() -> None:
     assert player.state == PlayerState.PLAYING
     assert player.current_track == t1
     assert player.is_playing is True
-    assert resolver.stream_call_count == 1
+    assert resolver.streamed_ids[0] == "t1"  # prefetch of t2 may already have run
 
     # Pause
     assert player.pause() is True
@@ -195,10 +205,12 @@ async def test_player_prefetch_cache_hit() -> None:
     # Pre-populate prefetch cache as if background task completed
     player._prefetched = ("song_b", StreamInfo(url="http://cached.url"))
 
-    # Next track should hit the prefetch cache without calling resolver.get_stream again
+    # Next track should hit the prefetch cache without calling resolver.get_stream again.
+    # play_next() only starts an idle player, so advance through skip().
     calls_before = resolver.stream_call_count
     with patch("discord.FFmpegPCMAudio", return_value=DummyAudioSource()):
-        await player.play_next()
+        await player.skip()
+        await asyncio.sleep(0.01)
 
     assert resolver.stream_call_count == calls_before
     assert player.current_track == t2
