@@ -31,6 +31,9 @@ class FakeResolver(Resolver):
 
     def __init__(self) -> None:
         self.stream_call_count = 0
+        self.streamed_ids: list[str] = []
+        self.background_calls = 0
+        self.invalidated: list[str] = []
 
     async def resolve_query(self, query: str, requester_id: int) -> Track:
         return Track(
@@ -53,9 +56,15 @@ class FakeResolver(Resolver):
             False,
         )
 
-    async def get_stream(self, track: Track) -> StreamInfo:
+    async def get_stream(self, track: Track, *, background: bool = False) -> StreamInfo:
         self.stream_call_count += 1
+        self.streamed_ids.append(track.video_id)
+        if background:
+            self.background_calls += 1
         return StreamInfo(url=f"http://stream.test/{track.video_id}")
+
+    def invalidate_stream(self, video_id: str) -> None:
+        self.invalidated.append(video_id)
 
 
 class FakeVoiceClient:
