@@ -220,11 +220,10 @@ class RecommendView(BaseView):
                 return
 
             if self.player.state == PlayerState.IDLE:
-                first = self.tracks[0]
-                rest = self.tracks[1:]
-                self.player.queue.add(first)
+                # Queue everything before starting, so a failing first track falls through
+                # to the next one instead of leaving the player idle.
+                self.player.queue.add_many(self.tracks)
                 await self.player.play_next()
-                self.player.queue.add_many(rest)
                 self.player.maybe_prefetch()
             else:
                 self.player.queue.add_many(self.tracks)

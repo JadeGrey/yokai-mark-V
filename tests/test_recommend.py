@@ -184,3 +184,33 @@ async def test_recommend_view_permissions_and_queue_action() -> None:
     # 4. Double press protection: subsequent click does nothing
     await view.queue_all_button.callback(interaction_press)
     assert len(player.queue) == 2  # Still 2, not 4!
+
+
+@pytest.mark.asyncio
+async def test_recommend_view_on_idle_player_queues_all_before_playing() -> None:
+    """If the first recommendation fails to load, the rest must already be queued."""
+    mock_bot = MagicMock()
+    mock_bot.config.max_queue_size = 50
+    player = GuildPlayer(guild_id=1, bot=mock_bot, resolver=MagicMock())
+    mock_vc = MagicMock()
+    mock_vc.is_connected.return_value = True
+    player.voice_client = mock_vc
+
+    queued_at_play: list[list[str]] = []
+
+    async def play_next() -> None:
+        queued_at_play.append([t.video_id for t in player.queue.upcoming])
+        player.queue.pop_next()
+
+    player.play_next = AsyncMock(side_effect=play_next)  # type: ignore[method-assign]
+    player.maybe_prefetch = MagicMock()  # type: ignore[method-assign]
+
+    tracks = [Track(video_id=f"r{i}", title=f"Rec {i}", duration_s=100) for i in range(3)]
+    view = RecommendView(player=player, tracks=tracks, requester_id=111, seed_title="Seed")
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.response.edit_message = AsyncMock()
+
+    await view.queue_all_button.callback(interaction)
+
+    assert queued_at_play == [["r0", "r1", "r2"]]
+    assert [t.video_id for t in player.queue.upcoming] == ["r1", "r2"]

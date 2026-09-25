@@ -257,16 +257,15 @@ class MusicCog(commands.Cog, name="Music"):
                     )
             await send(interaction, embed=embed)
         else:
-            # Playlist queueing: start first immediately if idle
+            # Playlist queueing: queue everything first, then start playback if idle, so the
+            # worker moves on to the next track if the first one fails to load.
             first = tracks_to_queue[0]
-            rest = tracks_to_queue[1:]
             if player.state == PlayerState.IDLE:
-                player.queue.add(first)
+                total_loaded = player.queue.add_many(tracks_to_queue)
                 await player.play_next()
-                added_rest = player.queue.add_many(rest)
 
                 player.maybe_prefetch()
-                total_loaded = 1 + added_rest
+                added_rest = max(total_loaded - 1, 0)
                 msg = (
                     f"Started playback with **{first.title}** "
                     f"and queued **{added_rest}** additional tracks."
