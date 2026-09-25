@@ -178,10 +178,11 @@ async def test_download_failure_with_unlink_permission_error(
 
     monkeypatch.setattr(Path, "unlink", failing_unlink)
     buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    task = buffer._inflight["aaaaaaaa"]
     await buffer.wait_idle()  # must not raise
-    task = buffer._inflight.get("aaaaaaaa")
-    if task is not None:
-        buffer._inflight.pop("aaaaaaaa", None)
+    assert task.done()
+    assert task.exception() is None
+    assert task.result() is None
     assert buffer.get("aaaaaaaa") is None
     assert (tmp_path / "aaaaaaaa.part").exists()
 
@@ -241,6 +242,7 @@ async def test_cancel_while_waiting_for_semaphore(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
     if task_a is not None:
         task_a.cancel()
+        await asyncio.gather(task_a, return_exceptions=True)
 
 
 @pytest.mark.asyncio
