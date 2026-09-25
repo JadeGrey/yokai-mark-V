@@ -28,9 +28,16 @@ class Resolver(ABC):
         ...
 
     @abstractmethod
-    async def get_stream(self, track: Track) -> StreamInfo:
-        """Fetch fresh direct playback audio stream URL and HTTP headers for FFmpeg."""
+    async def get_stream(self, track: Track, *, background: bool = False) -> StreamInfo:
+        """Fetch fresh direct playback audio stream URL and HTTP headers for FFmpeg.
+
+        `background=True` marks speculative work (prefetch) so it never starves playback.
+        """
         ...
+
+    def invalidate_stream(self, video_id: str) -> None:
+        """Forget any cached stream URL for a video (used before a retry). Default: no-op."""
+        return None
 
     def get_average_latency(self) -> Optional[float]:
         """Return rolling average resolution latency in milliseconds, or None if no data."""
