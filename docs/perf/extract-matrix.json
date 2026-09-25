@@ -1,0 +1,567 @@
+[
+  {
+    "profile": "default",
+    "extractor_args": null,
+    "ok_runs": 2,
+    "runs": 2,
+    "median_ms": 2015.962599998602,
+    "format_id": "251",
+    "ext": "webm",
+    "acodec": "opus",
+    "audio_only": true,
+    "plays_without_headers": true,
+    "error": null
+  },
+  {
+    "profile": "client=android",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "android"
+        ]
+      }
+    },
+    "ok_runs": 2,
+    "runs": 2,
+    "median_ms": 1596.7948500001512,
+    "format_id": "18",
+    "ext": "mp4",
+    "acodec": "mp4a.40.2",
+    "audio_only": false,
+    "plays_without_headers": true,
+    "error": null
+  },
+  {
+    "profile": "client=android+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "android"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 2,
+    "runs": 2,
+    "median_ms": 1555.4044999953476,
+    "format_id": "18",
+    "ext": "mp4",
+    "acodec": "mp4a.40.2",
+    "audio_only": false,
+    "plays_without_headers": true,
+    "error": null
+  },
+  {
+    "profile": "client=android_vr",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "android_vr"
+        ]
+      }
+    },
+    "ok_runs": 2,
+    "runs": 2,
+    "median_ms": 1684.867050000321,
+    "format_id": "18",
+    "ext": "mp4",
+    "acodec": "mp4a.40.2",
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": null
+  },
+  {
+    "profile": "client=android_vr+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "android_vr"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser or --cookies for the authe"
+  },
+  {
+    "profile": "client=ios",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "ios"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=ios+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "ios"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=mweb",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "mweb"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=mweb+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "mweb"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=tv",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: The page needs to be reloaded."
+  },
+  {
+    "profile": "client=tv+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: The page needs to be reloaded."
+  },
+  {
+    "profile": "client=tv_downgraded",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv_downgraded"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: The page needs to be reloaded."
+  },
+  {
+    "profile": "client=tv_downgraded+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv_downgraded"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser or --cookies for the authe"
+  },
+  {
+    "profile": "client=tv_simply",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv_simply"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=tv_simply+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "tv_simply"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser or --cookies for the authe"
+  },
+  {
+    "profile": "client=visionos",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "visionos"
+        ]
+      }
+    },
+    "ok_runs": 2,
+    "runs": 2,
+    "median_ms": 2047.6193499998772,
+    "format_id": "251",
+    "ext": "webm",
+    "acodec": "opus",
+    "audio_only": true,
+    "plays_without_headers": true,
+    "error": null
+  },
+  {
+    "profile": "client=visionos+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "visionos"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser or --cookies for the authe"
+  },
+  {
+    "profile": "client=web",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_creator",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_creator"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Please sign in. Use --cookies-from-browser or --cookies for the authentication. See  https"
+  },
+  {
+    "profile": "client=web_creator+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_creator"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Please sign in. Use --cookies-from-browser or --cookies for the authentication. See  https"
+  },
+  {
+    "profile": "client=web_embedded",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_embedded"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_embedded+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_embedded"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_music",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_music"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_music+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_music"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_safari",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_safari"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "client=web_safari+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_client": [
+          "web_safari"
+        ],
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Requested format is not available. Use --list-formats for a list of available formats"
+  },
+  {
+    "profile": "default+skip_webpage",
+    "extractor_args": {
+      "youtube": {
+        "player_skip": [
+          "webpage"
+        ]
+      }
+    },
+    "ok_runs": 0,
+    "runs": 2,
+    "median_ms": null,
+    "format_id": null,
+    "ext": null,
+    "acodec": null,
+    "audio_only": false,
+    "plays_without_headers": false,
+    "error": "ERROR: [youtube] lYBUbBu4W08: Sign in to confirm you\u2019re not a bot. Use --cookies-from-browser or --cookies for the authe"
+  }
+]
