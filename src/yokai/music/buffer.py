@@ -40,6 +40,8 @@ async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
         "1",
         "-reconnect_delay_max",
         "5",
+        "-rw_timeout",
+        "15000000",  # microseconds: give up on a read that stalls for 15 s
         "-i",
         url,
         "-vn",

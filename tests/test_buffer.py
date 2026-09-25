@@ -267,6 +267,9 @@ async def test_ffmpeg_download_arguments(tmp_path: Path, monkeypatch: pytest.Mon
     assert reconnect_idx < i_index
     assert reconnect_streamed_idx < i_index
     assert reconnect_delay_idx < i_index
+    rw_timeout_idx = fake_proc.args.index("-rw_timeout")
+    assert rw_timeout_idx < i_index
+    assert fake_proc.args[rw_timeout_idx + 1] == "15000000"
     assert fake_proc.args[i_index + 1] == url
     assert "-vn" in fake_proc.args
     assert "-c:a" in fake_proc.args

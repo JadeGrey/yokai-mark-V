@@ -41,7 +41,11 @@ RESUMED_END_GRACE_S = 5  # a resumed source ending this soon after its offset = 
 INSTANT_END_FLOOR_S = 5  # a clean end before this many seconds of a track = dead stream
 INSTANT_END_MIN_DURATION_S = 30  # ...but only for tracks at least this long
 PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
-FFMPEG_BEFORE_OPTIONS = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+STALL_GRACE_S = 30  # PLAYING this long past the known duration = a stalled read
+# -rw_timeout (microseconds): give up on a network read that stalls for 15 s (dead TCP link)
+FFMPEG_BEFORE_OPTIONS = (
+    "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -rw_timeout 15000000"
+)
 
 
 @dataclass(slots=True)
@@ -660,6 +664,14 @@ class GuildPlayer:
             return
 
         self._silent_ticks = 0
+        if track.duration_s > 0 and self.elapsed_seconds > track.duration_s + STALL_GRACE_S:
+            # FFmpeg is blocked on a dead read (the voice client still says "playing"). The
+            # track did play through, so retire it and move on; never resume past the end.
+            logger.warning("Playback of %s stalled past its end; moving on.", track.video_id)
+            self._retire_current("completed")
+            vc.stop()  # its `after` callback is stale by the time it runs
+            self._begin_advance()
+            return
         self._maybe_prebuild_next()
 
     # --------------------------------------------------------------------- controls

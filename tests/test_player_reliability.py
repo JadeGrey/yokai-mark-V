@@ -536,6 +536,49 @@ async def test_watchdog_recovers_a_silent_voice_client(ffmpeg) -> None:
     assert player.current_track is not None and player.current_track.video_id == "t1"
 
 
+async def test_url_sources_get_a_read_timeout(ffmpeg) -> None:
+    player, _vc, _bot = make_player()
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+    assert "-rw_timeout 15000000" in ffmpeg.call_args_list[-1].kwargs["before_options"]
+
+
+async def test_watchdog_recovers_a_stream_stalled_past_its_end(ffmpeg) -> None:
+    """A dead TCP read keeps the voice client "playing" forever; the watchdog moves on."""
+    resolver = FakeResolver()
+    player, vc, bot = make_player(resolver)
+    player.queue.add(make_track("t1", duration_s=180))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+    first = ffmpeg.created[0]
+
+    age_playback(player, 180 + player_module.STALL_GRACE_S - 2)
+    player._watchdog_tick(time.monotonic())
+    await settle()
+    assert player.current_track is not None and player.current_track.video_id == "t1"
+
+    age_playback(player, 180 + player_module.STALL_GRACE_S + 2)
+    assert vc.is_playing()
+    stops: list[bool] = []
+    real_stop = vc.stop
+
+    def spy_stop() -> None:
+        stops.append(vc.is_playing())
+        real_stop()
+
+    vc.stop = spy_stop  # type: ignore[method-assign]
+    player._watchdog_tick(time.monotonic())
+    await settle()
+
+    assert stops == [True]  # the stuck source was stopped (discord.py refuses a second play)
+    assert outcomes(bot, "t1") == ["completed"]
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+    assert player.state == PlayerState.PLAYING
+    assert resolver.invalidated == []  # not resumed
+    assert len(ffmpeg.created) == 2  # t1, then t2
+    assert first is ffmpeg.created[0]
+
+
 async def test_watchdog_abandons_a_load_stuck_past_the_limit(ffmpeg) -> None:
     player, _vc, bot = make_player(HangingResolver())
     player.queue.add(make_track("stuck"))
