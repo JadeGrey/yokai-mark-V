@@ -130,6 +130,33 @@ async def test_start_and_clear_wipe_the_directory(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_start_and_clear_only_delete_audio_files(tmp_path: Path) -> None:
+    """AUDIO_BUFFER_DIR=data must never delete the database next to the audio files."""
+    (tmp_path / "yokai.db").write_bytes(b"db")
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "keep.txt").write_bytes(b"x")
+    (tmp_path / "old.mka").write_bytes(b"a")
+    (tmp_path / "old.part").write_bytes(b"a")
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=make_downloader())
+
+    await buffer.start()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["notes", "yokai.db"]
+
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    await buffer.clear()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["notes", "yokai.db"]
+    assert (tmp_path / "notes" / "keep.txt").read_bytes() == b"x"
+
+
+@pytest.mark.asyncio
+async def test_start_creates_a_missing_directory(tmp_path: Path) -> None:
+    buffer = AudioBuffer(tmp_path / "a" / "cache", 10_000)
+    await buffer.start()
+    assert (tmp_path / "a" / "cache").is_dir()
+
+
+@pytest.mark.asyncio
 async def test_unsafe_video_ids_with_newlines_and_spaces(tmp_path: Path) -> None:
     calls: list[str] = []
     buffer = AudioBuffer(tmp_path, 10_000, downloader=make_downloader(calls=calls))
@@ -298,6 +325,35 @@ async def test_ffmpeg_download_non_zero_exit(
         await ffmpeg_download(url, dest)
     assert "ffmpeg exited 1" in str(exc_info.value)
     assert "Stream error details" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("returncode", [1, 0])
+@pytest.mark.asyncio
+async def test_ffmpeg_download_error_hides_stream_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, returncode: int
+) -> None:
+    """googlevideo URLs carry the owner's public IP and a signature: keep them out of logs."""
+    stderr = (
+        b"[https @ 0x1] HTTP error 403 Forbidden\n"
+        b"https://rr3---sn-abc.googlevideo.com/videoplayback?ip=203.0.113.7&sig=SECRET: "
+        b"Server returned 403 Forbidden (access denied)"
+    )
+    fake_proc = AsyncMock()
+    fake_proc.communicate = AsyncMock(return_value=(b"", stderr))
+    fake_proc.returncode = returncode
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return fake_proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    with pytest.raises(RuntimeError) as exc_info:
+        await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+    message = str(exc_info.value)
+    assert "<url>" in message
+    assert "googlevideo" not in message
+    assert "203.0.113.7" not in message
+    assert "SECRET" not in message
+    assert "Server returned 403 Forbidden" in message
 
 
 @pytest.mark.asyncio

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Coroutine, Optional
 import discord
 
 from yokai.errors import UnmatchedTrackError, VoiceError, YokaiError
-from yokai.music.buffer import AudioBuffer
+from yokai.music.buffer import AudioBuffer, redact_urls
 from yokai.music.models import LoopMode, MusicQueue, PlayerState, StreamInfo, Track
 from yokai.music.resolvers.base import Resolver
 from yokai.music.timing import StageTimer
@@ -244,6 +244,12 @@ class GuildPlayer:
                             source, from_file = prepared.source, prepared.from_file
                         else:
                             source, from_file = await self._prepare_source(track, start_s)
+                    if generation != self._generation:
+                        return  # superseded while loading; `finally` discards the source
+                    ready, source = source, None
+                    # Raises only if the voice client refuses to play (it cleans up `ready`).
+                    self._play_source(generation, track, ready, start_s, from_file)
+                    return
                 except Exception as exc:
                     if generation != self._generation:
                         return
@@ -254,12 +260,6 @@ class GuildPlayer:
                     if track is None:
                         self._enter_idle()
                     continue
-
-                if generation != self._generation:
-                    return  # superseded while loading; `finally` discards the source
-                ready, source = source, None
-                self._play_source(generation, track, ready, start_s, from_file)
-                return
         finally:
             if source is not None:
                 self._discard_source(source)
@@ -384,7 +384,14 @@ class GuildPlayer:
         self._paused_duration = 0.0
         self._pause_start_time = 0.0
         self._track_offset = start_s
-        vc.play(source, after=_after)
+        try:
+            vc.play(source, after=_after)
+        except Exception:
+            # e.g. discord.ClientException; never leak the FFmpeg process we just started
+            self._current_source = None
+            self._current_from_file = False
+            self._discard_source(source)
+            raise
         self.state = PlayerState.PLAYING
         self._silent_ticks = 0
         self._failure_notified = False
@@ -443,7 +450,8 @@ class GuildPlayer:
             # (the known duration was too long), so it is finished, not cut off.
             premature = listened - self._track_offset >= RESUMED_END_GRACE_S
         if error is not None:
-            logger.error("Track %s ended with error: %s", track.video_id, error)
+            # FFmpeg errors include its stderr, which can contain the signed stream URL.
+            logger.error("Track %s ended with error: %s", track.video_id, redact_urls(str(error)))
         if (error is not None or premature) and self._current_from_file:
             # The network cannot cut off a local file, so the file itself is bad (truncated).
             self._current_from_file = False
@@ -706,7 +714,7 @@ class GuildPlayer:
         return skipped
 
     async def stop(self) -> None:
-        """Stop playback, clear the queue, disconnect voice, wipe the buffer, reset presence."""
+        """Stop playback, clear the queue, disconnect voice, clear the buffer, reset presence."""
         logger.info("Stopping player and clearing queue.")
         self._generation += 1  # every pending callback and worker is now stale
         if self._advance_task is not None and not self._advance_task.done():

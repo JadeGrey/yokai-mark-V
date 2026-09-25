@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 
 from tests.test_player import DummyAudioSource, FakeResolver, FakeVoiceClient
@@ -445,7 +446,9 @@ async def test_dead_stream_with_loop_off_records_error_and_notifies(ffmpeg) -> N
     assert send.await_count == 2
 
 
-async def test_ffmpeg_error_on_the_wrapped_source_is_surfaced(ffmpeg) -> None:
+async def test_ffmpeg_error_on_the_wrapped_source_is_surfaced(
+    ffmpeg, caplog: pytest.LogCaptureFixture
+) -> None:
     """discord.py only checks `_current_error` on the transformer; we read the wrapped source."""
     resolver = FakeResolver()
     player, vc, bot = make_player(resolver)
@@ -453,14 +456,19 @@ async def test_ffmpeg_error_on_the_wrapped_source_is_surfaced(ffmpeg) -> None:
     await player.play_next()
 
     # Near the end, a clean end would be "completed"; the FFmpeg error must force a resume.
-    ffmpeg.created[0]._current_error = RuntimeError("FFmpeg exited with code 1")
+    ffmpeg.created[0]._current_error = RuntimeError(
+        "FFmpeg exited with code 1. Stderr: https://rr1.googlevideo.com/videoplayback?ip=203.0.113.7"
+    )
     age_playback(player, 175)
-    vc.finish()
-    await settle()
+    with caplog.at_level("ERROR", logger="yokai.music.player"):
+        vc.finish()
+        await settle()
 
     assert resolver.invalidated == ["t1"]
     assert outcomes(bot, "t1") == []
     assert "-ss 175" in ffmpeg.call_args_list[-1].kwargs["before_options"]
+    assert "FFmpeg exited with code 1" in caplog.text
+    assert "203.0.113.7" not in caplog.text  # the signed stream URL is redacted
 
 
 async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
@@ -480,6 +488,34 @@ async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
     assert outcomes(bot, "bad2") == ["error"]
     assert player.text_channel.send.await_count == 1
     assert resolver.invalidated.count("bad1") >= 1  # retried once with a fresh URL
+
+
+async def test_voice_play_raising_cleans_up_and_moves_on(ffmpeg) -> None:
+    class RefusingVoiceClient(FakeVoiceClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.refusals = 1
+
+        def play(self, source: object, *, after: object = None) -> None:
+            if self.refusals:
+                self.refusals -= 1
+                raise discord.ClientException("Already playing audio.")
+            super().play(source, after=after)  # type: ignore[arg-type]
+
+    player, _vc, bot = make_player()
+    player.voice_client = RefusingVoiceClient()
+    send = attach_channel(player)
+    player.queue.add(make_track("t1"))
+    player.queue.add(make_track("t2"))
+
+    await asyncio.wait_for(player.play_next(), timeout=1.0)
+    await settle()
+
+    assert ffmpeg.created[0].cleaned is True  # no leaked FFmpeg process
+    assert outcomes(bot, "t1") == ["error"]
+    assert send.await_count == 1
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+    assert player.state == PlayerState.PLAYING
 
 
 async def test_a_later_failure_burst_is_notified_again(ffmpeg) -> None:

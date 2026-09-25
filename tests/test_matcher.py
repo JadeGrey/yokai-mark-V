@@ -150,3 +150,34 @@ async def test_track_matcher_cache_hit_and_miss(tmp_path: Path) -> None:
         assert cached_entry[0] == "yt_new_456"
 
     await db.close()
+
+
+@pytest.mark.asyncio
+async def test_ytdlp_fallback_uses_the_thumbnails_list_of_flat_entries() -> None:
+    """Flat yt-dlp search entries carry `thumbnails` (a list), not `thumbnail`."""
+    mock_resolver = AsyncMock(spec=YtDlpResolver)
+    mock_resolver.search_candidates.return_value = [
+        {
+            "id": "yt_flat_789",
+            "title": "Flat Song",
+            "channel": "Artist F",
+            "duration": 200,
+            "thumbnails": [
+                {"url": "https://i.ytimg.com/vi/yt_flat_789/default.jpg"},
+                {"url": "https://i.ytimg.com/vi/yt_flat_789/hqdefault.jpg"},
+            ],
+        }
+    ]
+    matcher = TrackMatcher(ytdlp_resolver=mock_resolver)
+    sp_track = SpotifyTrackMeta(
+        spotify_id="sp_flat",
+        title="Flat Song",
+        artists=["Artist F"],
+        duration_s=200,
+        thumbnail_url="https://spotify.example/cover.jpg",
+    )
+    with patch.object(matcher, "_ytmusic_search", return_value=[]):
+        matched = await matcher.match_track(sp_track, requester_id=1)
+
+    assert matched is not None and matched.video_id == "yt_flat_789"
+    assert matched.thumbnail_url == "https://i.ytimg.com/vi/yt_flat_789/hqdefault.jpg"

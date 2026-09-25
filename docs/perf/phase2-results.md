@@ -64,7 +64,8 @@ What the numbers say about different kinds of play:
 
 - Queued or repeat tracks are fast. A track that is already prefetched or buffered starts in about
   43 ms (`buffered_first_frame`, FFmpeg reading the local file), and a cached search plus stream is
-  effectively instant (`warm_play` 0.13 ms). The buffer download (735 ms p50) happens while the
+  effectively instant (`warm_play` 0.13 ms; this figure excludes FFmpeg's first frame, which adds
+  about 255 ms from a URL or 43 ms from the buffer). The buffer download (735 ms p50) happens while the
   previous track is still playing, so track-to-track changes do not pay the cold cost.
 - A first-time `/play` of something new, with nothing playing, costs about 2.7 s (p95 3.5 s). That is
   a 76% improvement over the 11.2 s baseline, almost all from the search fix (8809 ms to 549 ms).
@@ -81,3 +82,12 @@ Options for the owner (the owner chooses; the next plan is written accordingly):
 - (c) A PO-token provider, which spec section 7.3 lists as a later fallback. Cost: an extra moving
   part to run and keep alive; it addresses bot-check failures more than latency, so it is not expected
   to close the 1.2 s gap by itself.
+
+## Known limitations
+
+- A track skipped to while its prefetch is still queued behind other background extraction can wait
+  up to one extraction timeout before it starts.
+- A retry after the 20 s per-attempt stream timeout joins the same in-flight extraction instead of
+  starting a fresh one.
+- Background prefetch failures count toward the resolver's degraded flag, so `/diag` can show
+  "degraded" even when no track the user asked for failed.

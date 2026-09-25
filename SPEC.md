@@ -297,7 +297,7 @@ Privacy: store Discord user IDs, command names, and play events only. No message
 | `ALONE_DISCONNECT_SECONDS` | `120` | Leave when alone |
 | `RECOMMEND_COUNT` | `8` | Tracks per `/recommend` |
 | AUDIO_BUFFER_MB | 500 | Pre-buffer size cap in MB (0 disables) |
-| AUDIO_BUFFER_DIR | data/cache | Pre-buffer folder (wiped on startup and /stop) |
+| AUDIO_BUFFER_DIR | data/cache | Pre-buffer folder (audio files in it are deleted on startup and /stop) |
 
 Invite scopes: `bot`, `applications.commands`. Permissions: View Channels, Send Messages, Embed Links, Connect, Speak.
 

@@ -201,8 +201,11 @@ class YokaiBot(commands.Bot):
         # 1. Update for bot itself
         if self.user and member.id == self.user.id:
             if before.channel is not None and after.channel is None:
-                logger.info("Yokai was disconnected/kicked from voice channel.")
-                await player.stop()
+                # Our own stop() clears voice_client before it disconnects, so only a kick or
+                # an external disconnect still has one; never re-enter stop() for our own.
+                if player.voice_client is not None:
+                    logger.info("Yokai was disconnected/kicked from voice channel.")
+                    await player.stop()
                 await self.presence.set_idle()
             elif before.channel != after.channel and after.channel is not None:
                 logger.info("Yokai was moved to voice channel #%s", after.channel.name)

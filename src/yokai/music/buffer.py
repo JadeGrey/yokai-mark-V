@@ -12,7 +12,6 @@ import functools
 import logging
 import os
 import re
-import shutil
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable, Optional
 
@@ -21,9 +20,15 @@ from yokai.music.models import StreamInfo, Track
 logger = logging.getLogger(__name__)
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
+_URL = re.compile(r"https?://\S+")
 DOWNLOAD_TIMEOUT_S = 120.0
 
 Downloader = Callable[[str, Path], Awaitable[None]]
+
+
+def redact_urls(text: str) -> str:
+    """Replace URLs (stream URLs carry the public IP and a signature) with `<url>`."""
+    return _URL.sub("<url>", text)
 
 
 async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
@@ -59,7 +64,8 @@ async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
         proc.kill()
         await proc.wait()
         raise
-    detail = stderr.decode(errors="replace").strip()
+    # Stream URLs carry the public IP and a signature; keep them out of error messages.
+    detail = redact_urls(stderr.decode(errors="replace")).strip()
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg exited {proc.returncode}: {detail[:200]}")
     if detail:
@@ -93,12 +99,16 @@ class AudioBuffer:
         return self.max_bytes > 0
 
     async def start(self) -> None:
-        """Wipe leftovers from a previous run and make sure the directory exists."""
+        """Delete audio files left by a previous run and make sure the directory exists."""
         await asyncio.to_thread(self._reset_directory)
 
     def _reset_directory(self) -> None:
-        shutil.rmtree(self.directory, ignore_errors=True)
+        """Delete only our own files (`*.mka`, `*.part`); anything else in the folder stays."""
         self.directory.mkdir(parents=True, exist_ok=True)
+        for pattern in ("*.mka", "*.part"):
+            for path in self.directory.glob(pattern):
+                if path.is_file():
+                    self._unlink_quietly(path)
 
     def _unlink_quietly(self, path: Path) -> None:
         """Delete a file, logging but not raising OSError (e.g., permission errors on Windows)."""

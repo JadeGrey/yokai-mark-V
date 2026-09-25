@@ -50,7 +50,8 @@ def stream_expiry(url: str, now: Optional[float] = None) -> float:
     return current + DEFAULT_STREAM_TTL_S
 
 
-def _pick_thumbnail(entry: dict[str, Any]) -> Optional[str]:
+def pick_thumbnail(entry: dict[str, Any]) -> Optional[str]:
+    """Best thumbnail URL of a yt-dlp entry: `thumbnail`, else the last of `thumbnails`."""
     thumb = entry.get("thumbnail")
     if thumb:
         return str(thumb)
@@ -215,7 +216,7 @@ class YtDlpResolver(Resolver):
                 title=entry.get("title") or "Unknown Title",
                 artist=entry.get("uploader") or entry.get("channel") or entry.get("artist"),
                 duration_s=duration,
-                thumbnail_url=_pick_thumbnail(entry),
+                thumbnail_url=pick_thumbnail(entry),
                 requester_id=requester_id,
                 origin="search",
             )
@@ -297,7 +298,7 @@ class YtDlpResolver(Resolver):
                             title=entry.get("title") or "Unknown Title",
                             artist=entry.get("uploader") or entry.get("channel"),
                             duration_s=duration,
-                            thumbnail_url=_pick_thumbnail(entry),
+                            thumbnail_url=pick_thumbnail(entry),
                             requester_id=requester_id,
                             origin="link",
                         )

@@ -11,7 +11,7 @@ from typing import Any, Optional
 import ytmusicapi
 
 from yokai.music.models import Track
-from yokai.music.resolvers.ytdlp import YtDlpResolver
+from yokai.music.resolvers.ytdlp import YtDlpResolver, pick_thumbnail
 from yokai.music.spotify.models import SpotifyTrackMeta
 from yokai.storage.db import Database
 
@@ -232,7 +232,7 @@ class TrackMatcher:
                     title = entry.get("title", "")
                     uploader = entry.get("uploader") or entry.get("channel")
                     dur_s = entry.get("duration")
-                    thumb = entry.get("thumbnail")
+                    thumb = pick_thumbnail(entry)  # flat entries only carry `thumbnails`
 
                     score = score_candidate(spotify_track, title, uploader, dur_s)
                     if best_candidate is None or score > best_candidate[4]:

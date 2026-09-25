@@ -167,6 +167,23 @@ async def test_error_mapping_and_health_degradation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_without_a_direct_url_counts_as_a_failure() -> None:
+    resolver = YtDlpResolver()
+    no_url = {"id": "vid_123", "title": "Test", "formats": []}
+
+    with patch.object(yt_dlp.YoutubeDL, "extract_info", return_value=no_url):
+        for attempt in (1, 2, 3):
+            track = Track(video_id=f"vid_{attempt}", title="Test", duration_s=180)
+            with pytest.raises(BotCheckError):
+                await resolver.get_stream(track)
+            assert resolver.consecutive_failures == attempt
+            assert len(resolver.error_ring_buffer) == attempt
+            assert resolver.is_degraded is (attempt == 3)
+
+    assert "vid_1" in resolver.error_ring_buffer[0]
+
+
+@pytest.mark.asyncio
 async def test_resolve_url_caches_stream_info() -> None:
     single_data = {
         "id": "vid_cached",
