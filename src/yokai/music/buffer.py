@@ -93,9 +93,16 @@ class AudioBuffer:
         shutil.rmtree(self.directory, ignore_errors=True)
         self.directory.mkdir(parents=True, exist_ok=True)
 
+    def _unlink_quietly(self, path: Path) -> None:
+        """Delete a file, logging but not raising OSError (e.g., permission errors on Windows)."""
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.debug("Failed to unlink %s: %s", path, exc)
+
     def path_for(self, video_id: str) -> Optional[Path]:
         """Destination path for a video, or None if the ID is not a safe YouTube-style ID."""
-        if not _SAFE_ID.match(video_id):
+        if not _SAFE_ID.fullmatch(video_id):
             return None
         return self.directory / f"{video_id}.mka"
 
@@ -138,11 +145,11 @@ class AudioBuffer:
                 await self._downloader(url, part)
                 os.replace(part, dest)
             except asyncio.CancelledError:
-                part.unlink(missing_ok=True)
+                self._unlink_quietly(part)
                 raise
             except Exception as exc:  # any failure just means "no buffer for this track"
                 logger.warning("Audio pre-buffer failed for %s: %s", video_id, exc)
-                part.unlink(missing_ok=True)
+                self._unlink_quietly(part)
                 return None
         self._evict()
         return dest
