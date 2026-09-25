@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Coroutine, Optional
@@ -42,10 +43,34 @@ INSTANT_END_FLOOR_S = 5  # a clean end before this many seconds of a track = dea
 INSTANT_END_MIN_DURATION_S = 30  # ...but only for tracks at least this long
 PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
 STALL_GRACE_S = 30  # PLAYING this long past the known duration = a stalled read
+FFMPEG_EXIT_WAIT_S = 1.0  # max wait for a just-ended FFmpeg process to be reaped (see `_after`)
 # -rw_timeout (microseconds): give up on a network read that stalls for 15 s (dead TCP link)
 FFMPEG_BEFORE_OPTIONS = (
     "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -rw_timeout 15000000"
 )
+
+
+def _ffmpeg_exit_error(source: object, wait_s: float) -> Optional[Exception]:
+    """Return the wrapped FFmpeg source's failure once its process has been reaped, if any.
+
+    Runs on the voice thread, so it must never raise. Sources that are not FFmpeg-backed
+    (or lack any of the private attributes) simply yield None or whatever error is already set.
+    """
+    try:
+        original = getattr(source, "original", None)
+        process = getattr(original, "_process", None)
+        if process is not None:
+            try:
+                process.wait(timeout=wait_s)
+            except subprocess.TimeoutExpired:
+                pass  # still running: no exit code to report yet
+        check = getattr(original, "_check_process_returncode", None)
+        if callable(check):
+            check()
+        return getattr(original, "_current_error", None)
+    except Exception:  # defensive: an exception on the voice thread would be invisible
+        logger.debug("Could not read the FFmpeg exit status", exc_info=True)
+        return None
 
 
 @dataclass(slots=True)
@@ -365,14 +390,12 @@ class GuildPlayer:
         def _after(error: Optional[Exception]) -> None:
             # discord.py's AudioPlayer only checks `_current_error` on the source it was given
             # (our PCMVolumeTransformer), so FFmpeg failures arrive here as None. The wrapped
-            # FFmpegPCMAudio sets its own `_current_error` inside read() when it hits EOF and
-            # FFmpeg has already exited non-zero, i.e. BEFORE this callback runs; cleanup()
-            # runs after this callback and sets `_stopped` first, so it never sets it later.
-            # This runs on the audio thread, so reading it here does not touch the event loop.
-            # If FFmpeg had not been reaped yet at EOF the error is lost; the instant-end floor
-            # and the premature-end check in `_on_source_finished` cover that case.
-            if error is None:
-                error = getattr(getattr(source, "original", None), "_current_error", None)
+            # FFmpegPCMAudio only sets its own `_current_error` if FFmpeg was already reaped at
+            # EOF, which on Windows lags by ~200 ms, so wait for it explicitly. This runs on the
+            # audio thread before cleanup(); a stale callback is ignored, so it never waits
+            # (skip() retires the track before vc.stop(); stop() bumps the generation first).
+            if error is None and generation == self._generation and self.current_track is track:
+                error = _ffmpeg_exit_error(source, FFMPEG_EXIT_WAIT_S)
             try:
                 loop.call_soon_threadsafe(self._on_source_finished, generation, track, error)
             except RuntimeError:

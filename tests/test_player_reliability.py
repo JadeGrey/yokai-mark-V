@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -16,7 +17,7 @@ from yokai.errors import BotCheckError
 from yokai.music import player as player_module
 from yokai.music.buffer import AudioBuffer
 from yokai.music.models import LoopMode, PlayerState, StreamInfo, Track
-from yokai.music.player import GuildPlayer
+from yokai.music.player import GuildPlayer, _ffmpeg_exit_error
 
 
 class RecordingSource(DummyAudioSource):
@@ -34,6 +35,54 @@ def ffmpeg():
 
     def factory(*_args: object, **_kwargs: object) -> RecordingSource:
         source = RecordingSource()
+        created.append(source)
+        return source
+
+    with patch("discord.FFmpegPCMAudio", side_effect=factory) as mock:
+        mock.created = created
+        yield mock
+
+
+class LateProcess:
+    """A dead FFmpeg whose exit code only becomes visible once `wait()` reaps it (Windows)."""
+
+    def __init__(self, wait_raises: Optional[BaseException] = None) -> None:
+        self.reaped = False
+        self.wait_calls: list[Optional[float]] = []
+        self.wait_raises = wait_raises
+
+    def poll(self) -> Optional[int]:
+        return 1 if self.reaped else None
+
+    def wait(self, timeout: Optional[float] = None) -> int:
+        self.wait_calls.append(timeout)
+        if self.wait_raises is not None:
+            raise self.wait_raises
+        self.reaped = True
+        return 1
+
+
+class LateFFmpegSource(RecordingSource):
+    """Mirrors discord.FFmpegPCMAudio: the error is only recorded if `poll()` shows an exit."""
+
+    def __init__(self, wait_raises: Optional[BaseException] = None) -> None:
+        super().__init__()
+        self._current_error: Optional[Exception] = None
+        self._process = LateProcess(wait_raises)
+
+    def _check_process_returncode(self) -> None:
+        code = self._process.poll()
+        if code is not None and code != 0 and self._current_error is None:
+            self._current_error = RuntimeError(f"FFmpeg exited with code {code}")
+
+
+@pytest.fixture
+def late_ffmpeg():
+    """FFmpegPCMAudio replaced by sources whose failure is only visible after a wait."""
+    created: list[LateFFmpegSource] = []
+
+    def factory(*_args: object, **_kwargs: object) -> LateFFmpegSource:
+        source = LateFFmpegSource()
         created.append(source)
         return source
 
@@ -469,6 +518,124 @@ async def test_ffmpeg_error_on_the_wrapped_source_is_surfaced(
     assert "-ss 175" in ffmpeg.call_args_list[-1].kwargs["before_options"]
     assert "FFmpeg exited with code 1" in caplog.text
     assert "203.0.113.7" not in caplog.text  # the signed stream URL is redacted
+
+
+def test_the_late_reaped_fake_loses_the_error_without_a_wait() -> None:
+    source = LateFFmpegSource()
+    source._check_process_returncode()  # what discord.py does at EOF: poll() still says running
+    assert source._current_error is None
+    assert source._process.wait_calls == []
+
+
+async def test_late_reaped_ffmpeg_failure_is_surfaced(late_ffmpeg) -> None:
+    """After EOF FFmpeg is reaped late, so the callback must wait for it before reading."""
+    player, vc, bot = make_player()
+    send = attach_channel(player)
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+    age_playback(player, 175)  # near the end: a clean end would be "completed"
+
+    for _ in range(player_module.MAX_RESUME_ATTEMPTS + 1):
+        vc.finish()  # `after(None)`, like discord.py with a PCMVolumeTransformer
+        await settle()
+
+    assert outcomes(bot, "t1") == ["error"]
+    assert send.await_count == 1
+    assert len(late_ffmpeg.created) == 1 + player_module.MAX_RESUME_ATTEMPTS
+    assert late_ffmpeg.created[0]._process.wait_calls == [player_module.FFMPEG_EXIT_WAIT_S]
+
+
+async def test_dead_url_on_a_short_track_in_loop_track_ends_as_error(late_ffmpeg) -> None:
+    """Below the instant-end floor's 30 s minimum, only the FFmpeg exit code reveals the failure."""
+    player, vc, bot = make_player()
+    send = attach_channel(player)
+    player.queue.loop_mode = LoopMode.TRACK
+    player.queue.add(make_track("short", duration_s=20))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+
+    for _ in range(12):
+        if player.current_track is None or player.current_track.video_id != "short":
+            break
+        vc.finish()
+        await settle()
+
+    assert outcomes(bot, "short") == ["error"]
+    assert send.await_count == 1
+    assert "short" not in [t.video_id for t in player.queue.upcoming]
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+    assert len(late_ffmpeg.created) == 1 + player_module.MAX_RESUME_ATTEMPTS + 1  # bounded
+
+
+async def test_stale_callback_does_not_wait_for_ffmpeg(late_ffmpeg) -> None:
+    player, vc, bot = make_player()
+    player.queue.add(make_track("t1"))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+    first = late_ffmpeg.created[0]
+
+    await player.skip()  # vc.stop() delivers the callback for the skipped playback
+    await settle()
+
+    assert first._process.wait_calls == []
+    assert outcomes(bot, "t1") == ["skipped"]
+
+    await player.stop()  # ...and so does stop() for the second one
+    await settle()
+    assert all(source._process.wait_calls == [] for source in late_ffmpeg.created)
+
+
+async def test_stop_callback_does_not_wait_for_ffmpeg(late_ffmpeg) -> None:
+    player, _vc, _bot = make_player()
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+
+    await player.stop()
+    await settle()
+
+    assert late_ffmpeg.created[0]._process.wait_calls == []
+
+
+async def test_source_without_an_ffmpeg_process_still_finishes(ffmpeg) -> None:
+    """Fakes and non-FFmpeg sources have no `_process`; the callback is delivered unchanged."""
+    player, vc, bot = make_player()
+    player.queue.add(make_track("t1", duration_s=180))
+    await player.play_next()
+    age_playback(player, 178)
+    vc.finish()
+    await settle()
+    assert outcomes(bot, "t1") == ["completed"]
+    assert _ffmpeg_exit_error(DummyAudioSource(), 1.0) is None
+    assert _ffmpeg_exit_error(MagicMock(spec=[]), 1.0) is None
+
+
+async def test_ffmpeg_still_running_after_the_wait_is_not_an_error(monkeypatch) -> None:
+    source = LateFFmpegSource(wait_raises=subprocess.TimeoutExpired("ffmpeg", 1.0))
+    wrapper = MagicMock()
+    wrapper.original = source
+    assert _ffmpeg_exit_error(wrapper, 0.01) is None
+    assert source._process.wait_calls == [0.01]
+
+    # ...and through the real callback: a timed-out wait is swallowed, the callback delivered.
+    factory = lambda *_a, **_k: source  # noqa: E731
+    monkeypatch.setattr("discord.FFmpegPCMAudio", factory)
+    player, vc, bot = make_player()
+    player.queue.add(make_track("t1", duration_s=180))
+    await player.play_next()
+    age_playback(player, 178)
+    vc.finish()
+    await settle()
+    assert outcomes(bot, "t1") == ["completed"]
+    assert source._process.wait_calls == [0.01, player_module.FFMPEG_EXIT_WAIT_S]
+
+
+def test_exit_error_helper_never_raises() -> None:
+    class Exploding:
+        @property
+        def original(self) -> object:
+            raise RuntimeError("boom")
+
+    assert _ffmpeg_exit_error(Exploding(), 1.0) is None
 
 
 async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
