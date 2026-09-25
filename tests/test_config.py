@@ -76,3 +76,23 @@ def test_load_config_valid() -> None:
         assert cfg.max_queue_size == 50
         assert cfg.max_playlist_tracks == 100
         assert cfg.spotify_scraper_enabled is True
+
+
+def test_audio_buffer_defaults_and_overrides() -> None:
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    with patch.dict(os.environ, base, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.audio_buffer_mb == 500
+        assert cfg.audio_buffer_dir == Path("data/cache")
+
+    custom = {**base, "AUDIO_BUFFER_MB": "128", "AUDIO_BUFFER_DIR": "somewhere/else"}
+    with patch.dict(os.environ, custom, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.audio_buffer_mb == 128
+        assert cfg.audio_buffer_dir == Path("somewhere/else")
+
+
+def test_negative_audio_buffer_means_disabled() -> None:
+    env = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2", "AUDIO_BUFFER_MB": "-5"}
+    with patch.dict(os.environ, env, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).audio_buffer_mb == 0

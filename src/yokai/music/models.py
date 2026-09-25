@@ -115,6 +115,13 @@ class MusicQueue:
         self._upcoming.extend(to_add)
         return len(to_add)
 
+    def push_front(self, track: Track) -> None:
+        """Put a track at the head of the queue, ignoring the size cap.
+
+        Used to replay the current track in loop-track mode.
+        """
+        self._upcoming.insert(0, track)
+
     def pop_next(self) -> Optional[Track]:
         """Remove and return the next track in the queue, or None if empty."""
         if not self._upcoming:

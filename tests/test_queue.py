@@ -122,3 +122,20 @@ def test_queue_pagination() -> None:
     assert e_items == []
     assert e_pages == 1
     assert e_total == 0
+
+
+def test_push_front_replays_before_other_tracks() -> None:
+    queue = MusicQueue(max_size=3)
+    first = _make_track(1)
+    second = _make_track(2)
+    queue.add(second)
+    queue.push_front(first)
+    assert queue.peek_next() is first
+    assert [t.video_id for t in queue.upcoming] == ["vid_1", "vid_2"]
+
+
+def test_push_front_ignores_size_cap() -> None:
+    queue = MusicQueue(max_size=1)
+    queue.add(_make_track(1))
+    queue.push_front(_make_track(2))
+    assert len(queue) == 2

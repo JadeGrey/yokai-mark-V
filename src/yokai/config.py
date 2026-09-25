@@ -45,6 +45,10 @@ class Config:
     alone_disconnect_seconds: int = 120
     recommend_count: int = 8
 
+    # Audio pre-buffer (0 MB disables it)
+    audio_buffer_mb: int = 500
+    audio_buffer_dir: Path = Path("data/cache")
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -123,6 +127,8 @@ def load_config(env_path: Path | str | None = None) -> Config:
         "ALONE_DISCONNECT_SECONDS", os.getenv("ALONE_DISCONNECT_SECONDS"), 120
     )
     recommend_count = _parse_int("RECOMMEND_COUNT", os.getenv("RECOMMEND_COUNT"), 8)
+    audio_buffer_mb = max(0, _parse_int("AUDIO_BUFFER_MB", os.getenv("AUDIO_BUFFER_MB"), 500))
+    audio_buffer_dir = Path(os.getenv("AUDIO_BUFFER_DIR", "data/cache").strip() or "data/cache")
 
     return Config(
         discord_token=token,
@@ -142,4 +148,6 @@ def load_config(env_path: Path | str | None = None) -> Config:
         idle_disconnect_seconds=idle_disconnect,
         alone_disconnect_seconds=alone_disconnect,
         recommend_count=recommend_count,
+        audio_buffer_mb=audio_buffer_mb,
+        audio_buffer_dir=audio_buffer_dir,
     )

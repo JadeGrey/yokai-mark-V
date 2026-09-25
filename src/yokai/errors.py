@@ -93,6 +93,16 @@ class SpotifyResolutionError(YokaiError):
         super().__init__(message, user_hint=user_hint)
 
 
+class UnmatchedTrackError(YokaiError):
+    """Raised when an imported Spotify track has no confident YouTube match."""
+
+    def __init__(self, title: str) -> None:
+        super().__init__(
+            f"Could not find a confident YouTube match for **{title}**.",
+            user_hint="Try searching with the song title and artist, or paste a YouTube link.",
+        )
+
+
 class VoiceError(YokaiError):
     """Base exception for voice channel connection or playback errors."""
 
