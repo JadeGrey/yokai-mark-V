@@ -394,6 +394,75 @@ async def test_clean_premature_end_after_exhausted_resumes_is_completed(ffmpeg) 
     assert player.current_track is not None and player.current_track.video_id == "t2"
 
 
+def attach_channel(player: GuildPlayer) -> AsyncMock:
+    player.text_channel = MagicMock()
+    player.text_channel.send = AsyncMock()
+    return player.text_channel.send
+
+
+async def test_dead_stream_in_loop_track_ends_as_error_without_replaying(ffmpeg) -> None:
+    """Production delivers `after(None)` when FFmpeg dies: it must still count as a failure."""
+    player, vc, bot = make_player()
+    send = attach_channel(player)
+    player.queue.loop_mode = LoopMode.TRACK
+    player.queue.add(make_track("dead1"))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+
+    for _ in range(12):
+        if player.current_track is None or player.current_track.video_id != "dead1":
+            break
+        vc.finish()  # no error argument, exactly like discord.py with a PCMVolumeTransformer
+        await settle()
+
+    assert outcomes(bot, "dead1") == ["error"]
+    assert send.await_count == 1
+    assert "dead1" not in [t.video_id for t in player.queue.upcoming]
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+    assert len(ffmpeg.created) == 1 + player_module.MAX_RESUME_ATTEMPTS + 1  # bounded
+
+
+async def test_dead_stream_with_loop_off_records_error_and_notifies(ffmpeg) -> None:
+    player, vc, bot = make_player(SelectiveResolver(fail=frozenset({"bad"})))
+    send = attach_channel(player)
+    player.queue.add(make_track("dead1"))
+    await player.play_next()
+
+    for _ in range(player_module.MAX_RESUME_ATTEMPTS + 1):
+        vc.finish()
+        await settle()
+
+    assert outcomes(bot, "dead1") == ["error"]
+    assert send.await_count == 1
+    assert player.state == PlayerState.IDLE
+
+    # Going idle ended the burst, so a later failure (here: a load failure, which never
+    # starts playback to reset the flag) is notified again.
+    player.queue.add(make_track("bad"))
+    await player.play_next()
+    await settle()
+    assert outcomes(bot, "bad") == ["error"]
+    assert send.await_count == 2
+
+
+async def test_ffmpeg_error_on_the_wrapped_source_is_surfaced(ffmpeg) -> None:
+    """discord.py only checks `_current_error` on the transformer; we read the wrapped source."""
+    resolver = FakeResolver()
+    player, vc, bot = make_player(resolver)
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+
+    # Near the end, a clean end would be "completed"; the FFmpeg error must force a resume.
+    ffmpeg.created[0]._current_error = RuntimeError("FFmpeg exited with code 1")
+    age_playback(player, 175)
+    vc.finish()
+    await settle()
+
+    assert resolver.invalidated == ["t1"]
+    assert outcomes(bot, "t1") == []
+    assert "-ss 175" in ffmpeg.call_args_list[-1].kwargs["before_options"]
+
+
 async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
     resolver = SelectiveResolver(fail=frozenset({"bad1", "bad2"}))
     player, _vc, bot = make_player(resolver)

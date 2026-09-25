@@ -38,6 +38,8 @@ PREBUILD_LEAD_S = 8  # start the next FFmpeg this many seconds before the track 
 PREMATURE_END_MARGIN_S = 10  # ending this far before the known duration counts as cut off
 MAX_RESUME_ATTEMPTS = 2
 RESUMED_END_GRACE_S = 5  # a resumed source ending this soon after its offset = real end
+INSTANT_END_FLOOR_S = 5  # a clean end before this many seconds of a track = dead stream
+INSTANT_END_MIN_DURATION_S = 30  # ...but only for tracks at least this long
 PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
 FFMPEG_BEFORE_OPTIONS = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 
@@ -344,6 +346,16 @@ class GuildPlayer:
         loop = asyncio.get_running_loop()
 
         def _after(error: Optional[Exception]) -> None:
+            # discord.py's AudioPlayer only checks `_current_error` on the source it was given
+            # (our PCMVolumeTransformer), so FFmpeg failures arrive here as None. The wrapped
+            # FFmpegPCMAudio sets its own `_current_error` inside read() when it hits EOF and
+            # FFmpeg has already exited non-zero, i.e. BEFORE this callback runs; cleanup()
+            # runs after this callback and sets `_stopped` first, so it never sets it later.
+            # This runs on the audio thread, so reading it here does not touch the event loop.
+            # If FFmpeg had not been reaped yet at EOF the error is lost; the instant-end floor
+            # and the premature-end check in `_on_source_finished` cover that case.
+            if error is None:
+                error = getattr(getattr(source, "original", None), "_current_error", None)
             try:
                 loop.call_soon_threadsafe(self._on_source_finished, generation, track, error)
             except RuntimeError:
@@ -395,6 +407,14 @@ class GuildPlayer:
             return
 
         listened = self.elapsed_seconds
+        if (
+            error is None
+            and track.duration_s >= INSTANT_END_MIN_DURATION_S
+            and listened < INSTANT_END_FLOOR_S
+        ):
+            # FFmpeg can exit 0 after a dead connection; a long track that "ends" in its first
+            # seconds is a failed stream, not a finished song (and must never loop forever).
+            error = RuntimeError("stream ended immediately")
         premature = (
             error is None
             and track.duration_s > 0
@@ -432,6 +452,9 @@ class GuildPlayer:
         # A clean end is never an error, even when resume attempts ran out.
         outcome = "error" if error is not None else "completed"
         self._retire_current(outcome, listened=listened)
+        if error is not None and self._claim_failure_notice():
+            # Claimed synchronously, so going idle below correctly ends this burst.
+            self._spawn(self._send_failure_notice(track, error))
         self._begin_advance()
 
     async def _on_load_failed(self, track: Track, exc: BaseException) -> None:
@@ -441,9 +464,19 @@ class GuildPlayer:
 
     async def _notify_failure(self, track: Track, exc: BaseException) -> None:
         """Tell the channel once per failure burst (a successful track resets the burst)."""
+        if self._claim_failure_notice():
+            await self._send_failure_notice(track, exc)
+
+    def _claim_failure_notice(self) -> bool:
+        """Return True (and mark the burst notified) if a notice should be sent now."""
         if self._failure_notified or self.text_channel is None:
-            return
+            return False
         self._failure_notified = True
+        return True
+
+    async def _send_failure_notice(self, track: Track, exc: BaseException) -> None:
+        if self.text_channel is None:
+            return
 
         from yokai.ui.embeds import EmbedFactory
 
