@@ -200,6 +200,60 @@ async def test_stale_voice_callback_is_ignored(ffmpeg) -> None:
     assert [t.video_id for t in player.queue.upcoming] == ["t3"]
 
 
+async def test_stale_callback_after_watchdog_resume_is_ignored(ffmpeg) -> None:
+    """The same Track object is current again, so only the generation can reject the callback."""
+    resolver = FakeResolver()
+    player, vc, _bot = make_player(resolver)
+    player.queue.add(make_track("t1"))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+    pre_resume_after = vc._after
+
+    vc._playing = False  # the voice player died without calling `after`
+    player._watchdog_tick(time.monotonic())
+    player._watchdog_tick(time.monotonic())
+    await settle()
+    assert len(ffmpeg.created) == 2
+    assert player.current_track is not None and player.current_track.video_id == "t1"
+
+    assert pre_resume_after is not None
+    pre_resume_after(None)  # the stalled player thread finally reports the old source's end
+    await settle()
+
+    assert len(ffmpeg.created) == 2  # no second resume
+    assert resolver.invalidated == ["t1"]
+    assert player.current_track is not None and player.current_track.video_id == "t1"
+    assert [t.video_id for t in player.queue.upcoming] == ["t2"]
+    assert player.state == PlayerState.PLAYING
+
+
+async def test_stale_callback_after_loop_track_replay_is_ignored(ffmpeg) -> None:
+    resolver = FakeResolver()
+    player, vc, bot = make_player(resolver)
+    player.queue.loop_mode = LoopMode.TRACK
+    player.queue.add(make_track("t1"))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+    first_after = vc._after
+    first_track = player.current_track
+
+    age_playback(player, 180)
+    vc.finish()
+    await settle()
+    assert player.current_track is first_track  # same Track object replays
+    assert len(ffmpeg.created) == 2
+
+    assert first_after is not None
+    first_after(None)  # the first play's callback arrives again, late
+    await settle()
+
+    assert len(ffmpeg.created) == 2  # no resume, no advance
+    assert resolver.invalidated == []
+    assert player.current_track is first_track
+    assert [t.video_id for t in player.queue.upcoming] == ["t2"]
+    assert outcomes(bot, "t1") == ["completed"]
+
+
 # ------------------------------------------------------------- natural end / loops
 
 
@@ -296,6 +350,50 @@ async def test_resume_attempts_are_bounded(ffmpeg) -> None:
     assert "t1" not in [t.video_id for t in player.queue.upcoming]
 
 
+async def test_overstated_duration_ends_as_completed_and_stays_in_loop(ffmpeg) -> None:
+    """A 188 s upload whose metadata says 200 s must not be treated as an error."""
+    resolver = FakeResolver()
+    player, vc, bot = make_player(resolver)
+    player.queue.loop_mode = LoopMode.QUEUE
+    player.queue.add(make_track("t1", duration_s=200))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+
+    age_playback(player, 188)
+    vc.finish()  # clean end at 188 s: looks premature, so one resume is tried
+    await settle()
+    assert player.current_track is not None and player.current_track.video_id == "t1"
+
+    vc.finish()  # the resumed source (seeked to 188 s) ends at once: the stream is over
+    await settle()
+
+    assert outcomes(bot, "t1") == ["completed"]
+    assert resolver.invalidated == ["t1"]  # at most one resume
+    assert len(ffmpeg.created) == 3  # t1, one resume of t1, then t2
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+    assert [t.video_id for t in player.queue.upcoming] == ["t1"]
+
+
+async def test_clean_premature_end_after_exhausted_resumes_is_completed(ffmpeg) -> None:
+    resolver = FakeResolver()
+    player, vc, bot = make_player(resolver)
+    player.queue.add(make_track("t1"))
+    player.queue.add(make_track("t2"))
+    await player.play_next()
+
+    age_playback(player, 20)
+    vc.finish()  # cut off at 20 s: resume 1
+    await settle()
+    for _ in range(2):  # each resumed source plays 10 s more, then is cut off again
+        age_playback(player, 10)
+        vc.finish()
+        await settle()
+
+    assert resolver.invalidated == ["t1", "t1"]  # both resumes were used
+    assert outcomes(bot, "t1") == ["completed"]  # a clean end is not an error
+    assert player.current_track is not None and player.current_track.video_id == "t2"
+
+
 async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
     resolver = SelectiveResolver(fail=frozenset({"bad1", "bad2"}))
     player, _vc, bot = make_player(resolver)
@@ -313,6 +411,26 @@ async def test_load_failure_skips_to_next_and_notifies_once(ffmpeg) -> None:
     assert outcomes(bot, "bad2") == ["error"]
     assert player.text_channel.send.await_count == 1
     assert resolver.invalidated.count("bad1") >= 1  # retried once with a fresh URL
+
+
+async def test_a_later_failure_burst_is_notified_again(ffmpeg) -> None:
+    resolver = SelectiveResolver(fail=frozenset({"bad1", "bad2", "bad3"}))
+    player, _vc, _bot = make_player(resolver)
+    player.text_channel = MagicMock()
+    player.text_channel.send = AsyncMock()
+
+    player.queue.add(make_track("bad1"))
+    player.queue.add(make_track("bad2"))
+    await player.play_next()
+    await settle()
+    assert player.state == PlayerState.IDLE
+    assert player.text_channel.send.await_count == 1  # one notice for the whole burst
+
+    player.queue.add(make_track("bad3"))  # a separate, later failure
+    await player.play_next()
+    await settle()
+    assert player.state == PlayerState.IDLE
+    assert player.text_channel.send.await_count == 2
 
 
 async def test_stuck_load_times_out_and_moves_on(ffmpeg, monkeypatch: pytest.MonkeyPatch) -> None:

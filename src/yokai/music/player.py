@@ -37,6 +37,7 @@ WATCHDOG_SILENT_TICKS = 2  # consecutive "PLAYING but voice idle" ticks before r
 PREBUILD_LEAD_S = 8  # start the next FFmpeg this many seconds before the track ends
 PREMATURE_END_MARGIN_S = 10  # ending this far before the known duration counts as cut off
 MAX_RESUME_ATTEMPTS = 2
+RESUMED_END_GRACE_S = 5  # a resumed source ending this soon after its offset = real end
 PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
 FFMPEG_BEFORE_OPTIONS = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 
@@ -219,6 +220,7 @@ class GuildPlayer:
         self.state = PlayerState.IDLE
         self.current_track = None
         self._current_source = None
+        self._failure_notified = False  # the failure burst (if any) ends here
         self._start_idle_timer()
 
     async def _advance_worker(self, generation: int, track: Optional[Track], start_s: int) -> None:
@@ -398,6 +400,10 @@ class GuildPlayer:
             and track.duration_s > 0
             and listened < track.duration_s - PREMATURE_END_MARGIN_S
         )
+        if premature and self._track_offset > 0:
+            # A resumed source that ends almost at once means the stream really ends here
+            # (the known duration was too long), so it is finished, not cut off.
+            premature = listened - self._track_offset >= RESUMED_END_GRACE_S
         if error is not None:
             logger.error("Track %s ended with error: %s", track.video_id, error)
 
@@ -423,7 +429,8 @@ class GuildPlayer:
             return
 
         self._last_finish_at = time.perf_counter()
-        outcome = "error" if error is not None or premature else "completed"
+        # A clean end is never an error, even when resume attempts ran out.
+        outcome = "error" if error is not None else "completed"
         self._retire_current(outcome, listened=listened)
         self._begin_advance()
 
@@ -651,6 +658,7 @@ class GuildPlayer:
         self._current_source = None
         self.queue.clear()
         self.state = PlayerState.IDLE
+        self._failure_notified = False
 
         self._prefetched = None
         if self._prefetch_task is not None and not self._prefetch_task.done():
