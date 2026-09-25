@@ -12,6 +12,7 @@ Yokai is a private, single-server Discord bot (~10 users) hosted locally on the 
 - **Universal Input Support:** Stream from YouTube links (`watch`, `youtu.be`, `shorts`, `music.youtube.com`), YouTube playlists, free-text search queries, and Spotify track, album, and playlist links.
 - **Smart Spotify Matching:** Metadata-only matching using an official Spotify Web API client with automatic scraper fallback, matching tracks to clean YouTube native audio without streaming Spotify audio or polluting analytics.
 - **Instant Prefetching & Streaming:** Prefetches direct stream URLs and metadata ahead of time for instantaneous track transitions.
+- **Fast Search & Self-Healing Playback:** Fast search through YouTube Music, a local pre-buffer for gapless track changes, and self-healing playback (stuck loads time out, cut-off tracks resume).
 - **Radio Recommendations (`/recommend`):** Intelligent YouTube Music radio discovery with multi-tier deduplication and a collaborative "Queue them all" interactive button.
 - **Comprehensive Telemetry & Diagnostics:**
   - `/ping`: Real-time WebSocket Gateway, REST API, SQLite database, Voice, and audio Resolver rolling average latencies.
@@ -106,6 +107,8 @@ MAX_TRACK_SECONDS=3600
 IDLE_DISCONNECT_SECONDS=300
 ALONE_DISCONNECT_SECONDS=120
 RECOMMEND_COUNT=8
+AUDIO_BUFFER_MB=500
+AUDIO_BUFFER_DIR=data/cache
 
 # ==============================================================================
 # OPTIONAL PATH OVERRIDES & COOKIES

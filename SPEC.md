@@ -136,7 +136,7 @@ Stream URLs expire, so **never store stream URLs in the queue**. Queue entries a
 | YouTube playlist URL | Flat extraction, capped at `MAX_PLAYLIST_TRACKS`. Auto-generated mixes (`RD…`) get a friendly "not supported" message. |
 | Spotify track / album / playlist (URL, `spotify:` URI, `spotify.link` short link) | See §7.4. Artist, show, and episode links get a friendly "not supported" message. |
 | Any other URL | Rejected with a friendly message (allowlist in `AGENTS.md`). |
-| Plain text | Search: yt-dlp `ytsearch5:<query>`; take the first non-live result within `MAX_TRACK_SECONDS`. |
+| Plain text | Search: ytmusicapi (songs, then videos), falling back to a flat yt-dlp ytsearch5; take the first non-live result within MAX_TRACK_SECONDS. |
 
 ### 7.3 YouTube resolver (yt-dlp)
 - Interface (sketch): `resolve_query(text) -> Track`, `resolve_url(url) -> Track | list[Track]`, `get_stream(track) -> StreamInfo(url, http_headers, expires_hint)`.
@@ -184,7 +184,7 @@ Spotify collection tracks queue as `PENDING_MATCH` and are matched lazily just b
 - Queue with loop modes (off/track/queue), a history list (last 100 tracks), max size `MAX_QUEUE_SIZE`.
 - Audio: `FFmpegPCMAudio` wrapped in `PCMVolumeTransformer`. FFmpeg before-options: `-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5`; options: `-vn`.
 - The `after` callback runs in a non-async thread: hand control back with `loop.call_soon_threadsafe` or `asyncio.run_coroutine_threadsafe`.
-- Prefetch the next stream URL while the current track plays.
+- Prefetch the next two tracks' stream URLs while the current track plays, download them into the local audio buffer (AUDIO_BUFFER_MB), and start the next FFmpeg process about 8 seconds before the current track ends so the switch is gapless. Playback races are prevented with generation-tagged voice callbacks; a watchdog recovers stuck loads and silent voice clients; a track that ends early is resumed at its offset (at most twice).
 - Auto-disconnect: `ALONE_DISCONNECT_SECONDS` when no humans remain in the channel; `IDLE_DISCONNECT_SECONDS` after the queue ends.
 - Handle being kicked/moved: clean up state and return presence to idle.
 - **Play events:** on every track end, write a `play_events` row with outcome `completed` (ended naturally or ≥90% listened), `skipped`, `stopped`, or `error`, plus `listened_s`. This is cheap now and gives a future custom recommender real data.
@@ -296,6 +296,8 @@ Privacy: store Discord user IDs, command names, and play events only. No message
 | `IDLE_DISCONNECT_SECONDS` | `300` | Leave after the queue ends |
 | `ALONE_DISCONNECT_SECONDS` | `120` | Leave when alone |
 | `RECOMMEND_COUNT` | `8` | Tracks per `/recommend` |
+| AUDIO_BUFFER_MB | 500 | Pre-buffer size cap in MB (0 disables) |
+| AUDIO_BUFFER_DIR | data/cache | Pre-buffer folder (wiped on startup and /stop) |
 
 Invite scopes: `bot`, `applications.commands`. Permissions: View Channels, Send Messages, Embed Links, Connect, Speak.
 

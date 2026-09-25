@@ -1,6 +1,6 @@
 # Yokai Mark V — Manual QA Checklist
 
-This document details the 10 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
+This document details the 17 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
 
 ---
 
@@ -18,6 +18,13 @@ This document details the 10 manual verification procedures to validate Yokai Ma
 | **8** | **Network Disruption Recovery** | • If network drops briefly, FFmpeg reconnects (`-reconnect 1`).<br>• On permanent drop, player records event and skips or halts cleanly without crashing. | 1. During active playback, toggle internet connection off for 3 seconds, then back on.<br>2. Verify playback recovers or skips gracefully. | `Pending Owner Run` |
 | **9** | **Utility & Diagnostics Suite** | • `/ping`: Displays Gateway, REST, Database, Voice, and Resolver latencies.<br>• `/usage [period]`: Shows top operators and commands with mentions.<br>• `/about`: Displays versions, uptime, OS, and Ubisoft disclaimer.<br>• `/diag`: Rejects non-owners with error embed; displays ephemeral telemetry + Update yt-dlp button for owner. | 1. Run `/ping`, `/usage period: 7d`, and `/about`.<br>2. Run `/diag` as the configured bot owner.<br>3. Have another user run `/diag` and verify refusal. | `Pending Owner Run` |
 | **10** | **Process Supervision & Auto-Restart** | • Killing python process triggers `run.ps1` cooldown.<br>• Bot restarts after 5 seconds automatically. | 1. Launch Yokai using `.\run.ps1`.<br>2. In Task Manager or PowerShell, kill the `python.exe` process.<br>3. Verify `run.ps1` captures crash and restarts Yokai in 5 seconds. | `Pending Owner Run` |
+| **11** | **Cold `/play` Latency** | • Audio starts under about 2 s after `/play` with a song name.<br>• Voice connect runs while search resolves. | 1. Join a voice channel.<br>2. Run `/play query: <song name>` for a song not played recently.<br>3. Note the time from pressing Enter until audio is heard. | `Pending Owner Run` |
+| **12** | **Gapless Track Change** | • No audible gap when the first track ends and the second begins. | 1. `/play` two tracks (short ones help).<br>2. Listen at the end of the first track.<br>3. Confirm the second starts with no audible gap. | `Pending Owner Run` |
+| **13** | **Skip During Slow Load** | • `/skip` responds immediately even while the track is still loading.<br>• Bot moves on to the next track or goes idle without hanging. | 1. `/play` a track not played before.<br>2. Press `/skip` while Discord still shows "thinking" / the track is loading.<br>3. Verify the bot recovers and `/queue` is consistent. | `Pending Owner Run` |
+| **14** | **Rapid Double Skip** | • Two quick `/skip` commands advance exactly two tracks.<br>• No track is skipped twice or replayed. | 1. Queue three tracks.<br>2. Run `/skip` twice in quick succession.<br>3. Verify the third track plays and `/queue` is correct. | `Pending Owner Run` |
+| **15** | **Stop While Looping** | • `/stop` clears the queue and the looped track does not return. | 1. `/loop mode: track` while a track plays.<br>2. Run `/stop`.<br>3. Run `/play` with a new track and confirm the old one does not return. | `Pending Owner Run` |
+| **16** | **Wi-Fi Drop Mid-Track** | • Playback resumes, or skips cleanly, after a 5 s network loss.<br>• No crash and no silent hang. | 1. During playback, disconnect Wi-Fi for 5 seconds, then reconnect.<br>2. Verify audio resumes (or the bot skips to the next track cleanly). | `Pending Owner Run` |
+| **17** | **Buffer Folder Deleted Mid-Play** | • Playback continues when `data/cache` contents are deleted during a track. | 1. Play a track with another queued so the buffer fills.<br>2. Delete the contents of `data/cache` while it plays.<br>3. Verify playback continues and the next track still plays. | `Pending Owner Run` |
 
 ---
 
@@ -25,11 +32,11 @@ This document details the 10 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 76 passed in 1.70s
+# Result: 148 passed in 4.90s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 58 files already formatted
+# Result: 70 files already formatted
 ```

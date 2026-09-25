@@ -7,7 +7,7 @@ Read first: `SPEC.md` (what to build and why) and `TASKS.md` (ordered phases wit
 ## Locked decisions
 Do not change these without asking the owner.
 - Python 3.12+ and `discord.py>=2.7.1` with voice extras plus `davey`. Discord has required DAVE end-to-end encryption for voice since March 2026; a bot without DAVE cannot join calls.
-- Playback: `yt-dlp` used in-process (Python API) plus FFmpeg. All audio comes from YouTube. No Lavalink. No Spotify streaming.
+- Playback: yt-dlp used in-process (Python API) plus FFmpeg. All audio comes from YouTube. Free-text search goes through ytmusicapi first (yt-dlp flat search is the fallback). Upcoming tracks are pre-buffered to disk with FFmpeg (AUDIO_BUFFER_MB, 0 disables). No Lavalink. No Spotify streaming.
 - Spotify links (track, album, playlist) are metadata only: official API first, scraper fallback, then matched to YouTube audio.
 - Recommendations: YouTube Music radio via `ytmusicapi` only, behind a `Recommender` interface.
 - Storage: SQLite via `aiosqlite`. Single guild; slash commands synced to that guild.
