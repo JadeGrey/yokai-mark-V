@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import logging
 import time
@@ -14,10 +15,12 @@ from discord.ext import commands
 from yokai.config import Config
 from yokai.errors import YokaiError
 from yokai.health import HealthReport, check_health
+from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
 from yokai.music.recommend import YTMusicRadioRecommender
 from yokai.music.resolvers.matcher import TrackMatcher
 from yokai.music.resolvers.ytdlp import YtDlpResolver
+from yokai.music.search import YtMusicSearcher
 from yokai.music.spotify import (
     OfficialSpotifyProvider,
     ScraperSpotifyProvider,
@@ -38,11 +41,21 @@ class YokaiBot(commands.Bot):
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
         self.presence = PresenceManager(self)
+        self.searcher = YtMusicSearcher(max_track_seconds=config.max_track_seconds)
         self.resolver = YtDlpResolver(
             deno_path=config.deno_path,
             cookies_file=config.ytdlp_cookies_file,
             max_track_seconds=config.max_track_seconds,
+            searcher=self.searcher,
         )
+        self.audio_buffer = AudioBuffer(
+            directory=config.audio_buffer_dir,
+            max_bytes=config.audio_buffer_mb * 1024 * 1024,
+            ffmpeg=str(config.ffmpeg_path)
+            if config.ffmpeg_path
+            else (self.health.ffmpeg_path or "ffmpeg"),
+        )
+        self._warmup_task: Optional[asyncio.Task[None]] = None
 
         official_sp = None
         if config.spotify_client_id and config.spotify_client_secret:
@@ -85,6 +98,7 @@ class YokaiBot(commands.Bot):
                 guild_id=guild_id,
                 bot=self,
                 resolver=self.resolver,
+                buffer=self.audio_buffer,
             )
         return self.players[guild_id]
 
@@ -92,6 +106,9 @@ class YokaiBot(commands.Bot):
         """Initialize database, load cogs, and synchronize slash commands to single guild."""
         logger.info("Initializing SQLite storage at %s...", self.config.db_path)
         await self.db.initialize()
+        await self.audio_buffer.start()
+        # ytmusicapi's first call is slow (about 1.5 s); pay it now, not on someone's /play
+        self._warmup_task = asyncio.create_task(self.searcher.warm_up())
 
         # Load extension cogs
         logger.info("Loading extensions...")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Optional
 
 import discord
@@ -22,6 +24,12 @@ if TYPE_CHECKING:
     from yokai.music.player import GuildPlayer
 
 logger = logging.getLogger(__name__)
+
+
+def _observe_task(task: asyncio.Task[object]) -> None:
+    """Retrieve a background task's exception so asyncio does not log it as never retrieved."""
+    if not task.cancelled() and task.exception() is not None:
+        logger.debug("Background task failed: %s", task.exception())
 
 
 def _validate_voice_state(
@@ -94,12 +102,9 @@ class MusicCog(commands.Cog, name="Music"):
 
         await interaction.response.defer(thinking=True)
         avatar_url = str(self.bot.user.display_avatar.url) if self.bot.user else None
+        request_started = time.perf_counter()
 
-        # 1. Connect to caller's voice channel
-        await player.connect(caller_vc)
-        player.text_channel = interaction.channel
-
-        # 2. Classify input
+        # 1. Classify first: unsupported input must not make the bot join voice
         classified = classify_input(query)
 
         if classified.kind == InputKind.UNSUPPORTED:
@@ -110,6 +115,11 @@ class MusicCog(commands.Cog, name="Music"):
             )
             await send(interaction, embed=err_embed, ephemeral=True)
             return
+
+        # 2. Join voice WHILE the query resolves (joining takes about as long as a search)
+        player.text_channel = interaction.channel
+        connect_task = asyncio.create_task(player.connect(caller_vc))
+        connect_task.add_done_callback(_observe_task)
 
         # 3. Resolve target
         tracks_to_queue: list[Track] = []
@@ -203,12 +213,21 @@ class MusicCog(commands.Cog, name="Music"):
             await send(interaction, embed=err_embed)
             return
 
-        # 4. Enqueue and start playback
+        # 4. Start extracting the stream now, then wait for the voice connection
+        if not is_playlist and player.state == PlayerState.IDLE:
+            player.warm_stream(tracks_to_queue[0])
+        await connect_task
+
+        # 5. Enqueue and start playback
         if not is_playlist:
             track = tracks_to_queue[0]
             if player.state == PlayerState.IDLE:
                 player.queue.add(track)
                 await player.play_next()
+                logger.info(
+                    "stage=play_to_audio ms=%.0f status=ok kind=single",
+                    (time.perf_counter() - request_started) * 1000.0,
+                )
                 embed = EmbedFactory.now_playing(
                     title=track.title,
                     artist=track.artist,
