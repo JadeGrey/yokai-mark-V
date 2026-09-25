@@ -179,7 +179,39 @@ async def test_download_failure_with_unlink_permission_error(
     monkeypatch.setattr(Path, "unlink", failing_unlink)
     buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
     await buffer.wait_idle()  # must not raise
+    task = buffer._inflight.get("aaaaaaaa")
+    if task is not None:
+        buffer._inflight.pop("aaaaaaaa", None)
     assert buffer.get("aaaaaaaa") is None
+    assert (tmp_path / "aaaaaaaa.part").exists()
+
+
+@pytest.mark.asyncio
+async def test_cancel_with_unlink_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def hanging_downloader(url: str, dest: Path) -> None:
+        dest.write_bytes(b"partial")
+        await asyncio.sleep(10)
+
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=hanging_downloader)
+    orig_unlink = Path.unlink
+
+    def failing_unlink(self: Path, missing_ok: bool = False) -> None:
+        if str(self).endswith(".part"):
+            raise PermissionError("file in use")
+        return orig_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", failing_unlink)
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await asyncio.sleep(0.05)
+    task = buffer._inflight.get("aaaaaaaa")
+    assert task is not None
+    task.cancel()
+    results = await asyncio.gather(task, return_exceptions=True)
+    assert len(results) == 1 and isinstance(results[0], asyncio.CancelledError)
+    assert task.cancelled()
+    assert (tmp_path / "aaaaaaaa.part").exists()
 
 
 @pytest.mark.asyncio
@@ -191,13 +223,15 @@ async def test_cancel_while_waiting_for_semaphore(tmp_path: Path) -> None:
             downloads_started.set()
             await asyncio.sleep(10)
         else:
-            downloads_started.wait()
+            await downloads_started.wait()
             dest.write_bytes(b"x" * 1000)
 
     buffer = AudioBuffer(tmp_path, 10_000, downloader=slow_downloader)
     buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
     await asyncio.sleep(0.05)
     buffer.schedule(track("bbbbbbbb"), StreamInfo(url="http://s/2"))
+    await asyncio.sleep(0.05)  # Let task B reach the semaphore wait
+    task_a = buffer._inflight.get("aaaaaaaa")
     task_b = buffer._inflight.get("bbbbbbbb")
     assert task_b is not None
     task_b.cancel()
@@ -205,6 +239,8 @@ async def test_cancel_while_waiting_for_semaphore(tmp_path: Path) -> None:
     assert len(results) == 1 and isinstance(results[0], asyncio.CancelledError)
     assert task_b.cancelled()
     assert list(tmp_path.iterdir()) == []
+    if task_a is not None:
+        task_a.cancel()
 
 
 @pytest.mark.asyncio
@@ -222,18 +258,20 @@ async def test_ffmpeg_download_arguments(tmp_path: Path, monkeypatch: pytest.Mon
     dest = tmp_path / "output.mka"
     await ffmpeg_download(url, dest, ffmpeg="custom_ffmpeg")
     assert fake_proc.args[0] == "custom_ffmpeg"
-    assert "-reconnect" in fake_proc.args
-    assert "-reconnect_streamed" in fake_proc.args
-    assert "-reconnect_delay_max" in fake_proc.args
-    assert "-i" in fake_proc.args
     i_index = fake_proc.args.index("-i")
+    reconnect_idx = fake_proc.args.index("-reconnect")
+    reconnect_streamed_idx = fake_proc.args.index("-reconnect_streamed")
+    reconnect_delay_idx = fake_proc.args.index("-reconnect_delay_max")
+    assert reconnect_idx < i_index
+    assert reconnect_streamed_idx < i_index
+    assert reconnect_delay_idx < i_index
     assert fake_proc.args[i_index + 1] == url
     assert "-vn" in fake_proc.args
     assert "-c:a" in fake_proc.args
     assert "copy" in fake_proc.args
     assert "-f" in fake_proc.args
     assert "matroska" in fake_proc.args
-    assert str(dest) in fake_proc.args
+    assert fake_proc.args[-1] == str(dest)
 
 
 @pytest.mark.asyncio
@@ -241,7 +279,8 @@ async def test_ffmpeg_download_non_zero_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_proc = AsyncMock()
-    fake_proc.communicate = AsyncMock(return_value=(b"", b"Stream error details"))
+    stderr_text = b"Stream error details"
+    fake_proc.communicate = AsyncMock(return_value=(b"", stderr_text))
     fake_proc.returncode = 1
 
     async def fake_create_subprocess_exec(*args, **kwargs):
@@ -250,14 +289,20 @@ async def test_ffmpeg_download_non_zero_exit(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
     url = "http://example.com/stream"
     dest = tmp_path / "output.mka"
-    with pytest.raises(RuntimeError, match="ffmpeg exited 1"):
+    with pytest.raises(RuntimeError) as exc_info:
         await ffmpeg_download(url, dest)
+    assert "ffmpeg exited 1" in str(exc_info.value)
+    assert "Stream error details" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_ffmpeg_download_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_proc = AsyncMock()
-    fake_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+
+    async def hanging_communicate():
+        await asyncio.Event().wait()
+
+    fake_proc.communicate = hanging_communicate
     fake_proc.kill = Mock()
     fake_proc.wait = AsyncMock()
 
@@ -265,7 +310,7 @@ async def test_ffmpeg_download_timeout(tmp_path: Path, monkeypatch: pytest.Monke
         return fake_proc
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
-    monkeypatch.setattr("yokai.music.buffer.DOWNLOAD_TIMEOUT_S", 0.001)
+    monkeypatch.setattr("yokai.music.buffer.DOWNLOAD_TIMEOUT_S", 0.05)
     url = "http://example.com/stream"
     dest = tmp_path / "output.mka"
     with pytest.raises(asyncio.TimeoutError):
