@@ -90,8 +90,21 @@ Goal: every message Yokai sends looks like it came from the same bot, and featur
 4. Enforce Discord limits centrally with `clamp()` helpers: title 256, description 4096, field name 256, field value 1024, footer 2048, 25 fields, 6000 characters total. Truncate with an ellipsis; never raise.
 5. A single `send()` helper handles the interaction lifecycle (response vs followup vs edit), ephemeral flag (errors default to ephemeral), `allowed_mentions=none`, and attaching views.
 6. `BaseView` for all buttons/selects: timeout, disable on timeout, `interaction_check` that restricts who may press, and safe error handling. `QueuePaginator` and `RecommendView` extend it.
-7. Error embeds have a fixed shape: quip line (optional) + plain explanation + optional "what to try" hint.
+7. Error embeds have a fixed shape: specific title + plain explanation + optional `Try` field, with the quip (optional) in the footer.
 8. Tests: every builder respects limits (including hostile inputs such as 10,000-character titles); every quip key has 3+ variants; a lint-style test greps feature modules for raw text sends.
+
+### Layout (v2)
+
+- **Titles** are specific to the situation; there is no generic "Error" or "Success". Each embed carries exactly one emoji, in the title.
+- **Error embed:** specific title, plain message in the description, a separate non-inline `Try` field, the quip in the footer, no second emoji.
+- **Now playing:** the title is the track title linked to its YouTube page, then an artist line and a progress bar (`━` played, `●` head, `─` remaining, no emoji). Inline fields: Duration, Requested by, Source.
+- **Queued:** title `Queued`, the track as a linked bold line, fields Position, Plays in, Duration, Requested by, Source.
+- **Queue and recommendation lists** are compact numbered lines: `` ` 1.` **Title** — Artist · `3:41` ``. The queue header shows what is playing, the total runtime and the loop state.
+- **Import summaries** (playlist or album loads) use Loaded / Queued / Now playing fields.
+- **Grid:** every run of inline fields is padded to three columns so Discord's layout stays aligned.
+- **Safety:** all user-supplied track text goes through `escape_md`, so a title cannot inject a link or formatting.
+- **`/ping`** color comes from gateway, REST, voice and database latency only; the resolver figure is displayed but not counted (see section 9). `/diag` is amber when YouTube is degraded or yt-dlp is outdated, green otherwise.
+- **Design review:** `scripts/preview_embeds.py` renders every builder with sample data to `docs/preview/embeds.html`. Regenerate it after changing any builder.
 
 ---
 
