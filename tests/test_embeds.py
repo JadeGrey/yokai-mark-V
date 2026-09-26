@@ -314,6 +314,14 @@ def test_track_text_is_escaped_in_lists_and_links() -> None:
     assert "[free gift](" not in page.description
     recs = EmbedFactory.recommendations(tracks=[(nasty, nasty, 10)], seed_title=nasty)
     assert "[free gift](" not in recs.description
+    assert "Seeded from **\\[free gift\\]\\(" in recs.description
+    summary = EmbedFactory.import_summary(
+        kind="Playlist", name=nasty, loaded=1, total=None, queued=0, now_playing=nasty
+    )
+    assert "[free gift](" not in summary.description
+    assert "\\[free gift\\]" in summary.description
+    assert "[free gift](" not in _fields(summary)["Now playing"]
+    assert "\\[free gift\\]" in _fields(summary)["Now playing"]
 
 
 def test_queue_page_compact_list_with_header() -> None:

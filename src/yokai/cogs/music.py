@@ -15,8 +15,9 @@ from yokai.errors import VoiceChannelError, VoicePermissionError
 from yokai.music.classifier import InputKind, classify_input
 from yokai.music.models import LoopMode, PlayerState, Track
 from yokai.music.spotify.urls import parse_spotify_uri_or_url, resolve_spotify_link
+from yokai.textutil import escape_md
 from yokai.theme import quip_bank
-from yokai.ui.embeds import EmbedFactory, send
+from yokai.ui.embeds import EmbedFactory, clamp, send
 from yokai.ui.views import QueuePaginator, RecommendView
 
 if TYPE_CHECKING:
@@ -172,7 +173,10 @@ class MusicCog(commands.Cog, name="Music"):
                 if not matched:
                     err_embed = EmbedFactory.error(
                         title="No match found",
-                        message=f"Could not find a confident YouTube match for '{meta.title}'.",
+                        message=(
+                            "Could not find a confident YouTube match for "
+                            f"**{escape_md(clamp(meta.title, 120))}**."
+                        ),
                         user_hint="Try searching with YouTube song title and artist.",
                         bot_avatar_url=avatar_url,
                     )
@@ -390,7 +394,7 @@ class MusicCog(commands.Cog, name="Music"):
         title = skipped.title if skipped else "Track"
         embed = EmbedFactory.success(
             title="Skipped",
-            description=f"Skipped **{title}**.",
+            description=f"Skipped **{escape_md(clamp(title, 120))}**.",
             context="Controls",
             quip=quip,
         )
@@ -470,7 +474,7 @@ class MusicCog(commands.Cog, name="Music"):
             removed = player.queue.remove(position)
             embed = EmbedFactory.success(
                 title="Track Removed",
-                description=f"Removed **#{position}**: {removed.title}",
+                description=f"Removed **#{position}**: {escape_md(clamp(removed.title, 120))}",
                 context="Queue",
             )
             await send(interaction, embed=embed)
@@ -667,7 +671,10 @@ class MusicCog(commands.Cog, name="Music"):
         if not recommendation.tracks:
             embed = EmbedFactory.warning(
                 title="No Recommendations Found",
-                description=f"Could not discover new radio tracks for **{seed_track.title}**.",
+                description=(
+                    "Could not discover new radio tracks for "
+                    f"**{escape_md(clamp(seed_track.title, 120))}**."
+                ),
                 context="Recommendations",
             )
             await send(interaction, embed=embed)

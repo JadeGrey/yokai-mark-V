@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from yokai.textutil import escape_md
+
 
 class YokaiError(Exception):
     """Base exception for all domain errors in Yokai."""
@@ -116,7 +118,7 @@ class UnmatchedTrackError(YokaiError):
 
     def __init__(self, title: str) -> None:
         super().__init__(
-            f"Could not find a confident YouTube match for **{title}**.",
+            f"Could not find a confident YouTube match for **{escape_md(title[:120])}**.",
             user_hint="Try searching with the song title and artist, or paste a YouTube link.",
         )
 

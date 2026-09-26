@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, Mapping, Optional, Sequence
 
 import discord
 
+from yokai.textutil import escape_md
 from yokai.theme import (
     COLOR_BRAND,
     COLOR_ERROR,
@@ -40,8 +40,6 @@ ZERO_WIDTH = "​"
 FIELDS_BUDGET = 3000  # characters reserved for fields so the description always has room
 LIST_BUDGET = 3000  # characters of track lines in a list embed
 
-_MD_SPECIAL = re.compile(r"([\\*_`~|\[\]<>()])")
-
 
 def clamp(text: Optional[str], max_len: int) -> str:
     """Clamp string to max_len, appending an ellipsis if truncated."""
@@ -53,15 +51,6 @@ def clamp(text: Optional[str], max_len: int) -> str:
     if max_len <= 1:
         return text[:max_len]
     return text[: max_len - 1].rstrip() + "…"
-
-
-def escape_md(text: str) -> str:
-    """Escape Discord markdown so user-supplied text (track titles) renders as plain text.
-
-    Backslash-escapes `\\ * _ ` ~ | [ ] ( ) < >`, which neutralises live links, mentions, code
-    spans and formatting that a YouTube title could otherwise inject into an embed.
-    """
-    return _MD_SPECIAL.sub(r"\\\1", text)
 
 
 def format_runtime(seconds: Optional[int]) -> str:

@@ -25,6 +25,7 @@ from yokai.music.buffer import AudioBuffer, redact_urls
 from yokai.music.models import LoopMode, MusicQueue, PlayerState, StreamInfo, Track
 from yokai.music.resolvers.base import Resolver
 from yokai.music.timing import StageTimer
+from yokai.textutil import escape_md
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -534,10 +535,15 @@ class GuildPlayer:
 
         from yokai.ui.embeds import EmbedFactory
 
-        reason = (
-            exc.message if isinstance(exc, YokaiError) else "The audio stream could not be loaded."
-        )
-        description = f"Skipping **{track.title}**. {reason}"
+        if isinstance(exc, UnmatchedTrackError):
+            description = exc.message  # already names the (escaped) track
+        else:
+            reason = (
+                exc.message
+                if isinstance(exc, YokaiError)
+                else "The audio stream could not be loaded."
+            )
+            description = f"Skipping **{escape_md(track.title[:120])}**. {reason}"
         if getattr(self.resolver, "is_degraded", False) is True:
             description += "\nYouTube is giving me trouble. The owner can check `/diag`."
         embed = EmbedFactory.warning(
