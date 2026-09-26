@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{6,32}$")
 _URL = re.compile(r"https?://\S+")
+# FFmpeg prints this once for every YouTube opus/webm stream copy, yet exits 0 and writes a
+# complete, valid file: it is parser noise, not a failure. Addresses vary per run.
+_BENIGN_OPUS_LINE = re.compile(r"^\[opus @ [0-9a-fA-Fx]+\] Error parsing Opus packet header\.\s*$")
 DOWNLOAD_TIMEOUT_S = 120.0
 
 Downloader = Callable[[str, Path], Awaitable[None]]
@@ -29,6 +32,12 @@ Downloader = Callable[[str, Path], Awaitable[None]]
 def redact_urls(text: str) -> str:
     """Replace URLs (stream URLs carry the public IP and a signature) with `<url>`."""
     return _URL.sub("<url>", text)
+
+
+def _significant_stderr(text: str) -> str:
+    """Return `text` without the known-benign opus line and blank lines ('' = nothing left)."""
+    lines = (line.strip() for line in text.splitlines())
+    return "\n".join(line for line in lines if line and not _BENIGN_OPUS_LINE.match(line))
 
 
 async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
@@ -68,10 +77,12 @@ async def ffmpeg_download(url: str, dest: Path, ffmpeg: str = "ffmpeg") -> None:
     detail = redact_urls(stderr.decode(errors="replace")).strip()
     if proc.returncode != 0:
         raise RuntimeError(f"ffmpeg exited {proc.returncode}: {detail[:200]}")
-    if detail:
-        # With `-loglevel error`, any output means a read failed; FFmpeg can still exit 0
-        # after a mid-stream error, leaving a truncated file.
-        raise RuntimeError(f"ffmpeg reported errors: {detail[:200]}")
+    significant = _significant_stderr(detail)
+    if significant:
+        # With `-loglevel error`, FFmpeg can still exit 0 after a mid-stream error ("File ended
+        # prematurely", "Stream ends prematurely", ...), leaving a truncated or damaged copy. The
+        # one benign opus parse line is ignored; any other output is treated as a failure.
+        raise RuntimeError(f"ffmpeg reported errors: {significant[:200]}")
 
 
 class AudioBuffer:

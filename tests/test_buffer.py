@@ -374,6 +374,87 @@ async def test_ffmpeg_download_stderr_with_zero_exit_is_a_failure(
     assert "Error in the pull function." in str(exc_info.value)
 
 
+OPUS_NOISE = "[opus @ 0000025cf9143880] Error parsing Opus packet header."
+
+
+def _fake_ffmpeg(monkeypatch: pytest.MonkeyPatch, stderr: str, returncode: int = 0) -> None:
+    fake_proc = AsyncMock()
+    fake_proc.communicate = AsyncMock(return_value=(b"", stderr.encode()))
+    fake_proc.returncode = returncode
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return fake_proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        OPUS_NOISE,
+        OPUS_NOISE + "\n",
+        OPUS_NOISE + "\r\n",
+        "\r\n" + OPUS_NOISE + "\r\n\r\n",
+        f"{OPUS_NOISE}\n\n{OPUS_NOISE}\n[opus @ 0x7f12ab] Error parsing Opus packet header.\n",
+        f"{OPUS_NOISE}\r\n{OPUS_NOISE}\r\n\r\n",
+    ],
+)
+@pytest.mark.asyncio
+async def test_ffmpeg_download_ignores_benign_opus_parse_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stderr: str
+) -> None:
+    """Every YouTube opus/webm stream copy exits 0 with this one harmless line."""
+    _fake_ffmpeg(monkeypatch, stderr)
+    await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+
+
+@pytest.mark.parametrize(
+    "truncation",
+    [
+        "[http @ 000001415e3ce100] Stream ends prematurely at 104281, should be 208563",
+        "[matroska,webm @ 000001415e3ce100] File ended prematurely",
+        "[matroska,webm @ 0x1] Element at 0x19788 ending at 0x14f3301 exceeds containing "
+        "master element ending at 0x25d44",
+    ],
+)
+@pytest.mark.asyncio
+async def test_ffmpeg_download_truncation_next_to_opus_noise_is_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, truncation: str
+) -> None:
+    stderr = (
+        f"{OPUS_NOISE}\n{truncation}\n"
+        "https://rr3---sn-abc.googlevideo.com/videoplayback?ip=203.0.113.7&sig=SECRET: gone\n"
+    )
+    _fake_ffmpeg(monkeypatch, stderr)
+    with pytest.raises(RuntimeError) as exc_info:
+        await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+    message = str(exc_info.value)
+    assert "ffmpeg reported errors" in message
+    assert "prematurely" in message or "exceeds containing" in message
+    assert "googlevideo" not in message
+    assert "203.0.113.7" not in message
+    assert "SECRET" not in message
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_download_similar_opus_line_is_not_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the exact known sentence is benign; a different opus error is still a failure."""
+    _fake_ffmpeg(monkeypatch, "[opus @ 0x1] Invalid packet size, stream damaged.")
+    with pytest.raises(RuntimeError, match="ffmpeg reported errors"):
+        await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_download_non_zero_exit_with_opus_noise_still_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_ffmpeg(monkeypatch, OPUS_NOISE, returncode=1)
+    with pytest.raises(RuntimeError, match="ffmpeg exited 1"):
+        await ffmpeg_download("http://example.com/stream", tmp_path / "output.mka")
+
+
 @pytest.mark.asyncio
 async def test_download_reporting_errors_leaves_no_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
