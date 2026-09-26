@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Mapping, Optional, Sequence
 
 import discord
@@ -13,6 +14,11 @@ from yokai.theme import (
     COLOR_IDLE,
     COLOR_SUCCESS,
     COLOR_WARNING,
+    PROGRESS_EMPTY,
+    PROGRESS_FILLED,
+    PROGRESS_HEAD,
+    PROGRESS_LENGTH,
+    SEP,
     Emoji,
     quip_bank,
 )
@@ -28,6 +34,14 @@ MAX_FOOTER_LEN = 2048
 MAX_FIELDS_COUNT = 25
 MAX_TOTAL_LEN = 6000
 
+FieldSpec = tuple[str, str, bool]  # (name, value, inline)
+
+ZERO_WIDTH = "​"
+FIELDS_BUDGET = 3000  # characters reserved for fields so the description always has room
+LIST_BUDGET = 3000  # characters of track lines in a list embed
+
+_MD_SPECIAL = re.compile(r"([\\*_`~|\[\]<>()])")
+
 
 def clamp(text: Optional[str], max_len: int) -> str:
     """Clamp string to max_len, appending an ellipsis if truncated."""
@@ -39,6 +53,62 @@ def clamp(text: Optional[str], max_len: int) -> str:
     if max_len <= 1:
         return text[:max_len]
     return text[: max_len - 1].rstrip() + "…"
+
+
+def escape_md(text: str) -> str:
+    """Escape Discord markdown so user-supplied text (track titles) renders as plain text.
+
+    Backslash-escapes `\\ * _ ` ~ | [ ] ( ) < >`, which neutralises live links, mentions, code
+    spans and formatting that a YouTube title could otherwise inject into an embed.
+    """
+    return _MD_SPECIAL.sub(r"\\\1", text)
+
+
+def format_runtime(seconds: Optional[int]) -> str:
+    """Compact total time: 45s, 7m 20s, 1h 12m."""
+    if seconds is None or seconds < 0:
+        return "unknown"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes}m {secs:02d}s"
+
+
+def _link(text: str, url: Optional[str]) -> str:
+    """Bold, escaped text; a markdown link when a URL is known."""
+    safe = escape_md(text)
+    return f"**[{safe}]({url})**" if url else f"**{safe}**"
+
+
+def _grid(fields: Sequence[FieldSpec]) -> list[FieldSpec]:
+    """Pad every run of inline fields to a multiple of three so Discord's grid stays aligned."""
+    out: list[FieldSpec] = []
+    run = 0
+
+    def flush() -> None:
+        nonlocal run
+        if run % 3:
+            out.extend([(ZERO_WIDTH, ZERO_WIDTH, True)] * (3 - run % 3))
+        run = 0
+
+    for name, value, inline in fields:
+        if inline:
+            run += 1
+        else:
+            flush()
+        out.append((name, value, inline))
+    flush()
+    return out
+
+
+def _list_line(pos: int, title: str, artist: Optional[str], duration_s: Optional[int]) -> str:
+    """One compact numbered track line: ` 1. **Title** — Artist · `3:41``."""
+    artist_part = f" — {escape_md(clamp(artist, 40))}" if artist else ""
+    dur_part = f"{SEP}`{_format_duration(duration_s)}`" if duration_s else ""
+    return f"`{pos:>2}.` **{escape_md(clamp(title, 60))}**{artist_part}{dur_part}"
 
 
 class EmbedFactory:
@@ -53,32 +123,47 @@ class EmbedFactory:
         bot_avatar_url: Optional[str] = None,
         quip: Optional[str] = None,
         thumbnail_url: Optional[str] = None,
+        url: Optional[str] = None,
+        fields: Sequence[FieldSpec] = (),
+        footer_quip: Optional[str] = None,
     ) -> discord.Embed:
         clamped_title = clamp(title, MAX_TITLE_LEN)
-        footer_text = clamp(f"Yokai · {context}", MAX_FOOTER_LEN)
+        footer_text = f"Yokai{SEP}{context}"
+        if footer_quip:
+            footer_text += f"{SEP}{clamp(footer_quip, 80)}"
+        footer_text = clamp(footer_text, MAX_FOOTER_LEN)
+
+        field_items: list[FieldSpec] = []
+        fields_len = 0
+        for name, value, inline in fields[:MAX_FIELDS_COUNT]:
+            f_name = clamp(name, MAX_FIELD_NAME_LEN) or ZERO_WIDTH
+            f_value = clamp(value, MAX_FIELD_VAL_LEN) or ZERO_WIDTH
+            if fields_len + len(f_name) + len(f_value) > FIELDS_BUDGET:
+                break
+            field_items.append((f_name, f_value, inline))
+            fields_len += len(f_name) + len(f_value)
 
         desc = description
         if quip:
             desc = f"*{clamp(quip, 100)}*\n\n{desc}" if desc else f"*{clamp(quip, 100)}*"
 
-        # Reserve budget for title, footer, and safety margin
-        desc_budget = min(MAX_DESC_LEN, MAX_TOTAL_LEN - len(clamped_title) - len(footer_text) - 10)
+        # Reserve budget for title, footer, fields and a safety margin
+        desc_budget = min(
+            MAX_DESC_LEN, MAX_TOTAL_LEN - len(clamped_title) - len(footer_text) - fields_len - 10
+        )
         clamped_desc = clamp(desc, max(desc_budget, 10))
 
         embed = discord.Embed(
             title=clamped_title,
             description=clamped_desc,
             color=color,
+            url=url or None,
         )
-
-        embed.set_footer(
-            text=footer_text,
-            icon_url=bot_avatar_url,
-        )
-
+        embed.set_footer(text=footer_text, icon_url=bot_avatar_url)
         if thumbnail_url:
             embed.set_thumbnail(url=thumbnail_url)
-
+        for f_name, f_value, inline in field_items:
+            embed.add_field(name=f_name, value=f_value, inline=inline)
         return embed
 
     @classmethod
@@ -89,6 +174,7 @@ class EmbedFactory:
         context: str = "Info",
         quip: Optional[str] = None,
         bot_avatar_url: Optional[str] = None,
+        fields: Sequence[FieldSpec] = (),
     ) -> discord.Embed:
         return cls._create_base(
             title=title,
@@ -97,6 +183,7 @@ class EmbedFactory:
             context=context,
             bot_avatar_url=bot_avatar_url,
             quip=quip,
+            fields=fields,
         )
 
     @classmethod
@@ -107,6 +194,7 @@ class EmbedFactory:
         context: str = "Success",
         quip: Optional[str] = None,
         bot_avatar_url: Optional[str] = None,
+        fields: Sequence[FieldSpec] = (),
     ) -> discord.Embed:
         return cls._create_base(
             title=f"{Emoji.CHECK} {title}",
@@ -115,6 +203,7 @@ class EmbedFactory:
             context=context,
             bot_avatar_url=bot_avatar_url,
             quip=quip,
+            fields=fields,
         )
 
     @classmethod
@@ -125,6 +214,7 @@ class EmbedFactory:
         context: str = "Warning",
         quip: Optional[str] = None,
         bot_avatar_url: Optional[str] = None,
+        fields: Sequence[FieldSpec] = (),
     ) -> discord.Embed:
         return cls._create_base(
             title=f"{Emoji.WARN} {title}",
@@ -133,6 +223,7 @@ class EmbedFactory:
             context=context,
             bot_avatar_url=bot_avatar_url,
             quip=quip,
+            fields=fields,
         )
 
     @classmethod
@@ -143,19 +234,18 @@ class EmbedFactory:
         context: str = "System",
         include_quip: bool = True,
         bot_avatar_url: Optional[str] = None,
+        title: str = "That didn't work",
     ) -> discord.Embed:
-        quip = quip_bank.get("error_lead") if include_quip else None
-        desc_parts = [message]
-        if user_hint:
-            desc_parts.append(f"\n💡 **What to try:** {user_hint}")
-
+        """Fixed shape: specific title, plain explanation, a 'Try' field, quip in the footer."""
+        fields: list[FieldSpec] = [("Try", user_hint, False)] if user_hint else []
         return cls._create_base(
-            title=f"{Emoji.CROSS} Error",
-            description="\n".join(desc_parts),
+            title=f"{Emoji.CROSS} {title}",
+            description=message,
             color=COLOR_ERROR,
             context=context,
             bot_avatar_url=bot_avatar_url,
-            quip=quip,
+            fields=fields,
+            footer_quip=quip_bank.get("error_lead") if include_quip else None,
         )
 
     @classmethod
@@ -435,13 +525,13 @@ class EmbedFactory:
         return embed
 
 
-def _render_progress_bar(current: int, total: int, length: int = 14) -> str:
+def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH) -> str:
+    """A bar of `length` glyphs with one head marker; never an emoji."""
     if total <= 0:
-        return "━" * length
+        return PROGRESS_HEAD + PROGRESS_EMPTY * (length - 1)
     progress = min(max(current / total, 0.0), 1.0)
-    filled = int(progress * length)
-    unfilled = length - filled
-    return "━" * filled + "🔘" + "─" * max(unfilled - 1, 0)
+    head = min(int(progress * length), length - 1)
+    return PROGRESS_FILLED * head + PROGRESS_HEAD + PROGRESS_EMPTY * (length - 1 - head)
 
 
 def _format_duration(seconds: Optional[int]) -> str:
