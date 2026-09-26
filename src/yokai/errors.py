@@ -8,6 +8,8 @@ from typing import Optional
 class YokaiError(Exception):
     """Base exception for all domain errors in Yokai."""
 
+    title: str = "That didn't work"
+
     def __init__(self, message: str, user_hint: Optional[str] = None) -> None:
         super().__init__(message)
         self.message = message
@@ -16,6 +18,8 @@ class YokaiError(Exception):
 
 class NotFoundError(YokaiError):
     """Raised when a track, query, or playlist yielded no results or was deleted."""
+
+    title = "Nothing found"
 
     def __init__(
         self,
@@ -28,6 +32,8 @@ class NotFoundError(YokaiError):
 class LoginRequiredError(YokaiError):
     """Raised when media is age-restricted, private, or members-only."""
 
+    title = "Login required"
+
     def __init__(
         self,
         message: str = "This content requires a login (age-gated, private, or members-only).",
@@ -38,6 +44,8 @@ class LoginRequiredError(YokaiError):
 
 class UnavailableError(YokaiError):
     """Raised when media is region-blocked, taken down, or unavailable."""
+
+    title = "Track unavailable"
 
     def __init__(
         self,
@@ -50,6 +58,8 @@ class UnavailableError(YokaiError):
 class BotCheckError(YokaiError):
     """Raised when YouTube issues a bot check, HTTP 403, or SABR format blockage."""
 
+    title = "YouTube blocked the request"
+
     def __init__(
         self,
         message: str = "YouTube blocked the audio extraction request (bot detection/403).",
@@ -60,6 +70,8 @@ class BotCheckError(YokaiError):
 
 class ExtractionTimeoutError(YokaiError):
     """Raised when audio metadata or stream URL extraction timed out."""
+
+    title = "Took too long"
 
     def __init__(
         self,
@@ -72,6 +84,8 @@ class ExtractionTimeoutError(YokaiError):
 class UnsupportedError(YokaiError):
     """Raised when a URL domain, media format, or link type is unsupported."""
 
+    title = "Not supported"
+
     def __init__(
         self,
         message: str = "This link or content type is not supported.",
@@ -82,6 +96,8 @@ class UnsupportedError(YokaiError):
 
 class SpotifyResolutionError(YokaiError):
     """Raised when Spotify metadata resolution fails across all providers."""
+
+    title = "Spotify lookup failed"
 
     def __init__(
         self,
@@ -96,6 +112,8 @@ class SpotifyResolutionError(YokaiError):
 class UnmatchedTrackError(YokaiError):
     """Raised when an imported Spotify track has no confident YouTube match."""
 
+    title = "No match found"
+
     def __init__(self, title: str) -> None:
         super().__init__(
             f"Could not find a confident YouTube match for **{title}**.",
@@ -106,9 +124,13 @@ class UnmatchedTrackError(YokaiError):
 class VoiceError(YokaiError):
     """Base exception for voice channel connection or playback errors."""
 
+    title = "Voice problem"
+
 
 class VoicePermissionError(VoiceError):
     """Raised when the bot lacks necessary voice permissions (Connect or Speak)."""
+
+    title = "Missing permission"
 
     def __init__(
         self,
@@ -124,6 +146,8 @@ class VoicePermissionError(VoiceError):
 
 class VoiceChannelError(VoiceError):
     """Raised when voice state rules are violated (e.g. caller not in VC)."""
+
+    title = "Voice channel needed"
 
     def __init__(
         self,

@@ -40,6 +40,7 @@ class BaseView(discord.ui.View):
         if self.allowed_user_ids is not None and interaction.user.id not in self.allowed_user_ids:
             err_embed = EmbedFactory.error(
                 message="You do not have permission to interact with this control.",
+                title="Not your control",
                 user_hint="Only the user who initiated this request can use these buttons.",
                 context="Permissions",
                 include_quip=False,
@@ -76,6 +77,7 @@ class BaseView(discord.ui.View):
         logger.error("Unhandled error in view item %s: %s", item, error, exc_info=error)
         err_embed = EmbedFactory.error(
             message="An unexpected error occurred while processing this action.",
+            title="Something broke",
             user_hint="Please try again or contact the bot owner if the issue persists.",
             context="Control Error",
         )
@@ -187,6 +189,7 @@ class RecommendView(BaseView):
             message=(
                 "You must be in the voice channel or be the requester to queue recommendations."
             ),
+            title="Not your control",
             user_hint="Join the voice channel to use this button.",
             context="Permissions",
             include_quip=False,
@@ -307,6 +310,7 @@ class DiagView(BaseView):
                     last_err = err_lines[-1] if err_lines else f"Exit code {proc.returncode}"
                     embed = EmbedFactory.error(
                         message=f"Failed to update yt-dlp: {last_err}",
+                        title="Update failed",
                         user_hint="Check host environment and pip permissions.",
                         context="Maintenance",
                         bot_avatar_url=self.bot_avatar_url,
@@ -316,6 +320,7 @@ class DiagView(BaseView):
                 logger.error("Exception occurred while updating yt-dlp: %s", exc)
                 embed = EmbedFactory.error(
                     message=f"Failed to execute pip update: {exc}",
+                    title="Update failed",
                     user_hint="Check host environment permissions.",
                     context="Maintenance",
                     bot_avatar_url=self.bot_avatar_url,

@@ -188,6 +188,7 @@ class MetaCog(commands.Cog, name="Meta"):
         if interaction.user.id != self.bot.config.owner_id:
             embed = EmbedFactory.error(
                 message="Access denied: this command is restricted to the bot owner.",
+                title="Owner only",
                 user_hint="Contact the bot operator if you require diagnostics.",
                 context="Permissions",
                 bot_avatar_url=avatar_url,

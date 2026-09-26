@@ -171,6 +171,7 @@ class YokaiBot(commands.Bot):
             logger.warning("Domain error executing /%s: %s", cmd_name, cause)
             embed = EmbedFactory.error(
                 message=cause.message,
+                title=cause.title,
                 user_hint=cause.user_hint,
                 bot_avatar_url=avatar_url,
             )
@@ -178,6 +179,7 @@ class YokaiBot(commands.Bot):
             logger.error("Unexpected error executing /%s: %s", cmd_name, cause, exc_info=cause)
             embed = EmbedFactory.error(
                 message="An unexpected system error occurred while processing this command.",
+                title="Something broke",
                 user_hint="Check /diag or contact the bot owner if the issue persists.",
                 bot_avatar_url=avatar_url,
             )

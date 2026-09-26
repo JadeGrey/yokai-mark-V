@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 
 from yokai.bot import YokaiBot
 from yokai.config import Config
+from yokai.errors import NotFoundError
 from yokai.health import HealthReport
 
 
@@ -83,3 +85,37 @@ async def test_external_disconnect_stops_the_player() -> None:
 async def test_buffer_can_be_disabled_by_config() -> None:
     bot = make_bot(audio_buffer_mb=0)
     assert bot.audio_buffer.enabled is False
+
+
+@pytest.mark.asyncio
+async def test_tree_error_uses_the_domain_error_title() -> None:
+    bot = make_bot()
+    interaction = MagicMock()
+    interaction.command.qualified_name = "play"
+    interaction.user.id = 7
+    error = discord.app_commands.CommandInvokeError(MagicMock(), NotFoundError())
+    with (
+        patch.object(bot.db, "log_command", new=AsyncMock()),
+        patch("yokai.bot.send", new=AsyncMock()) as sent,
+    ):
+        await bot.on_tree_error(interaction, error)
+    embed = sent.await_args.kwargs["embed"]
+    assert embed.title == "❌ Nothing found"
+    assert sent.await_args.kwargs["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_tree_error_for_unexpected_exceptions_is_generic_but_specific_enough() -> None:
+    bot = make_bot()
+    interaction = MagicMock()
+    interaction.command.qualified_name = "play"
+    interaction.user.id = 7
+    error = discord.app_commands.CommandInvokeError(MagicMock(), RuntimeError("kaboom"))
+    with (
+        patch.object(bot.db, "log_command", new=AsyncMock()),
+        patch("yokai.bot.send", new=AsyncMock()) as sent,
+    ):
+        await bot.on_tree_error(interaction, error)
+    embed = sent.await_args.kwargs["embed"]
+    assert embed.title == "❌ Something broke"
+    assert "kaboom" not in (embed.description or "")
