@@ -1,0 +1,375 @@
+"""Render every Yokai embed with realistic sample data into one HTML page for visual review.
+
+Nothing is sent to Discord and nothing touches the network. Run from the repo root (PowerShell):
+
+    .\\.venv\\Scripts\\python.exe scripts\\preview_embeds.py
+    start docs\\preview\\embeds.html
+
+The page is a document fragment (meta charset, title, style, content; no html/head/body tags) so it
+opens in a browser and can also be published as an Artifact.
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import re
+import sys
+from pathlib import Path
+
+import discord
+
+from yokai.music.models import Track
+from yokai.ui.embeds import EmbedFactory
+
+PAGE_STYLE = """
+:root { color-scheme: dark; }
+body { margin: 0; background: #1e1f22; color: #dbdee1;
+  font: 15px/1.4 "gg sans", "Segoe UI", system-ui, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 4px; color: #f2f3f5; }
+p.lead { margin: 0 0 24px; color: #949ba4; }
+.card { margin: 0 0 28px; }
+.label { margin: 0 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+  color: #949ba4; font-weight: 600; }
+.embed { position: relative; background: #2b2d31; border-left: 4px solid #00e5ff;
+  border-radius: 4px; padding: 10px 14px 12px; max-width: 520px; overflow: hidden; }
+.embed .thumb { position: absolute; top: 12px; right: 12px; width: 72px; height: 72px;
+  border-radius: 6px; background: linear-gradient(135deg, #00e5ff33, #78909c55); }
+.embed .thumb + .body { margin-right: 88px; }
+.title { font-weight: 700; font-size: 16px; color: #f2f3f5; margin: 0 0 4px; }
+.title a { color: #00a8fc; text-decoration: none; }
+.desc { white-space: normal; word-break: break-word; }
+.desc a, .field a { color: #00a8fc; text-decoration: none; }
+code { background: #1e1f22; border-radius: 3px; padding: 0 4px; font-size: 13px; }
+.mention { background: #5865f24d; color: #c9cdfb; border-radius: 3px; padding: 0 2px; }
+.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px;
+  margin-top: 8px; }
+.field.wide { grid-column: 1 / -1; }
+.field .fname { font-weight: 700; font-size: 13px; color: #f2f3f5; margin-bottom: 2px; }
+.field .fval { font-size: 14px; word-break: break-word; }
+.footer { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px;
+  color: #949ba4; }
+.footer .icon { width: 18px; height: 18px; border-radius: 50%;
+  background: linear-gradient(135deg, #00e5ff, #0096c7); flex: none; }
+"""
+
+
+def md_to_html(text: str) -> str:
+    """A tiny Discord-markdown subset -> safe HTML (escapes first, so no markup can leak in)."""
+    out = html.escape(text, quote=False)
+    out = re.sub(r"&lt;@!?\d+&gt;", '<span class="mention">@user</span>', out)
+    out = re.sub(
+        r"\*\*\[((?:\\.|[^\]\\])+?)\]\((https?://[^)\s]+)\)\*\*",
+        r'<a href="\2"><strong>\1</strong></a>',
+        out,
+    )
+    out = re.sub(r"\[((?:\\.|[^\]\\])+?)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', out)
+    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", out)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    out = out.replace("\\[", "[").replace("\\]", "]").replace("\\*", "*").replace("\\_", "_")
+    out = out.replace("\\`", "`").replace("\\~", "~").replace("\\|", "|")
+    out = out.replace("\\(", "(").replace("\\)", ")")
+    out = out.replace("\\&lt;", "&lt;").replace("\\&gt;", "&gt;").replace("\\\\", "\\")
+    return out.replace("\n", "<br>")
+
+
+def render_embed(embed: discord.Embed, label: str) -> str:
+    data = embed.to_dict()
+    color = f"#{data.get('color', 0):06x}"
+    parts = [
+        f'<section class="card"><h3 class="label">{html.escape(label)}</h3>',
+        f'<div class="embed" style="border-left-color:{color}">',
+    ]
+    if data.get("thumbnail"):
+        parts.append('<div class="thumb" title="thumbnail placeholder"></div>')
+    parts.append('<div class="body">')
+    if data.get("title"):
+        title_html = html.escape(data["title"])
+        if data.get("url"):
+            title_html = f'<a href="{html.escape(data["url"])}">{title_html}</a>'
+        parts.append(f'<div class="title">{title_html}</div>')
+    if data.get("description"):
+        parts.append(f'<div class="desc">{md_to_html(data["description"])}</div>')
+    fields = data.get("fields", [])
+    if fields:
+        parts.append('<div class="fields">')
+        for field in fields:
+            klass = "field" if field.get("inline") else "field wide"
+            name = md_to_html(field.get("name", ""))
+            value = md_to_html(field.get("value", ""))
+            parts.append(
+                f'<div class="{klass}"><div class="fname">{name}</div>'
+                f'<div class="fval">{value}</div></div>'
+            )
+        parts.append("</div>")
+    footer = (data.get("footer") or {}).get("text")
+    if footer:
+        parts.append(f'<div class="footer"><span class="icon"></span>{html.escape(footer)}</div>')
+    parts.append("</div></div></section>")
+    return "".join(parts)
+
+
+def build_samples() -> list[tuple[str, discord.Embed]]:
+    """Every embed shape Yokai can send, with realistic data."""
+    yt = "https://www.youtube.com/watch?v="
+    thumb = "https://img.example/thumb.jpg"
+    avatar = None
+    tracks = [
+        Track(
+            video_id="dQw4w9WgXcQ",
+            title="Never Gonna Give You Up",
+            artist="Rick Astley",
+            duration_s=213,
+            requester_id=1,
+            origin="search",
+        ),
+        Track(
+            video_id="lYBUbBu4W08",
+            title="Never Gonna Give You Up",
+            artist="Rick Astley",
+            duration_s=214,
+            requester_id=1,
+            origin="import",
+        ),
+        Track(
+            video_id="9bZkp7q19f0",
+            title="Gangnam Style",
+            artist="PSY",
+            duration_s=253,
+            requester_id=2,
+            origin="recommendation",
+        ),
+    ]
+    rows = [(i, t.title, t.artist, t.duration_s) for i, t in enumerate(tracks * 3, start=1)]
+    samples: list[tuple[str, discord.Embed]] = [
+        (
+            "Now playing",
+            EmbedFactory.now_playing(
+                title="Never Gonna Give You Up",
+                artist="Rick Astley",
+                duration_s=213,
+                position_s=65,
+                requester_mention="<@42>",
+                thumbnail_url=thumb,
+                url=yt + "dQw4w9WgXcQ",
+                source="search",
+                bot_avatar_url=avatar,
+            ),
+        ),
+        (
+            "Now playing (no artist, unknown length)",
+            EmbedFactory.now_playing(
+                title="Untitled upload",
+                artist=None,
+                duration_s=0,
+                position_s=0,
+                requester_mention="<@42>",
+                source="link",
+            ),
+        ),
+        (
+            "Queued",
+            EmbedFactory.queued(
+                title="Gangnam Style",
+                position=3,
+                artist="PSY",
+                duration_s=253,
+                url=yt + "9bZkp7q19f0",
+                eta_s=440,
+                requester_mention="<@42>",
+                source="recommendation",
+                thumbnail_url=thumb,
+            ),
+        ),
+        (
+            "Queue page",
+            EmbedFactory.queue_page(
+                tracks=rows[:10],
+                page=1,
+                total_pages=2,
+                total_tracks=13,
+                loop_mode="queue",
+                now_playing=("Never Gonna Give You Up", yt + "dQw4w9WgXcQ", 213),
+                total_runtime_s=3900,
+            ),
+        ),
+        (
+            "Queue page (empty)",
+            EmbedFactory.queue_page(tracks=[], page=1, total_pages=1, total_tracks=0),
+        ),
+        (
+            "Recommendations",
+            EmbedFactory.recommendations(
+                tracks=[(t.title, t.artist or "Unknown", t.duration_s) for t in tracks],
+                seed_title="Never Gonna Give You Up",
+            ),
+        ),
+        (
+            "Playlist loaded",
+            EmbedFactory.import_summary(
+                kind="Playlist",
+                name=None,
+                loaded=42,
+                total=None,
+                queued=41,
+                now_playing="Never Gonna Give You Up",
+            ),
+        ),
+        (
+            "Spotify album loaded",
+            EmbedFactory.import_summary(
+                kind="Spotify album",
+                name="Discovery",
+                loaded=14,
+                total=14,
+                queued=13,
+                now_playing="One More Time",
+            ),
+        ),
+        (
+            "Spotify playlist (partial)",
+            EmbedFactory.import_summary(
+                kind="Spotify playlist",
+                name="Road Trip Mix",
+                loaded=50,
+                total=120,
+                queued=50,
+                partial=True,
+            ),
+        ),
+        (
+            "Success (skipped)",
+            EmbedFactory.success(
+                title="Skipped",
+                description="Skipped **Gangnam Style**.",
+                context="Controls",
+                quip="Gone. Next.",
+            ),
+        ),
+        (
+            "Info (nothing playing)",
+            EmbedFactory.info(
+                title="Nothing playing",
+                description="The player is currently idle.",
+                context="Status",
+            ),
+        ),
+        (
+            "Warning",
+            EmbedFactory.warning(
+                title="Track skipped",
+                description="Skipping **Some Song**. YouTube blocked the request (HTTP 403).",
+                context="Playback",
+            ),
+        ),
+        (
+            "Error (with hint and quip)",
+            EmbedFactory.error(
+                message="Could not find a confident YouTube match for 'Some Rare Song'.",
+                user_hint="Try searching with the song title and artist, or paste a YouTube link.",
+                title="No match found",
+                context="System",
+            ),
+        ),
+        (
+            "Error (plain, no quip)",
+            EmbedFactory.error(
+                message="You must be in a voice channel to use music commands.",
+                user_hint="Join a voice channel and try again.",
+                title="Voice channel needed",
+                include_quip=False,
+            ),
+        ),
+        (
+            "Ping (fast)",
+            EmbedFactory.ping(
+                gateway_ms=48.2,
+                rest_ms=71.5,
+                db_ms=0.8,
+                voice_ms=32.0,
+                voice_avg_ms=35.1,
+                resolver_ms=1804.0,
+            ),
+        ),
+        ("Ping (slow)", EmbedFactory.ping(gateway_ms=520.0, rest_ms=610.0, db_ms=2.0)),
+        (
+            "Usage",
+            EmbedFactory.usage(
+                top_users=[(1, 120, 88), (2, 64, 40), (3, 12, 5)],
+                top_commands=[("play", 150), ("skip", 60), ("queue", 22)],
+                period="Last 30 Days",
+            ),
+        ),
+        (
+            "About",
+            EmbedFactory.about(
+                version="0.1.0",
+                uptime_str="2d 3h 12m",
+                host_os="Windows 11",
+                owner_id=42,
+                stack_info={
+                    "Python": "3.14.0",
+                    "discord.py": "2.7.1",
+                    "yt-dlp": "2026.8.19",
+                    "ytmusicapi": "1.12.3",
+                    "FFmpeg": "2025-11-27",
+                },
+            ),
+        ),
+        (
+            "Diagnostics (healthy)",
+            EmbedFactory.diag(
+                diagnostics={
+                    "Python / discord.py": "3.14.0 / 2.7.1",
+                    "DAVE E2EE": "Enabled",
+                    "YouTube Health": "Healthy",
+                    "Database Size": "0.31 MB",
+                },
+                recent_errors=[],
+            ),
+        ),
+        (
+            "Diagnostics (needs attention)",
+            EmbedFactory.diag(
+                diagnostics={
+                    "Python / discord.py": "3.14.0 / 2.7.1",
+                    "DAVE E2EE": "Enabled",
+                    "YouTube Health": "Degraded (3 failures)",
+                    "yt-dlp Version": "2026.8.19 (37d old) (outdated)",
+                },
+                recent_errors=["/play: BotCheckError: YouTube blocked the request"],
+                status="warn",
+            ),
+        ),
+    ]
+    return samples
+
+
+def render_page(samples: list[tuple[str, discord.Embed]]) -> str:
+    cards = "".join(render_embed(embed, label) for label, embed in samples)
+    return (
+        '<meta charset="utf-8"><title>Yokai embed preview</title>'
+        f"<style>{PAGE_STYLE}</style>"
+        "<main><h1>Yokai embed preview</h1>"
+        '<p class="lead">Every embed Yokai can send, built by the real EmbedFactory with sample '
+        "data. Thumbnails are placeholders. Discord renders slightly differently, but layout, "
+        "wording and color are what you will see.</p>"
+        f"{cards}</main>"
+    )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--out", default="docs/preview/embeds.html")
+    args = parser.parse_args()
+    target = Path(args.out)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(render_page(build_samples()), encoding="utf-8")
+    sys.stdout.write(f"wrote {target}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
