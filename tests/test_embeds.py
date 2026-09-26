@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import discord
 import pytest
 
@@ -23,6 +25,7 @@ from yokai.ui.embeds import (
     clamp,
     escape_md,
     format_runtime,
+    send,
 )
 
 
@@ -521,3 +524,64 @@ def test_usage_embed_still_has_period_and_two_fields() -> None:
     assert "Last 7 Days" in embed.description
     assert [f.name for f in embed.fields] == ["Top Operators", "Top Commands"]
     assert emoji_count(embed) == 1
+
+
+def test_import_summary_note_is_appended_on_its_own_line() -> None:
+    embed = EmbedFactory.import_summary(
+        kind="Playlist",
+        name="Mix",
+        loaded=2,
+        total=None,
+        queued=2,
+        note="Queue limit reached: only 2 of 4 tracks fit.",
+    )
+    assert embed.description == "**Mix**\nQueue limit reached: only 2 of 4 tracks fit."
+    unnamed = EmbedFactory.import_summary(
+        kind="Playlist", name=None, loaded=2, total=None, queued=2, note="Note."
+    )
+    assert unnamed.description.splitlines() == ["Loaded from the playlist link.", "Note."]
+    plain = EmbedFactory.import_summary(kind="Playlist", name="Mix", loaded=2, total=None, queued=2)
+    assert plain.description == "**Mix**"
+
+
+def _send_interaction(avatar: object) -> MagicMock:
+    interaction = MagicMock()
+    interaction.response.is_done.return_value = False
+    interaction.response.send_message = AsyncMock()
+    interaction.original_response = AsyncMock()
+    if avatar is None:
+        interaction.client.user = None
+    else:
+        interaction.client.user.display_avatar.url = avatar
+    return interaction
+
+
+@pytest.mark.asyncio
+async def test_send_adds_the_bot_icon_to_a_footer_without_one() -> None:
+    interaction = _send_interaction("https://cdn.example/bot.png")
+    embed = EmbedFactory.success(title="Stopped", description="Done.", context="Controls")
+    await send(interaction, embed=embed)
+    sent = interaction.response.send_message.await_args.kwargs["embed"]
+    assert sent.footer.text == "Yokai · Controls"
+    assert sent.footer.icon_url == "https://cdn.example/bot.png"
+
+
+@pytest.mark.asyncio
+async def test_send_keeps_an_existing_footer_icon() -> None:
+    interaction = _send_interaction("https://cdn.example/bot.png")
+    embed = EmbedFactory.info(
+        title="Info", description="x", bot_avatar_url="https://cdn.example/own.png"
+    )
+    await send(interaction, embed=embed)
+    sent = interaction.response.send_message.await_args.kwargs["embed"]
+    assert sent.footer.icon_url == "https://cdn.example/own.png"
+
+
+@pytest.mark.asyncio
+async def test_send_without_a_bot_user_leaves_the_footer_alone() -> None:
+    for interaction in (_send_interaction(None), _send_interaction(MagicMock())):
+        embed = EmbedFactory.info(title="Info", description="x", context="Status")
+        await send(interaction, embed=embed)
+        sent = interaction.response.send_message.await_args.kwargs["embed"]
+        assert sent.footer.text == "Yokai · Status"
+        assert sent.footer.icon_url is None

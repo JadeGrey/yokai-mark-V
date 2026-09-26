@@ -8,7 +8,7 @@ import discord
 import pytest
 
 from yokai.cogs.music import MusicCog, _eta_seconds, _track_url
-from yokai.music.models import MusicQueue, PlayerState, Track
+from yokai.music.models import LoopMode, MusicQueue, PlayerState, Track
 
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
 
@@ -110,6 +110,39 @@ def test_eta_counts_remaining_current_plus_tracks_ahead() -> None:
     assert _eta_seconds(player, 2) == 100
 
 
+def test_eta_is_unknown_when_loop_track_never_advances() -> None:
+    player = MagicMock()
+    player.current_track = Track(video_id="cur00000001", title="C", duration_s=200)
+    player.elapsed_seconds = 50
+    player.queue = MusicQueue(max_size=10)
+    player.queue.add(Track(video_id="q0000000000", title="Q0", duration_s=100))
+    player.queue.loop_mode = LoopMode.TRACK
+    assert _eta_seconds(player, 1) is None
+
+
+def test_eta_is_unknown_when_the_current_track_has_no_duration() -> None:
+    player = MagicMock()
+    player.current_track = Track(video_id="live0000001", title="Live", duration_s=0)
+    player.elapsed_seconds = 50
+    player.queue = MusicQueue(max_size=10)
+    player.queue.add(Track(video_id="q0000000000", title="Q0", duration_s=100))
+    assert _eta_seconds(player, 1) is None
+
+
+@pytest.mark.asyncio
+async def test_queued_card_omits_plays_in_during_a_livestream() -> None:
+    cog, player = make_cog_and_player(PlayerState.PLAYING)
+    player.current_track = Track(video_id="live0000001", title="Live", duration_s=0)
+    player.resolver.resolve_query.return_value = Track(
+        video_id="dQw4w9WgXcQ", title="Next Up", duration_s=213
+    )
+    with patch("yokai.cogs.music.send", new=AsyncMock()) as send:
+        await cog.play.callback(cog, make_interaction(), query="next up")
+    fields = {f.name for f in send.await_args.kwargs["embed"].fields}
+    assert "Position" in fields
+    assert "Plays in" not in fields
+
+
 @pytest.mark.asyncio
 async def test_single_track_idle_play_shows_a_linked_now_playing_card() -> None:
     cog, player = make_cog_and_player(PlayerState.IDLE)
@@ -209,3 +242,58 @@ async def test_nowplaying_command_links_and_labels_the_source() -> None:
     assert embed.url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     fields = {f.name: f.value for f in embed.fields if f.name != "​"}
     assert fields["Source"] == "Recommendation"
+
+
+def playlist_tracks(count: int) -> list[Track]:
+    return [Track(video_id=f"vid{i:08d}", title=f"Song {i}", duration_s=100) for i in range(count)]
+
+
+@pytest.mark.asyncio
+async def test_playlist_truncated_by_the_queue_cap_says_so() -> None:
+    cog, player = make_cog_and_player(PlayerState.IDLE)
+    player.queue = MusicQueue(max_size=2)
+    player.resolver.resolve_url = AsyncMock(return_value=(playlist_tracks(4), True))
+    with patch("yokai.cogs.music.send", new=AsyncMock()) as send:
+        await cog.play.callback(cog, make_interaction(), query=PLAYLIST_URL)
+    embed = send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields if f.name != "​"}
+    assert fields["Loaded"] == "`2`"
+    assert "Queue limit reached: only 2 of 4 tracks fit." in embed.description.splitlines()
+
+
+@pytest.mark.asyncio
+async def test_playlist_on_a_busy_player_queues_everything_without_now_playing() -> None:
+    cog, player = make_cog_and_player(PlayerState.PLAYING)
+    player.resolver.resolve_url = AsyncMock(return_value=(playlist_tracks(3), True))
+    with patch("yokai.cogs.music.send", new=AsyncMock()) as send:
+        await cog.play.callback(cog, make_interaction(), query=PLAYLIST_URL)
+    embed = send.await_args.kwargs["embed"]
+    fields = {f.name: f.value for f in embed.fields if f.name != "​"}
+    assert fields == {"Loaded": "`3`", "Queued": "`3`"}
+    assert "Queue limit" not in embed.description
+    player.play_next.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_spotify_collection_summary_shows_partial_counts() -> None:
+    from yokai.music.spotify.models import SpotifyCollection, SpotifyTrackMeta
+
+    cog, player = make_cog_and_player(PlayerState.IDLE)
+    collection = SpotifyCollection(
+        name="Big Mix",
+        tracks=[SpotifyTrackMeta(spotify_id=f"sp{i}", title=f"Song {i}") for i in range(3)],
+        total=120,
+        partial=True,
+    )
+    cog.bot.spotify.resolve_playlist = AsyncMock(return_value=collection)
+    with patch("yokai.cogs.music.send", new=AsyncMock()) as send:
+        await cog.play.callback(
+            cog,
+            make_interaction(),
+            query="https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+        )
+    embed = send.await_args.kwargs["embed"]
+    assert embed.title == "📑 Spotify playlist loaded"
+    assert embed.description == "**Big Mix**"
+    fields = {f.name: f.value for f in embed.fields if f.name != "​"}
+    assert fields == {"Loaded": "`3 of 120`", "Queued": "`2`", "Now playing": "Song 0"}

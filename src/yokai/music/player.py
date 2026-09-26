@@ -547,7 +547,7 @@ class GuildPlayer:
         if getattr(self.resolver, "is_degraded", False) is True:
             description += "\nYouTube is giving me trouble. The owner can check `/diag`."
         embed = EmbedFactory.warning(
-            title="Track Skipped", description=description, context="Playback"
+            title="Track skipped", description=description, context="Playback"
         )
         try:
             await self.text_channel.send(embed=embed)

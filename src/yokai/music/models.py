@@ -8,6 +8,8 @@ import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, Sequence
 
+from yokai.theme import LIST_PAGE_SIZE
+
 if TYPE_CHECKING:
     from yokai.music.spotify.models import SpotifyTrackMeta
 
@@ -163,7 +165,9 @@ class MusicQueue:
         if len(self._history) > self.max_history:
             self._history.pop(0)
 
-    def get_page(self, page: int, per_page: int = 10) -> tuple[list[tuple[int, Track]], int, int]:
+    def get_page(
+        self, page: int, per_page: int = LIST_PAGE_SIZE
+    ) -> tuple[list[tuple[int, Track]], int, int]:
         """Get a paginated view of upcoming tracks.
 
         Returns:

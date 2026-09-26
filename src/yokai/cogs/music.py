@@ -85,11 +85,19 @@ def _track_url(track: Track) -> Optional[str]:
     return None if track.is_pending_match else track.url
 
 
-def _eta_seconds(player: GuildPlayer, position: int) -> int:
-    """Seconds until the track at 1-based queue `position` starts playing."""
+def _eta_seconds(player: GuildPlayer, position: int) -> Optional[int]:
+    """Seconds until the track at 1-based queue `position` starts playing.
+
+    None when it cannot be known: loop-track mode never advances the queue, and a current
+    track without a duration (a livestream) has no end to count down to.
+    """
+    if player.queue.loop_mode == LoopMode.TRACK:
+        return None
     remaining = 0
     current = player.current_track
-    if current is not None and current.duration_s > 0:
+    if current is not None:
+        if current.duration_s <= 0:
+            return None
         remaining = max(current.duration_s - player.elapsed_seconds, 0)
     ahead = sum(t.duration_s for t in list(player.queue.upcoming)[: max(position - 1, 0)])
     return remaining + ahead
@@ -307,6 +315,11 @@ class MusicCog(commands.Cog, name="Music"):
                 player.maybe_prefetch()
                 queued_count = total_loaded
 
+            note: Optional[str] = None
+            requested = len(tracks_to_queue)
+            if total_loaded < requested:
+                note = f"Queue limit reached: only {total_loaded} of {requested} tracks fit."
+
             if collection_info:
                 c_type, c_name, c_count, c_total, c_partial = collection_info
                 embed = EmbedFactory.import_summary(
@@ -318,6 +331,7 @@ class MusicCog(commands.Cog, name="Music"):
                     now_playing=now_playing_title,
                     partial=c_partial,
                     bot_avatar_url=avatar_url,
+                    note=note,
                 )
             else:
                 embed = EmbedFactory.import_summary(
@@ -328,6 +342,7 @@ class MusicCog(commands.Cog, name="Music"):
                     queued=queued_count,
                     now_playing=now_playing_title,
                     bot_avatar_url=avatar_url,
+                    note=note,
                 )
             await send(interaction, embed=embed)
 
@@ -339,7 +354,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not player.is_playing:
             embed = EmbedFactory.warning(
-                title="Playback Idle",
+                title="Playback idle",
                 description="Nothing is currently playing to pause.",
                 context="Controls",
             )
@@ -348,7 +363,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         player.pause()
         embed = EmbedFactory.success(
-            title="Playback Paused",
+            title="Playback paused",
             description="Use `/resume` to continue audio playback.",
             context="Controls",
         )
@@ -362,7 +377,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not player.is_paused:
             embed = EmbedFactory.warning(
-                title="Playback Active",
+                title="Playback active",
                 description="Playback is not currently paused.",
                 context="Controls",
             )
@@ -371,7 +386,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         player.resume()
         embed = EmbedFactory.success(
-            title="Playback Resumed",
+            title="Playback resumed",
             description="Audio stream continued.",
             context="Controls",
         )
@@ -385,7 +400,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not player.current_track:
             embed = EmbedFactory.warning(
-                title="No Active Track",
+                title="No active track",
                 description="There is no track currently playing to skip.",
                 context="Controls",
             )
@@ -446,7 +461,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not player.current_track:
             embed = EmbedFactory.info(
-                title="Nothing Playing",
+                title="Nothing playing",
                 description="The player is currently idle.",
                 context="Status",
                 bot_avatar_url=avatar_url,
@@ -478,7 +493,7 @@ class MusicCog(commands.Cog, name="Music"):
         try:
             removed = player.queue.remove(position)
             embed = EmbedFactory.success(
-                title="Track Removed",
+                title="Track removed",
                 description=f"Removed **#{position}**: {escape_md(clamp(removed.title, 120))}",
                 context="Queue",
             )
@@ -499,7 +514,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         count = player.queue.clear()
         embed = EmbedFactory.success(
-            title="Queue Cleared",
+            title="Queue cleared",
             description=f"Removed **{count}** upcoming tracks from the queue.",
             context="Queue",
         )
@@ -513,7 +528,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if len(player.queue) < 2:
             embed = EmbedFactory.warning(
-                title="Queue Too Short",
+                title="Queue too short",
                 description="Need at least 2 tracks in the queue to shuffle.",
                 context="Queue",
             )
@@ -522,7 +537,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         player.queue.shuffle()
         embed = EmbedFactory.success(
-            title="Queue Shuffled",
+            title="Queue shuffled",
             description=f"Randomized **{len(player.queue)}** upcoming tracks.",
             context="Queue",
         )
@@ -544,7 +559,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         player.queue.loop_mode = LoopMode(mode.value)
         embed = EmbedFactory.success(
-            title="Loop Mode Updated",
+            title="Loop mode updated",
             description=f"Loop mode set to **{mode.name}**.",
             context="Queue",
         )
@@ -559,7 +574,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         actual_level = player.set_volume(level)
         embed = EmbedFactory.success(
-            title="Volume Adjusted",
+            title="Volume adjusted",
             description=f"Volume set to **{actual_level}%**.",
             context="Audio",
         )
@@ -646,7 +661,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not seed_track:
             embed = EmbedFactory.warning(
-                title="No Seed Available",
+                title="No seed available",
                 description=(
                     "I need a seed track to generate recommendations. "
                     "Provide a song name, start playing music, or complete a track first."
@@ -675,7 +690,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not recommendation.tracks:
             embed = EmbedFactory.warning(
-                title="No Recommendations Found",
+                title="No recommendations found",
                 description=(
                     "Could not discover new radio tracks for "
                     f"**{escape_md(clamp(seed_track.title, 120))}**."

@@ -333,7 +333,7 @@ async def test_diag_view_update_ytdlp_execution() -> None:
         call_kwargs = mock_interaction.followup.send.call_args[1]
         sent_embed = call_kwargs.get("embed")
         assert sent_embed is not None
-        assert "yt-dlp Updated" in (sent_embed.title or "")
+        assert "yt-dlp updated" in (sent_embed.title or "")
         assert "Restart Required" in (sent_embed.description or "")
 
 
@@ -543,6 +543,7 @@ async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
         await cog.diag.callback(cog, interaction)
     assert sent.await_args.kwargs["view"].message is message  # so on_timeout can disable it
     embed = sent.await_args.kwargs["embed"]
+    assert embed.color.value == COLOR_WARNING and "Diagnostic Telemetry" in embed.title
     assert embed.title.startswith("⚠️")
     values = " ".join(f.value for f in embed.fields)
     assert "(outdated)" in values

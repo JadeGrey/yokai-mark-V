@@ -255,7 +255,7 @@ class RecommendView(BaseView):
             self.disable_all_items()
             quip = quip_bank.get("recs_queued")
             embed = EmbedFactory.success(
-                title="Recommendations Queued",
+                title="Recommendations queued",
                 description=f"Added **{len(self.tracks)}** recommended tracks to the queue.",
                 context=f"Seed: {self.seed_title}",
                 quip=quip,
@@ -312,7 +312,7 @@ class DiagView(BaseView):
                 proc = await asyncio.to_thread(_run_pip_update)
                 if proc.returncode == 0:
                     embed = EmbedFactory.success(
-                        title="yt-dlp Updated",
+                        title="yt-dlp updated",
                         description=(
                             "yt-dlp was successfully updated to the latest release.\n\n"
                             "**Restart Required:** Please restart the Yokai process "

@@ -99,3 +99,14 @@ async def test_queue_command_reads_the_live_track_and_keeps_the_message() -> Non
     assert view.message is message
     player.current_track = Track(video_id="new00000001", title="New Song")
     assert "New Song" in view.build_embed().description
+
+
+def test_queue_pages_use_the_theme_page_size() -> None:
+    import inspect
+
+    from yokai.theme import LIST_PAGE_SIZE
+
+    # 10 == 10 at runtime either way, so check the source names the token, not a literal.
+    assert "per_page: int = LIST_PAGE_SIZE" in inspect.getsource(MusicQueue.get_page)
+    items, total_pages, total = make_queue(LIST_PAGE_SIZE + 1).get_page(1)
+    assert (len(items), total_pages, total) == (LIST_PAGE_SIZE, 2, LIST_PAGE_SIZE + 1)

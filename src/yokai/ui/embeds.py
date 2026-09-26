@@ -396,6 +396,7 @@ class EmbedFactory:
         now_playing: Optional[str] = None,
         partial: bool = False,
         bot_avatar_url: Optional[str] = None,
+        note: Optional[str] = None,
     ) -> discord.Embed:
         loaded_text = f"`{loaded} of {total}`" if partial and total else f"`{loaded}`"
         fields: list[FieldSpec] = [
@@ -407,6 +408,8 @@ class EmbedFactory:
         description = (
             f"**{escape_md(clamp(name, 120))}**" if name else "Loaded from the playlist link."
         )
+        if note:
+            description += f"\n{note}"
         return cls._create_base(
             title=f"{Emoji.QUEUE} {clamp(kind, 60)} loaded",
             description=description,
@@ -599,6 +602,20 @@ def _format_duration(seconds: Optional[int]) -> str:
     return f"{m}:{s:02d}"
 
 
+def _add_footer_icon(interaction: discord.Interaction, embed: discord.Embed) -> None:
+    """Give a footer without an icon the bot's avatar, so every footer looks the same.
+
+    Tolerant of mocks and a missing bot user: anything but a string URL leaves it unchanged.
+    """
+    footer = embed.footer
+    if not footer.text or footer.icon_url:
+        return
+    user = getattr(getattr(interaction, "client", None), "user", None)
+    url = getattr(getattr(user, "display_avatar", None), "url", None)
+    if isinstance(url, str) and url:
+        embed.set_footer(text=footer.text, icon_url=url)
+
+
 async def send(
     interaction: discord.Interaction,
     embed: discord.Embed,
@@ -607,6 +624,7 @@ async def send(
 ) -> Optional[discord.Message]:
     """Uniform interaction responder handling lifecycle, ephemeral state, and views."""
     allowed_mentions = discord.AllowedMentions.none()
+    _add_footer_icon(interaction, embed)
 
     try:
         if interaction.response.is_done():
