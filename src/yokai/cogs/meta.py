@@ -278,7 +278,9 @@ class MetaCog(commands.Cog, name="Meta"):
         )
 
         view = DiagView(owner_id=self.bot.config.owner_id, bot_avatar_url=avatar_url)
-        await send(interaction, embed=embed, view=view, ephemeral=True)
+        msg = await send(interaction, embed=embed, view=view, ephemeral=True)
+        if isinstance(msg, discord.Message):
+            view.message = msg
 
 
 async def setup(bot: YokaiBot) -> None:

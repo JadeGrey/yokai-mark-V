@@ -39,6 +39,7 @@ Do not change these without asking the owner.
 - Slash commands only (`app_commands`), guild-scoped. No message-content or other privileged intents.
 - Defer within 3 seconds for anything that touches the network, then reply with followups.
 - Every user-visible message goes through the universal embed system (`ui/embeds.py`). No raw `send_message("text")` or `channel.send("text")` in feature code. Error embeds are ephemeral.
+- Discord fixes a deferred response's visibility at `defer` time: errors raised after a public `defer` (for example "nothing found" after a search) are visible to the channel. Validate input before deferring so validation errors are answered ephemerally.
 - Default `allowed_mentions` to none. Mention users only inside embeds.
 - Buttons and views must time out, disable themselves, and only act for users allowed to use them.
 

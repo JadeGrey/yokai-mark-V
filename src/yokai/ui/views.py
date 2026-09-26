@@ -6,7 +6,7 @@ import asyncio
 import logging
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
 
 import discord
 
@@ -100,25 +100,33 @@ class QueuePaginator(BaseView):
         initial_page: int = 1,
         bot_avatar_url: Optional[str] = None,
         timeout: float = 180.0,
-        current_track: Optional[Track] = None,
+        current_track_getter: Optional[Callable[[], Optional[Track]]] = None,
     ) -> None:
         super().__init__(allowed_user_ids=[author_id], timeout=timeout)
         self.queue = queue
         self.current_page = initial_page
         self.bot_avatar_url = bot_avatar_url
-        self.current_track = current_track
+        # Read on every render so a page shown after the track changed is never stale.
+        self.current_track_getter = current_track_getter
         self._update_buttons()
 
-    def _update_buttons(self) -> None:
+    def _clamp_page(self) -> int:
+        """Keep `current_page` inside 1..total_pages (the queue can shrink); return the total."""
         _, total_pages, _ = self.queue.get_page(self.current_page)
+        self.current_page = min(max(self.current_page, 1), total_pages)
+        return total_pages
+
+    def _update_buttons(self) -> None:
+        total_pages = self._clamp_page()
         self.prev_button.disabled = self.current_page <= 1
         self.next_button.disabled = self.current_page >= total_pages
 
     def build_embed(self) -> discord.Embed:
+        self._clamp_page()
         tracks, total_pages, total_tracks = self.queue.get_page(self.current_page)
         now_playing = None
-        if self.current_track is not None:
-            current = self.current_track
+        current = self.current_track_getter() if self.current_track_getter else None
+        if current is not None:
             url = None if current.is_pending_match else current.url
             now_playing = (current.title, url, current.duration_s)
         runtime = sum(t.duration_s for t in self.queue.upcoming if t.duration_s) or None
@@ -137,6 +145,7 @@ class QueuePaginator(BaseView):
     async def prev_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
+        self._clamp_page()
         if self.current_page > 1:
             self.current_page -= 1
         self._update_buttons()
@@ -146,7 +155,7 @@ class QueuePaginator(BaseView):
     async def next_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
-        _, total_pages, _ = self.queue.get_page(self.current_page)
+        total_pages = self._clamp_page()
         if self.current_page < total_pages:
             self.current_page += 1
         self._update_buttons()

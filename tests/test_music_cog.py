@@ -171,11 +171,24 @@ async def test_queue_full_error_has_a_specific_title() -> None:
 @pytest.mark.asyncio
 async def test_unsupported_link_has_a_specific_title_and_does_not_join_voice() -> None:
     cog, player = make_cog_and_player(PlayerState.IDLE)
+    interaction = make_interaction()
     with patch("yokai.cogs.music.send", new=AsyncMock()) as send:
-        await cog.play.callback(cog, make_interaction(), query="https://evil.example/x")
+        await cog.play.callback(cog, interaction, query="https://evil.example/x")
     assert send.await_args.kwargs["embed"].title == "❌ Unsupported link"
     assert send.await_args.kwargs["ephemeral"] is True
+    # Discord fixes visibility at defer time: a public defer would make this error public.
+    interaction.response.defer.assert_not_awaited()
     player.connect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_supported_input_is_still_deferred() -> None:
+    cog, player = make_cog_and_player(PlayerState.IDLE)
+    player.resolver.resolve_query.return_value = Track(video_id="dQw4w9WgXcQ", title="T")
+    interaction = make_interaction()
+    with patch("yokai.cogs.music.send", new=AsyncMock()):
+        await cog.play.callback(cog, interaction, query="something")
+    interaction.response.defer.assert_awaited_once_with(thinking=True)
 
 
 @pytest.mark.asyncio

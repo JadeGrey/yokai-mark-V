@@ -538,8 +538,10 @@ async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
     interaction = MagicMock()
     interaction.user.id = 42
     interaction.response.defer = AsyncMock()
-    with patch("yokai.cogs.meta.send", new=AsyncMock()) as sent:
+    message = MagicMock(spec=discord.Message)
+    with patch("yokai.cogs.meta.send", new=AsyncMock(return_value=message)) as sent:
         await cog.diag.callback(cog, interaction)
+    assert sent.await_args.kwargs["view"].message is message  # so on_timeout can disable it
     embed = sent.await_args.kwargs["embed"]
     assert embed.title.startswith("⚠️")
     values = " ".join(f.value for f in embed.fields)

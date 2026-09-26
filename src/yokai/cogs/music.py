@@ -116,11 +116,12 @@ class MusicCog(commands.Cog, name="Music"):
         player = self._player(interaction)
         caller_vc = _validate_voice_state(interaction, player)
 
-        await interaction.response.defer(thinking=True)
         avatar_url = str(self.bot.user.display_avatar.url) if self.bot.user else None
         request_started = time.perf_counter()
 
-        # 1. Classify first: unsupported input must not make the bot join voice
+        # 1. Classify first (synchronous and instant): unsupported input must not make the bot
+        # join voice, and its error is answered before any defer so it stays ephemeral
+        # (Discord fixes a deferred response's visibility at defer time).
         classified = classify_input(query)
 
         if classified.kind == InputKind.UNSUPPORTED:
@@ -132,6 +133,8 @@ class MusicCog(commands.Cog, name="Music"):
             )
             await send(interaction, embed=err_embed, ephemeral=True)
             return
+
+        await interaction.response.defer(thinking=True)
 
         # 2. Join voice WHILE the query resolves (joining takes about as long as a search)
         player.text_channel = interaction.channel
@@ -426,10 +429,12 @@ class MusicCog(commands.Cog, name="Music"):
             author_id=interaction.user.id,
             initial_page=max(1, page),
             bot_avatar_url=avatar_url,
-            current_track=player.current_track,
+            current_track_getter=lambda: player.current_track,
         )
         embed = paginator.build_embed()
-        await send(interaction, embed=embed, view=paginator)
+        msg = await send(interaction, embed=embed, view=paginator)
+        if isinstance(msg, discord.Message):
+            paginator.message = msg
 
     @app_commands.command(
         name="nowplaying", description="Show details of the currently playing track."
