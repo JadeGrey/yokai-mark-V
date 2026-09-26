@@ -21,6 +21,7 @@ from yokai.theme import (
     SEP,
     Emoji,
     quip_bank,
+    source_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,20 +259,33 @@ class EmbedFactory:
         requester_mention: str,
         thumbnail_url: Optional[str] = None,
         bot_avatar_url: Optional[str] = None,
+        url: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> discord.Embed:
-        artist_str = f"by **{clamp(artist, 100)}**\n" if artist else ""
-        progress_bar = _render_progress_bar(position_s, duration_s)
-        time_str = f"`{_format_duration(position_s)} / {_format_duration(duration_s)}`"
+        lines: list[str] = []
+        if artist:
+            lines.append(f"**{escape_md(clamp(artist, 100))}**")
+        bar = _render_progress_bar(position_s, duration_s)
+        elapsed = _format_duration(position_s)
+        total = _format_duration(duration_s)
+        lines.append(f"{bar}  `{elapsed} / {total}`")
 
-        desc = f"{artist_str}\n{progress_bar} {time_str}\n\nRequested by {requester_mention}"
+        fields: list[FieldSpec] = [
+            ("Duration", f"`{_format_duration(duration_s)}`", True),
+            ("Requested by", requester_mention, True),
+        ]
+        if source:
+            fields.append(("Source", source_label(source), True))
 
         return cls._create_base(
-            title=f"{Emoji.PLAY} Now Playing: {clamp(title, 180)}",
-            description=desc,
+            title=f"{Emoji.PLAY} {clamp(title, 200)}",
+            description="\n".join(lines),
             color=COLOR_BRAND,
-            context="Playback",
+            context="Now playing",
             bot_avatar_url=bot_avatar_url,
             thumbnail_url=thumbnail_url,
+            url=url,
+            fields=_grid(fields),
         )
 
     @classmethod
@@ -282,22 +296,35 @@ class EmbedFactory:
         artist: Optional[str] = None,
         duration_s: Optional[int] = None,
         bot_avatar_url: Optional[str] = None,
+        url: Optional[str] = None,
+        eta_s: Optional[int] = None,
+        requester_mention: Optional[str] = None,
+        source: Optional[str] = None,
+        thumbnail_url: Optional[str] = None,
     ) -> discord.Embed:
-        quip = quip_bank.get("queued")
-        details = []
+        lines = [_link(clamp(title, 200), url)]
         if artist:
-            details.append(f"Artist: **{clamp(artist, 80)}**")
+            lines.append(f"by {escape_md(clamp(artist, 100))}")
+
+        fields: list[FieldSpec] = [("Position", f"`#{position}`", True)]
+        if eta_s is not None:
+            fields.append(("Plays in", f"`~{format_runtime(eta_s)}`", True))
         if duration_s:
-            details.append(f"Duration: `{_format_duration(duration_s)}`")
-        details.append(f"Position in queue: **#{position}**")
+            fields.append(("Duration", f"`{_format_duration(duration_s)}`", True))
+        if requester_mention:
+            fields.append(("Requested by", requester_mention, True))
+        if source:
+            fields.append(("Source", source_label(source), True))
 
         return cls._create_base(
-            title=f"{Emoji.QUEUE} Queued: {clamp(title, 200)}",
-            description="\n".join(details),
+            title=f"{Emoji.QUEUE} Queued",
+            description="\n".join(lines),
             color=COLOR_BRAND,
             context="Queue",
             bot_avatar_url=bot_avatar_url,
-            quip=quip,
+            quip=quip_bank.get("queued"),
+            thumbnail_url=thumbnail_url,
+            fields=_grid(fields),
         )
 
     @classmethod
@@ -309,28 +336,39 @@ class EmbedFactory:
         total_tracks: int,
         loop_mode: str = "off",
         bot_avatar_url: Optional[str] = None,
+        now_playing: Optional[tuple[str, Optional[str], Optional[int]]] = None,
+        total_runtime_s: Optional[int] = None,
     ) -> discord.Embed:
-        quip = quip_bank.get("empty_queue") if total_tracks == 0 else None
-        embed = cls._create_base(
-            title=f"{Emoji.QUEUE} Upcoming Queue ({total_tracks} tracks)",
-            description="" if tracks else "The queue is empty.",
+        header: list[str] = []
+        if now_playing is not None:
+            np_title, np_url, np_duration = now_playing
+            np_time = f"{SEP}`{_format_duration(np_duration)}`" if np_duration else ""
+            header.append(f"**Now playing** {_link(clamp(np_title, 80), np_url)}{np_time}")
+        summary = f"**{total_tracks}** up next"
+        if total_tracks and total_runtime_s:
+            summary += f"{SEP}{format_runtime(total_runtime_s)} total"
+        summary += f"{SEP}loop {loop_mode}"
+        header.append(summary)
+
+        lines: list[str] = []
+        used = 0
+        for index, (pos, track_title, artist, dur) in enumerate(tracks):
+            line = _list_line(pos, track_title, artist, dur)
+            if used + len(line) + 1 > LIST_BUDGET:
+                lines.append(f"… and {len(tracks) - index} more on this page")
+                break
+            lines.append(line)
+            used += len(line) + 1
+        body = "\n".join(lines) if lines else "The queue is empty."
+
+        return cls._create_base(
+            title=f"{Emoji.QUEUE} Up next",
+            description="\n".join(header) + "\n\n" + body,
             color=COLOR_BRAND,
-            context=f"Page {page}/{max(total_pages, 1)} · Loop: {loop_mode}",
+            context=f"Page {page}/{max(total_pages, 1)}",
             bot_avatar_url=bot_avatar_url,
-            quip=quip,
+            quip=quip_bank.get("empty_queue") if total_tracks == 0 else None,
         )
-
-        for pos, title, artist, dur in tracks[:MAX_FIELDS_COUNT]:
-            dur_str = f" `{_format_duration(dur)}`" if dur else ""
-            artist_str = f" — {artist}" if artist else ""
-            val = f"{clamp(title, 80)}{clamp(artist_str, 60)}{dur_str}"
-            embed.add_field(
-                name=f"#{pos}",
-                value=clamp(val, MAX_FIELD_VAL_LEN),
-                inline=False,
-            )
-
-        return embed
 
     @classmethod
     def recommendations(
@@ -339,19 +377,55 @@ class EmbedFactory:
         seed_title: str,
         bot_avatar_url: Optional[str] = None,
     ) -> discord.Embed:
-        quip = quip_bank.get("recs_intro")
-        lines = []
+        lines: list[str] = []
+        used = 0
         for i, (title, artist, dur) in enumerate(tracks, start=1):
-            dur_str = f" `{_format_duration(dur)}`" if dur else ""
-            lines.append(f"`{i}.` **{clamp(title, 60)}** — {clamp(artist, 40)}{dur_str}")
+            line = _list_line(i, title, artist, dur)
+            if used + len(line) + 1 > LIST_BUDGET:
+                lines.append(f"… and {len(tracks) - i + 1} more")
+                break
+            lines.append(line)
+            used += len(line) + 1
 
+        description = f"Seeded from **{escape_md(clamp(seed_title, 80))}**\n\n" + "\n".join(lines)
         return cls._create_base(
-            title=f"{Emoji.RADIO} Radio Recommendations",
-            description="\n".join(lines),
+            title=f"{Emoji.RADIO} Radio recommendations",
+            description=description,
             color=COLOR_BRAND,
-            context=f"Seed: {clamp(seed_title, 40)}",
+            context="Recommendations",
             bot_avatar_url=bot_avatar_url,
-            quip=quip,
+            quip=quip_bank.get("recs_intro"),
+        )
+
+    @classmethod
+    def import_summary(
+        cls,
+        kind: str,
+        name: Optional[str],
+        loaded: int,
+        total: Optional[int],
+        queued: int,
+        now_playing: Optional[str] = None,
+        partial: bool = False,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        loaded_text = f"`{loaded} of {total}`" if partial and total else f"`{loaded}`"
+        fields: list[FieldSpec] = [
+            ("Loaded", loaded_text, True),
+            ("Queued", f"`{queued}`", True),
+        ]
+        if now_playing:
+            fields.append(("Now playing", escape_md(clamp(now_playing, 100)), True))
+        description = (
+            f"**{escape_md(clamp(name, 120))}**" if name else "Loaded from the playlist link."
+        )
+        return cls._create_base(
+            title=f"{Emoji.QUEUE} {clamp(kind, 60)} loaded",
+            description=description,
+            color=COLOR_BRAND,
+            context="Import",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
         )
 
     @classmethod
