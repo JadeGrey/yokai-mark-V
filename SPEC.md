@@ -221,7 +221,7 @@ After 3 consecutive extraction failures, mark YouTube health as degraded, post o
 
 ## 9. Utility commands
 
-**`/ping`.** One embed with a status line colored by the worst measured latency (good <150ms, ok <400ms, bad ≥400ms):
+**`/ping`.** One embed with a status line colored by the worst measured latency of gateway, REST, voice and database (good <150ms, ok <400ms, bad ≥400ms). The resolver figure is shown but not counted, because a first-time resolve is slow by nature:
 - Gateway: `bot.latency` (handle not-ready / NaN).
 - REST round-trip: time a cheap REST call (e.g. `application_info()`; confirm it isn't cached).
 - Voice: `voice_client.latency` and `average_latency` when connected; otherwise "not connected".

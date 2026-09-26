@@ -6,6 +6,7 @@ import discord
 import pytest
 
 from tests.embed_helpers import emoji_count, total_embed_length
+from yokai.theme import COLOR_ERROR, COLOR_SUCCESS, COLOR_WARNING
 from yokai.ui.embeds import (
     MAX_DESC_LEN,
     MAX_FIELD_NAME_LEN,
@@ -448,6 +449,36 @@ def test_ping_fields_are_grid_aligned_and_status_colored() -> None:
     slow = EmbedFactory.ping(gateway_ms=500.0, rest_ms=None, db_ms=None)
     assert slow.color.value != good.color.value
     assert emoji_count(good) == 1 and emoji_count(slow) == 1
+
+
+def test_ping_status_ignores_a_slow_resolver() -> None:
+    # A first-time YouTube resolve takes about 2 s by nature; it is shown but never counted.
+    embed = EmbedFactory.ping(
+        gateway_ms=40.0, rest_ms=60.0, db_ms=1.0, voice_ms=30.0, resolver_ms=3000.0
+    )
+    assert embed.color.value == COLOR_SUCCESS
+    assert "Fast. As expected." in embed.description
+    resolver = next(f for f in embed.fields if f.name == "Resolver")
+    assert "3000.0 ms" in resolver.value
+
+
+def test_ping_status_tiers_follow_gateway_rest_voice_and_database() -> None:
+    assert EmbedFactory.ping(gateway_ms=220.0, rest_ms=50.0, db_ms=1.0).color.value == COLOR_WARNING
+    assert EmbedFactory.ping(gateway_ms=500.0, rest_ms=50.0, db_ms=1.0).color.value == COLOR_ERROR
+    assert EmbedFactory.ping(gateway_ms=10.0, rest_ms=450.0, db_ms=1.0).color.value == COLOR_ERROR
+    assert (
+        EmbedFactory.ping(gateway_ms=10.0, rest_ms=10.0, db_ms=1.0, voice_ms=250.0).color.value
+        == COLOR_WARNING
+    )
+    assert (
+        EmbedFactory.ping(gateway_ms=10.0, rest_ms=10.0, db_ms=200.0).color.value == COLOR_WARNING
+    )
+
+
+def test_ping_with_only_resolver_data_still_works() -> None:
+    embed = EmbedFactory.ping(gateway_ms=None, rest_ms=None, db_ms=None, resolver_ms=1800.0)
+    assert embed.color.value == COLOR_SUCCESS
+    assert "1800.0 ms" in next(f for f in embed.fields if f.name == "Resolver").value
 
 
 def test_about_stack_grid_is_aligned_and_notice_is_wide() -> None:

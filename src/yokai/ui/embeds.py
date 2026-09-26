@@ -438,9 +438,9 @@ class EmbedFactory:
         resolver_ms: Optional[float] = None,
         bot_avatar_url: Optional[str] = None,
     ) -> discord.Embed:
-        latencies = [
-            val for val in (gateway_ms, rest_ms, db_ms, voice_ms, resolver_ms) if val is not None
-        ]
+        # The resolver figure is shown but not counted: a first-time YouTube resolve takes about
+        # 2 s by nature and would keep the status red forever.
+        latencies = [val for val in (gateway_ms, rest_ms, db_ms, voice_ms) if val is not None]
         worst = max(latencies) if latencies else 0.0
 
         if worst < 150.0:

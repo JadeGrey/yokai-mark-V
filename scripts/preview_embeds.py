@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import random
 import re
 import sys
 from pathlib import Path
@@ -55,24 +56,45 @@ code { background: #1e1f22; border-radius: 3px; padding: 0 4px; font-size: 13px;
 """
 
 
+_ESCAPED = re.compile(r"\\([\\*_`~|\[\]<>()])")
+_OPEN, _CLOSE = chr(0xE000), chr(0xE001)  # private-use placeholder delimiters
+_PLACEHOLDER = re.compile(_OPEN + r"(\d+)" + _CLOSE)
+_SAFE_URL = re.compile(r"^https?://", re.IGNORECASE)
+AVATAR_URL = "https://img.example/avatar.png"
+RANDOM_SEED = 20260925
+
+
 def md_to_html(text: str) -> str:
-    """A tiny Discord-markdown subset -> safe HTML (escapes first, so no markup can leak in)."""
-    out = html.escape(text, quote=False)
+    """A tiny Discord-markdown subset -> safe HTML (escapes first, so no markup can leak in).
+
+    Backslash-escapes and finished links are swapped for private-use placeholders before the
+    formatting regexes run, then restored at the end, so an escaped `\\*` never becomes italics.
+    """
+    stash: list[str] = []
+
+    def keep(fragment: str) -> str:
+        stash.append(fragment)
+        return f"{_OPEN}{len(stash) - 1}{_CLOSE}"
+
+    def restore(value: str) -> str:
+        return _PLACEHOLDER.sub(lambda m: restore(stash[int(m.group(1))]), value)
+
+    def link(m: re.Match[str]) -> str:
+        label, url = m.group(2), m.group(3)
+        # `url` is HTML-escaped without quotes, so quotes are the only way out of the attribute.
+        href = url.replace('"', "&quot;").replace("'", "&#x27;")
+        inner = f"<strong>{label}</strong>" if m.group(1) else label
+        return keep(f'<a href="{href}">{inner}</a>')
+
+    out = text.replace(_OPEN, "").replace(_CLOSE, "")
+    out = _ESCAPED.sub(lambda m: keep(html.escape(m.group(1), quote=True)), out)
+    out = html.escape(out, quote=False)
     out = re.sub(r"&lt;@!?\d+&gt;", '<span class="mention">@user</span>', out)
-    out = re.sub(
-        r"\*\*\[((?:\\.|[^\]\\])+?)\]\((https?://[^)\s]+)\)\*\*",
-        r'<a href="\2"><strong>\1</strong></a>',
-        out,
-    )
-    out = re.sub(r"\[((?:\\.|[^\]\\])+?)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', out)
+    out = re.sub(r"(\*\*)?\[([^\]]+?)\]\((https?://[^)\s]+)\)(?(1)\*\*)", link, out)
     out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
     out = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<em>\1</em>", out)
     out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
-    out = out.replace("\\[", "[").replace("\\]", "]").replace("\\*", "*").replace("\\_", "_")
-    out = out.replace("\\`", "`").replace("\\~", "~").replace("\\|", "|")
-    out = out.replace("\\(", "(").replace("\\)", ")")
-    out = out.replace("\\&lt;", "&lt;").replace("\\&gt;", "&gt;").replace("\\\\", "\\")
-    return out.replace("\n", "<br>")
+    return restore(out).replace("\n", "<br>")
 
 
 def render_embed(embed: discord.Embed, label: str) -> str:
@@ -87,8 +109,9 @@ def render_embed(embed: discord.Embed, label: str) -> str:
     parts.append('<div class="body">')
     if data.get("title"):
         title_html = html.escape(data["title"])
-        if data.get("url"):
-            title_html = f'<a href="{html.escape(data["url"])}">{title_html}</a>'
+        url = data.get("url") or ""
+        if _SAFE_URL.match(url):
+            title_html = f'<a href="{html.escape(url, quote=True)}">{title_html}</a>'
         parts.append(f'<div class="title">{title_html}</div>')
     if data.get("description"):
         parts.append(f'<div class="desc">{md_to_html(data["description"])}</div>')
@@ -97,16 +120,18 @@ def render_embed(embed: discord.Embed, label: str) -> str:
         parts.append('<div class="fields">')
         for field in fields:
             klass = "field" if field.get("inline") else "field wide"
-            name = md_to_html(field.get("name", ""))
+            # Discord does not render markdown in field names, so only escape them.
+            name = html.escape(field.get("name", ""))
             value = md_to_html(field.get("value", ""))
             parts.append(
                 f'<div class="{klass}"><div class="fname">{name}</div>'
                 f'<div class="fval">{value}</div></div>'
             )
         parts.append("</div>")
-    footer = (data.get("footer") or {}).get("text")
-    if footer:
-        parts.append(f'<div class="footer"><span class="icon"></span>{html.escape(footer)}</div>')
+    footer = data.get("footer") or {}
+    if footer.get("text"):
+        icon = '<span class="icon"></span>' if footer.get("icon_url") else ""
+        parts.append(f'<div class="footer">{icon}{html.escape(footer["text"])}</div>')
     parts.append("</div></div></section>")
     return "".join(parts)
 
@@ -115,7 +140,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
     """Every embed shape Yokai can send, with realistic data."""
     yt = "https://www.youtube.com/watch?v="
     thumb = "https://img.example/thumb.jpg"
-    avatar = None
+    av = AVATAR_URL
     tracks = [
         Track(
             video_id="dQw4w9WgXcQ",
@@ -143,6 +168,11 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
         ),
     ]
     rows = [(i, t.title, t.artist, t.duration_s) for i, t in enumerate(tracks * 3, start=1)]
+    long_title = "Extended Director's Cut Official Music Video (Remastered 2024) [4K Ultra HD]"
+    long_artist = "The Very Long Named Philharmonic Orchestra and Choir of Somewhere"
+    long_rows = [(i, f"{long_title} #{i}", long_artist, 200 + i) for i in range(1, 31)]
+    special_title = "Song (Official Video) [HD] *live* `demo`"
+    special_artist = "A*rtist [x](http://evil.example)"
     samples: list[tuple[str, discord.Embed]] = [
         (
             "Now playing",
@@ -155,7 +185,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 thumbnail_url=thumb,
                 url=yt + "dQw4w9WgXcQ",
                 source="search",
-                bot_avatar_url=avatar,
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -167,6 +197,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 position_s=0,
                 requester_mention="<@42>",
                 source="link",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -181,6 +212,21 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 requester_mention="<@42>",
                 source="recommendation",
                 thumbnail_url=thumb,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Queued (special characters)",
+            EmbedFactory.queued(
+                title=special_title,
+                position=4,
+                artist=special_artist,
+                duration_s=187,
+                url=yt + "9bZkp7q19f0",
+                eta_s=900,
+                requester_mention="<@42>",
+                source="search",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -193,17 +239,46 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 loop_mode="queue",
                 now_playing=("Never Gonna Give You Up", yt + "dQw4w9WgXcQ", 213),
                 total_runtime_s=3900,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Queue page (long list)",
+            EmbedFactory.queue_page(
+                tracks=long_rows,
+                page=1,
+                total_pages=3,
+                total_tracks=75,
+                loop_mode="off",
+                now_playing=(special_title, yt + "dQw4w9WgXcQ", 187),
+                total_runtime_s=17400,
+                bot_avatar_url=av,
             ),
         ),
         (
             "Queue page (empty)",
-            EmbedFactory.queue_page(tracks=[], page=1, total_pages=1, total_tracks=0),
+            EmbedFactory.queue_page(
+                tracks=[], page=1, total_pages=1, total_tracks=0, bot_avatar_url=av
+            ),
         ),
         (
             "Recommendations",
             EmbedFactory.recommendations(
                 tracks=[(t.title, t.artist or "Unknown", t.duration_s) for t in tracks],
                 seed_title="Never Gonna Give You Up",
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Recommendations (special characters)",
+            EmbedFactory.recommendations(
+                tracks=[
+                    (special_title, special_artist, 187),
+                    ("Wait [Remastered] (Live at Wembley)", "Artist *One* & `Two`", 254),
+                    ("<b>Not bold</b> | pipe ~ tilde _under_", "Björk", 301),
+                ],
+                seed_title=special_title,
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -215,6 +290,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 total=None,
                 queued=41,
                 now_playing="Never Gonna Give You Up",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -226,6 +302,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 total=14,
                 queued=13,
                 now_playing="One More Time",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -237,6 +314,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 total=120,
                 queued=50,
                 partial=True,
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -246,6 +324,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 description="Skipped **Gangnam Style**.",
                 context="Controls",
                 quip="Gone. Next.",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -254,6 +333,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 title="Nothing playing",
                 description="The player is currently idle.",
                 context="Status",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -262,6 +342,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 title="Track skipped",
                 description="Skipping **Some Song**. YouTube blocked the request (HTTP 403).",
                 context="Playback",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -271,6 +352,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 user_hint="Try searching with the song title and artist, or paste a YouTube link.",
                 title="No match found",
                 context="System",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -280,10 +362,11 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 user_hint="Join a voice channel and try again.",
                 title="Voice channel needed",
                 include_quip=False,
+                bot_avatar_url=av,
             ),
         ),
         (
-            "Ping (fast)",
+            "Ping (fast, slow resolver is not counted)",
             EmbedFactory.ping(
                 gateway_ms=48.2,
                 rest_ms=71.5,
@@ -291,15 +374,26 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 voice_ms=32.0,
                 voice_avg_ms=35.1,
                 resolver_ms=1804.0,
+                bot_avatar_url=av,
             ),
         ),
-        ("Ping (slow)", EmbedFactory.ping(gateway_ms=520.0, rest_ms=610.0, db_ms=2.0)),
+        (
+            "Ping (elevated)",
+            EmbedFactory.ping(
+                gateway_ms=220.0, rest_ms=130.0, db_ms=1.5, resolver_ms=900.0, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Ping (slow)",
+            EmbedFactory.ping(gateway_ms=520.0, rest_ms=610.0, db_ms=2.0, bot_avatar_url=av),
+        ),
         (
             "Usage",
             EmbedFactory.usage(
                 top_users=[(1, 120, 88), (2, 64, 40), (3, 12, 5)],
                 top_commands=[("play", 150), ("skip", 60), ("queue", 22)],
                 period="Last 30 Days",
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -316,6 +410,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                     "ytmusicapi": "1.12.3",
                     "FFmpeg": "2025-11-27",
                 },
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -328,6 +423,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                     "Database Size": "0.31 MB",
                 },
                 recent_errors=[],
+                bot_avatar_url=av,
             ),
         ),
         (
@@ -341,6 +437,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 },
                 recent_errors=["/play: BotCheckError: YouTube blocked the request"],
                 status="warn",
+                bot_avatar_url=av,
             ),
         ),
     ]
@@ -364,9 +461,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default="docs/preview/embeds.html")
     args = parser.parse_args()
+    random.seed(RANDOM_SEED)  # quips are random; a fixed seed keeps the committed page stable
     target = Path(args.out)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_page(build_samples()), encoding="utf-8")
+    target.write_text(render_page(build_samples()), encoding="utf-8", newline="\n")
     sys.stdout.write(f"wrote {target}\n")
     return 0
 
