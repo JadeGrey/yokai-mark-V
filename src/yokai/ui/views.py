@@ -100,11 +100,13 @@ class QueuePaginator(BaseView):
         initial_page: int = 1,
         bot_avatar_url: Optional[str] = None,
         timeout: float = 180.0,
+        current_track: Optional[Track] = None,
     ) -> None:
         super().__init__(allowed_user_ids=[author_id], timeout=timeout)
         self.queue = queue
         self.current_page = initial_page
         self.bot_avatar_url = bot_avatar_url
+        self.current_track = current_track
         self._update_buttons()
 
     def _update_buttons(self) -> None:
@@ -114,6 +116,12 @@ class QueuePaginator(BaseView):
 
     def build_embed(self) -> discord.Embed:
         tracks, total_pages, total_tracks = self.queue.get_page(self.current_page)
+        now_playing = None
+        if self.current_track is not None:
+            current = self.current_track
+            url = None if current.is_pending_match else current.url
+            now_playing = (current.title, url, current.duration_s)
+        runtime = sum(t.duration_s for t in self.queue.upcoming if t.duration_s) or None
         return EmbedFactory.queue_page(
             tracks=[(pos, t.title, t.artist, t.duration_s) for pos, t in tracks],
             page=self.current_page,
@@ -121,6 +129,8 @@ class QueuePaginator(BaseView):
             total_tracks=total_tracks,
             loop_mode=self.queue.loop_mode.value,
             bot_avatar_url=self.bot_avatar_url,
+            now_playing=now_playing,
+            total_runtime_s=runtime,
         )
 
     @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)

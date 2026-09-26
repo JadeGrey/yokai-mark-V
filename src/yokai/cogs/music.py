@@ -79,6 +79,21 @@ def _validate_voice_state(
     return caller_channel
 
 
+def _track_url(track: Track) -> Optional[str]:
+    """YouTube page URL for embeds; None for imported tracks that are not matched yet."""
+    return None if track.is_pending_match else track.url
+
+
+def _eta_seconds(player: GuildPlayer, position: int) -> int:
+    """Seconds until the track at 1-based queue `position` starts playing."""
+    remaining = 0
+    current = player.current_track
+    if current is not None and current.duration_s > 0:
+        remaining = max(current.duration_s - player.elapsed_seconds, 0)
+    ahead = sum(t.duration_s for t in list(player.queue.upcoming)[: max(position - 1, 0)])
+    return remaining + ahead
+
+
 class MusicCog(commands.Cog, name="Music"):
     """Playback, queue controls, and audio commands."""
 
@@ -109,6 +124,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if classified.kind == InputKind.UNSUPPORTED:
             err_embed = EmbedFactory.error(
+                title="Unsupported link",
                 message=classified.error_message or "Unsupported input.",
                 user_hint=classified.user_hint,
                 bot_avatar_url=avatar_url,
@@ -155,6 +171,7 @@ class MusicCog(commands.Cog, name="Music"):
                 matched = await self.bot.matcher.match_track(meta, interaction.user.id)
                 if not matched:
                     err_embed = EmbedFactory.error(
+                        title="No match found",
                         message=f"Could not find a confident YouTube match for '{meta.title}'.",
                         user_hint="Try searching with YouTube song title and artist.",
                         bot_avatar_url=avatar_url,
@@ -174,6 +191,7 @@ class MusicCog(commands.Cog, name="Music"):
 
                 if not collection.tracks:
                     err_embed = EmbedFactory.error(
+                        title="Nothing to play",
                         message=f"No playable tracks found in Spotify {entity_type}.",
                         user_hint="Check that the link is public and contains audio tracks.",
                         bot_avatar_url=avatar_url,
@@ -206,6 +224,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not tracks_to_queue:
             err_embed = EmbedFactory.error(
+                title="Nothing to play",
                 message="No playable audio tracks were found.",
                 user_hint="Check the link or search terms.",
                 bot_avatar_url=avatar_url,
@@ -236,11 +255,14 @@ class MusicCog(commands.Cog, name="Music"):
                     requester_mention=f"<@{interaction.user.id}>",
                     thumbnail_url=track.thumbnail_url,
                     bot_avatar_url=avatar_url,
+                    url=_track_url(track),
+                    source=track.origin,
                 )
             else:
                 added = player.queue.add(track)
                 if not added:
                     embed = EmbedFactory.error(
+                        title="Queue is full",
                         message=f"Queue limit reached ({self.bot.config.max_queue_size} tracks).",
                         user_hint="Wait for tracks to finish or remove items.",
                         bot_avatar_url=avatar_url,
@@ -254,41 +276,50 @@ class MusicCog(commands.Cog, name="Music"):
                         artist=track.artist,
                         duration_s=track.duration_s,
                         bot_avatar_url=avatar_url,
+                        url=_track_url(track),
+                        eta_s=_eta_seconds(player, pos),
+                        requester_mention=f"<@{interaction.user.id}>",
+                        source=track.origin,
+                        thumbnail_url=track.thumbnail_url,
                     )
             await send(interaction, embed=embed)
         else:
             # Playlist queueing: queue everything first, then start playback if idle, so the
             # worker moves on to the next track if the first one fails to load.
             first = tracks_to_queue[0]
+            now_playing_title: Optional[str] = None
             if player.state == PlayerState.IDLE:
                 total_loaded = player.queue.add_many(tracks_to_queue)
                 await player.play_next()
 
                 player.maybe_prefetch()
-                added_rest = max(total_loaded - 1, 0)
-                msg = (
-                    f"Started playback with **{first.title}** "
-                    f"and queued **{added_rest}** additional tracks."
-                )
+                queued_count = max(total_loaded - 1, 0)
+                now_playing_title = first.title
             else:
                 total_loaded = player.queue.add_many(tracks_to_queue)
                 player.maybe_prefetch()
-                msg = f"Queued **{total_loaded}** tracks from playlist."
+                queued_count = total_loaded
 
             if collection_info:
                 c_type, c_name, c_count, c_total, c_partial = collection_info
-                partial_note = f" (loaded {c_count} of {c_total})" if c_partial else ""
-                embed = EmbedFactory.success(
-                    title=f"Spotify {c_type.title()} Loaded ({c_count} tracks)",
-                    description=f"Loaded **{c_name}**{partial_note}.\n{msg}",
-                    context="Spotify Import",
+                embed = EmbedFactory.import_summary(
+                    kind=f"Spotify {c_type}",
+                    name=c_name,
+                    loaded=c_count,
+                    total=c_total,
+                    queued=queued_count,
+                    now_playing=now_playing_title,
+                    partial=c_partial,
                     bot_avatar_url=avatar_url,
                 )
             else:
-                embed = EmbedFactory.success(
-                    title=f"Playlist Loaded ({total_loaded} tracks)",
-                    description=msg,
-                    context="Playlist",
+                embed = EmbedFactory.import_summary(
+                    kind="Playlist",
+                    name=None,
+                    loaded=total_loaded,
+                    total=None,
+                    queued=queued_count,
+                    now_playing=now_playing_title,
                     bot_avatar_url=avatar_url,
                 )
             await send(interaction, embed=embed)
@@ -391,6 +422,7 @@ class MusicCog(commands.Cog, name="Music"):
             author_id=interaction.user.id,
             initial_page=max(1, page),
             bot_avatar_url=avatar_url,
+            current_track=player.current_track,
         )
         embed = paginator.build_embed()
         await send(interaction, embed=embed, view=paginator)
@@ -422,6 +454,8 @@ class MusicCog(commands.Cog, name="Music"):
             requester_mention=f"<@{track.requester_id}>",
             thumbnail_url=track.thumbnail_url,
             bot_avatar_url=avatar_url,
+            url=_track_url(track),
+            source=track.origin,
         )
         await send(interaction, embed=embed)
 
@@ -442,6 +476,7 @@ class MusicCog(commands.Cog, name="Music"):
             await send(interaction, embed=embed)
         except IndexError as err:
             err_embed = EmbedFactory.error(
+                title="No such position",
                 message=str(err),
                 user_hint="Check `/queue` to see valid track positions.",
             )
@@ -565,6 +600,7 @@ class MusicCog(commands.Cog, name="Music"):
                     )
                     if not col.tracks:
                         embed = EmbedFactory.error(
+                            title="Nothing to seed from",
                             message=f"No playable tracks in Spotify {e_type}.",
                             bot_avatar_url=avatar_url,
                         )
@@ -575,6 +611,7 @@ class MusicCog(commands.Cog, name="Music"):
                 seed_track = await self.bot.matcher.match_track(meta, interaction.user.id)
             else:
                 embed = EmbedFactory.error(
+                    title="Unsupported seed",
                     message=classified.error_message or "Unsupported seed input.",
                     user_hint=classified.user_hint,
                     bot_avatar_url=avatar_url,
