@@ -11,7 +11,6 @@ import discord
 from yokai.theme import (
     COLOR_BRAND,
     COLOR_ERROR,
-    COLOR_IDLE,
     COLOR_SUCCESS,
     COLOR_WARNING,
     PROGRESS_EMPTY,
@@ -457,31 +456,28 @@ class EmbedFactory:
         def _fmt(val: Optional[float]) -> str:
             return f"`{val:.1f} ms`" if val is not None else "*N/A*"
 
-        embed = cls._create_base(
+        voice_val = "*Not connected*"
+        if voice_ms is not None:
+            voice_val = f"`{voice_ms:.1f} ms`"
+            if voice_avg_ms is not None:
+                voice_val = f"`{voice_ms:.1f} ms` (avg `{voice_avg_ms:.1f} ms`)"
+        resolver_val = f"`{resolver_ms:.1f} ms`" if resolver_ms is not None else "*No data yet*"
+
+        fields: list[FieldSpec] = [
+            ("Gateway (WS)", _fmt(gateway_ms), True),
+            ("REST API", _fmt(rest_ms), True),
+            ("Database", _fmt(db_ms), True),
+            ("Voice", voice_val, True),
+            ("Resolver", resolver_val, True),
+        ]
+        return cls._create_base(
             title=f"{Emoji.PING} System Latencies",
             description=f"**Status:** {status_text}",
             color=color,
             context="Diagnostics",
             bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
         )
-
-        embed.add_field(name="Gateway (WS)", value=_fmt(gateway_ms), inline=True)
-        embed.add_field(name="REST API", value=_fmt(rest_ms), inline=True)
-        embed.add_field(name="Database", value=_fmt(db_ms), inline=True)
-
-        if voice_ms is not None:
-            if voice_avg_ms is not None:
-                voice_val = f"`{voice_ms:.1f} ms` (avg `{voice_avg_ms:.1f} ms`)"
-            else:
-                voice_val = f"`{voice_ms:.1f} ms`"
-        else:
-            voice_val = "*Not connected*"
-        embed.add_field(name="Voice", value=voice_val, inline=True)
-
-        resolver_val = f"`{resolver_ms:.1f} ms`" if resolver_ms is not None else "*No data yet*"
-        embed.add_field(name="Resolver", value=resolver_val, inline=True)
-
-        return embed
 
     @classmethod
     def usage(
@@ -537,27 +533,26 @@ class EmbedFactory:
             f"**Maintained by:** <@{owner_id}>"
         )
 
-        embed = cls._create_base(
+        fields: list[FieldSpec] = [
+            (clamp(component, 50), f"`{clamp(ver, 50)}`", True)
+            for component, ver in stack_info.items()
+        ]
+        fields.append(
+            (
+                "Notice",
+                "*Unaffiliated fan project inspired by Echo's Yokai drone "
+                "from Rainbow Six Siege. © Ubisoft.*",
+                False,
+            )
+        )
+        return cls._create_base(
             title=f"{Emoji.DRONE} About Yokai v{version}",
             description=desc,
             color=COLOR_BRAND,
             context="About",
             bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
         )
-
-        for component, ver in stack_info.items():
-            embed.add_field(name=clamp(component, 50), value=f"`{clamp(ver, 50)}`", inline=True)
-
-        embed.add_field(
-            name="Notice",
-            value=(
-                "*Unaffiliated fan project inspired by Echo's Yokai drone "
-                "from Rainbow Six Siege. © Ubisoft.*"
-            ),
-            inline=False,
-        )
-
-        return embed
 
     @classmethod
     def diag(
@@ -565,17 +560,12 @@ class EmbedFactory:
         diagnostics: Mapping[str, Any],
         recent_errors: Sequence[str],
         bot_avatar_url: Optional[str] = None,
+        status: str = "ok",
     ) -> discord.Embed:
-        embed = cls._create_base(
-            title=f"{Emoji.WARN} Diagnostic Telemetry",
-            description="Owner-only operational diagnostic overview.",
-            color=COLOR_IDLE,
-            context="Diagnostic",
-            bot_avatar_url=bot_avatar_url,
-        )
-
-        for key, val in diagnostics.items():
-            embed.add_field(name=clamp(key, 50), value=clamp(str(val), 200), inline=True)
+        needs_attention = status == "warn"
+        fields: list[FieldSpec] = [
+            (clamp(key, 50), clamp(str(val), 200), True) for key, val in diagnostics.items()
+        ]
 
         if recent_errors:
             lines: list[str] = []
@@ -587,16 +577,18 @@ class EmbedFactory:
                     break
                 lines.append(line)
                 char_count += len(line) + 1
-
-            embed.add_field(
-                name=f"Recent Exceptions ({len(recent_errors)})",
-                value="\n".join(lines) if lines else "*No errors recorded.*",
-                inline=False,
-            )
+            fields.append((f"Recent Exceptions ({len(recent_errors)})", "\n".join(lines), False))
         else:
-            embed.add_field(name="Recent Exceptions", value="*No errors recorded.*", inline=False)
+            fields.append(("Recent Exceptions", "*No errors recorded.*", False))
 
-        return embed
+        return cls._create_base(
+            title=f"{Emoji.WARN if needs_attention else Emoji.DRONE} Diagnostic Telemetry",
+            description="Owner-only operational diagnostic overview.",
+            color=COLOR_WARNING if needs_attention else COLOR_SUCCESS,
+            context="Diagnostic",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
 
 
 def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH) -> str:

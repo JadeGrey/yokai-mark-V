@@ -433,3 +433,52 @@ def test_music_builders_hostile_limits_and_emoji() -> None:
         assert len(embed.description) <= MAX_DESC_LEN
         assert total_embed_length(embed) <= MAX_TOTAL_LEN
         assert emoji_count(embed) <= 1
+
+
+def test_ping_fields_are_grid_aligned_and_status_colored() -> None:
+    good = EmbedFactory.ping(
+        gateway_ms=40.0, rest_ms=60.0, db_ms=1.0, voice_ms=30.0, resolver_ms=20.0
+    )
+    assert "System Latencies" in good.title
+    assert len(good.fields) % 3 == 0  # 5 real fields + 1 spacer
+    assert good.fields[-1].name == "​"
+    assert {"Gateway (WS)", "REST API", "Database", "Voice", "Resolver"} <= {
+        f.name for f in good.fields
+    }
+    slow = EmbedFactory.ping(gateway_ms=500.0, rest_ms=None, db_ms=None)
+    assert slow.color.value != good.color.value
+    assert emoji_count(good) == 1 and emoji_count(slow) == 1
+
+
+def test_about_stack_grid_is_aligned_and_notice_is_wide() -> None:
+    embed = EmbedFactory.about(
+        version="0.1.0",
+        uptime_str="1h 2m",
+        host_os="Windows 11",
+        stack_info={"Python": "3.14", "discord.py": "2.7.1", "yt-dlp": "x", "ytmusicapi": "y"},
+        owner_id=42,
+    )
+    inline = [f for f in embed.fields if f.inline]
+    assert len(inline) % 3 == 0
+    assert embed.fields[-1].name == "Notice" and embed.fields[-1].inline is False
+    assert emoji_count(embed) == 1
+
+
+def test_diag_status_changes_color_and_emoji() -> None:
+    ok = EmbedFactory.diag(diagnostics={"Python": "3.14"}, recent_errors=[])
+    warn = EmbedFactory.diag(diagnostics={"Python": "3.14"}, recent_errors=["boom"], status="warn")
+    assert "Diagnostic Telemetry" in ok.title
+    assert ok.title.startswith("🛸") and warn.title.startswith("⚠️")
+    assert ok.color.value != warn.color.value
+    assert emoji_count(ok) == 1 and emoji_count(warn) == 1
+    inline = [f for f in ok.fields if f.inline]
+    assert len(inline) % 3 == 0
+
+
+def test_usage_embed_still_has_period_and_two_fields() -> None:
+    embed = EmbedFactory.usage(
+        top_users=[(1, 5, 2)], top_commands=[("play", 9)], period="Last 7 Days"
+    )
+    assert "Last 7 Days" in embed.description
+    assert [f.name for f in embed.fields] == ["Top Operators", "Top Commands"]
+    assert emoji_count(embed) == 1
