@@ -244,7 +244,7 @@ class MetaCog(commands.Cog, name="Meta"):
             else (self.bot.health.ytdlp_version or "Unknown")
         )
         if self.bot.health.ytdlp_outdated:
-            ytdlp_age_str += " ⚠️ Outdated"
+            ytdlp_age_str += " (outdated)"
 
         diagnostics = {
             "Python / discord.py": f"{platform.python_version()} / {discord.__version__}",
@@ -265,10 +265,16 @@ class MetaCog(commands.Cog, name="Meta"):
             if err not in recent_errors:
                 recent_errors.append(err)
 
+        needs_attention = (
+            getattr(self.bot.resolver, "is_degraded", False) is True
+            or self.bot.health.ytdlp_outdated is True
+            or self.bot.health.davey_available is False
+        )
         embed = EmbedFactory.diag(
             diagnostics=diagnostics,
             recent_errors=recent_errors,
             bot_avatar_url=avatar_url,
+            status="warn" if needs_attention else "ok",
         )
 
         view = DiagView(owner_id=self.bot.config.owner_id, bot_avatar_url=avatar_url)

@@ -306,7 +306,7 @@ class DiagView(BaseView):
                         title="yt-dlp Updated",
                         description=(
                             "yt-dlp was successfully updated to the latest release.\n\n"
-                            "⚠️ **Restart Required:** Please restart the Yokai process "
+                            "**Restart Required:** Please restart the Yokai process "
                             "to load the updated package into memory."
                         ),
                         context="Maintenance",

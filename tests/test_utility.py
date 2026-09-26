@@ -507,3 +507,41 @@ async def test_bot_error_ring_buffer_on_tree_error() -> None:
     assert len(bot.error_ring_buffer) == 1
     assert "test_cmd" in bot.error_ring_buffer[0]
     assert "Simulated failure" in bot.error_ring_buffer[0]
+
+
+@pytest.mark.asyncio
+async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
+    bot = MagicMock()
+    bot.config.owner_id = 42
+    bot.config.db_path = ":memory:"
+    bot.user = None
+    bot.error_ring_buffer = []
+    bot.resolver.is_degraded = True
+    bot.resolver.consecutive_failures = 3
+    bot.resolver.error_ring_buffer = []
+    bot.health.davey_available = True
+    bot.health.davey_version = "0.1.6"
+    bot.health.ytdlp_version = "2026.8.19"
+    bot.health.ytdlp_age_days = 40
+    bot.health.ytdlp_outdated = True
+    bot.health.ffmpeg_path = "ffmpeg"
+    bot.health.deno_path = "deno"
+    bot.spotify.get_provider_status.return_value = {
+        "official_configured": False,
+        "official_circuit_available": True,
+        "official_failures": 0,
+        "scraper_enabled": True,
+        "scraper_circuit_available": True,
+        "scraper_failures": 0,
+    }
+    cog = MetaCog(bot)
+    interaction = MagicMock()
+    interaction.user.id = 42
+    interaction.response.defer = AsyncMock()
+    with patch("yokai.cogs.meta.send", new=AsyncMock()) as sent:
+        await cog.diag.callback(cog, interaction)
+    embed = sent.await_args.kwargs["embed"]
+    assert embed.title.startswith("⚠️")
+    values = " ".join(f.value for f in embed.fields)
+    assert "(outdated)" in values
+    assert "⚠️" not in values
