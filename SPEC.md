@@ -84,7 +84,7 @@ Design rule: every external integration hides behind an interface so it can be r
 Goal: every message Yokai sends looks like it came from the same bot, and feature code never builds embeds by hand.
 
 **Requirements**
-1. One `EmbedFactory` (or module of builder functions). Feature code calls semantic builders: `info`, `success`, `warning`, `error`, `now_playing`, `queued`, `queue_page`, `recommendations`, `ping`, `usage`, `about`, `diag`.
+1. One `EmbedFactory` (or module of builder functions). Feature code calls semantic builders: `info`, `success`, `warning`, `error`, `now_playing`, `queued`, `queue_page`, `recommendations`, `import_summary`, `ping`, `usage`, `about`, `diag`.
 2. A shared base builder applies: semantic color, consistent title style, footer (`Yokai · <context>` with the bot avatar as icon), optional thumbnail, optional one-line quip from the line bank.
 3. Colors, emoji, and footer text live in `theme.py`. Suggested default: one brand accent color for music/info, plus green/amber/red for success/warning/error. The owner can retune them in one place.
 4. Enforce Discord limits centrally with `clamp()` helpers: title 256, description 4096, field name 256, field value 1024, footer 2048, 25 fields, 6000 characters total. Truncate with an ellipsis; never raise.
@@ -95,15 +95,15 @@ Goal: every message Yokai sends looks like it came from the same bot, and featur
 
 ### Layout (v2)
 
-- **Titles** are specific to the situation; there is no generic "Error" or "Success". Each embed carries exactly one emoji, in the title.
+- **Titles** are specific to the situation and in sentence case ("Playback paused"); there is no generic "Error" or "Success". Each embed carries at most one emoji, in the title (plain info embeds have none).
 - **Error embed:** specific title, plain message in the description, a separate non-inline `Try` field, the quip in the footer, no second emoji.
 - **Now playing:** the title is the track title linked to its YouTube page, then an artist line and a progress bar (`━` played, `●` head, `─` remaining, no emoji). Inline fields: Duration, Requested by, Source.
 - **Queued:** title `Queued`, the track as a linked bold line, fields Position, Plays in, Duration, Requested by, Source.
 - **Queue and recommendation lists** are compact numbered lines: `` ` 1.` **Title** — Artist · `3:41` ``. The queue header shows what is playing, the total runtime and the loop state.
-- **Import summaries** (playlist or album loads) use Loaded / Queued / Now playing fields.
+- **Import summaries** (playlist or album loads) use Loaded / Queued / Now playing fields, plus a note line when the queue limit cut the import short.
 - **Grid:** every run of inline fields is padded to three columns so Discord's layout stays aligned.
 - **Safety:** all user-supplied track text goes through `escape_md`, so a title cannot inject a link or formatting.
-- **`/ping`** color comes from gateway, REST, voice and database latency only; the resolver figure is displayed but not counted (see section 9). `/diag` is amber when YouTube is degraded or yt-dlp is outdated, green otherwise.
+- **`/ping`** color comes from gateway, REST, voice and database latency only; the resolver figure is displayed but not counted (see section 9). `/diag` is amber when YouTube is degraded, yt-dlp is outdated, or DAVE voice encryption is unavailable; green otherwise.
 - **Design review:** `scripts/preview_embeds.py` renders every builder with sample data to `docs/preview/embeds.html`. Regenerate it after changing any builder.
 
 ---
@@ -226,7 +226,7 @@ After 3 consecutive extraction failures, mark YouTube health as degraded, post o
 3. Filter: drop the seed itself, tracks already queued or playing, the last 100 plays, duplicates by normalized title+artist (even with different video IDs), non-music video types where identifiable, and tracks over 10 minutes.
 4. Take `RECOMMEND_COUNT` (default 8, valid 5–10).
 5. Cache results per seed for 10 minutes.
-6. Post one embed: quip, numbered list (`Title — Artist  \`3:41\``), footer naming the seed, and a single **button** (label from `theme.py`, e.g. "Queue them all").
+6. Post one embed: quip, a "Seeded from **seed**" line, numbered lines (`` ` 1.` **Title** — Artist · `3:41` ``), footer `Yokai · Recommendations`, and a single **button** (label from `theme.py`, e.g. "Queue them all").
 7. Button behavior (`RecommendView`): restricted to users in the bot's voice channel or the requester; if the bot isn't connected, join the presser's channel; queue all listed tracks; edit the embed to a "queued" state and disable the button; single use; times out after 180s and disables itself. Guard with a lock so a double-click can't queue twice.
 8. If ytmusicapi fails or returns too few tracks, show an error embed; never crash.
 
