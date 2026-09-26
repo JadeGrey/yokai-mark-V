@@ -2,7 +2,19 @@
 
 from __future__ import annotations
 
-from yokai.theme import QUIP_VARIANTS, QuipBank
+from tests.embed_helpers import EMOJI_RE
+from yokai.theme import (
+    LIST_PAGE_SIZE,
+    PROGRESS_EMPTY,
+    PROGRESS_FILLED,
+    PROGRESS_HEAD,
+    PROGRESS_LENGTH,
+    QUIP_VARIANTS,
+    SEP,
+    Emoji,
+    QuipBank,
+    source_label,
+)
 
 
 def test_quip_variants_minimum_count() -> None:
@@ -38,3 +50,29 @@ def test_quip_bank_no_repeat() -> None:
                 f"Quip '{current}' was repeated consecutively for key '{key}'"
             )
             last_quip = current
+
+
+def test_progress_glyphs_are_single_non_emoji_characters() -> None:
+    assert (PROGRESS_FILLED, PROGRESS_HEAD, PROGRESS_EMPTY) == ("━", "●", "─")
+    for glyph in (PROGRESS_FILLED, PROGRESS_HEAD, PROGRESS_EMPTY):
+        assert len(glyph) == 1
+        assert not EMOJI_RE.search(glyph)
+    assert PROGRESS_LENGTH >= 10
+    assert SEP == " · "
+    assert LIST_PAGE_SIZE == 10
+
+
+def test_fixed_emoji_set_is_still_single_glyphs() -> None:
+    names = [n for n in vars(Emoji) if not n.startswith("_")]
+    assert names, "Emoji set must not be empty"
+    for name in names:
+        assert EMOJI_RE.search(getattr(Emoji, name)), f"{name} must be a real emoji"
+
+
+def test_source_label_known_and_unknown_origins() -> None:
+    assert source_label("link") == "YouTube link"
+    assert source_label("search") == "Search"
+    assert source_label("import") == "Spotify import"
+    assert source_label("recommendation") == "Recommendation"
+    assert source_label("something_new") == "Something new"
+    assert source_label("") == "Unknown"

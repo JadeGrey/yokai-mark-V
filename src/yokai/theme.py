@@ -29,6 +29,30 @@ class Emoji:
     SKIP: Final[str] = "⏭️"
 
 
+# Layout tokens shared by every embed builder
+PROGRESS_LENGTH: Final[int] = 14
+PROGRESS_FILLED: Final[str] = "━"
+PROGRESS_HEAD: Final[str] = "●"
+PROGRESS_EMPTY: Final[str] = "─"
+SEP: Final[str] = " · "
+LIST_PAGE_SIZE: Final[int] = 10
+
+# Where a track came from (Track.origin) as shown to people
+SOURCE_LABELS: Final[Mapping[str, str]] = {
+    "link": "YouTube link",
+    "search": "Search",
+    "import": "Spotify import",
+    "recommendation": "Recommendation",
+}
+
+
+def source_label(origin: str) -> str:
+    """Human-readable label for a `Track.origin` value."""
+    if origin in SOURCE_LABELS:
+        return SOURCE_LABELS[origin]
+    return origin.replace("_", " ").capitalize() or "Unknown"
+
+
 # Persona Line Bank (at least 3 variants per key)
 QUIP_VARIANTS: Final[Mapping[str, Sequence[str]]] = {
     "play_start": (
