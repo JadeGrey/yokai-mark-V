@@ -140,15 +140,24 @@ def load_config(env_path: Path | str | None = None) -> Config:
 
     # Economy: Renown wallet, earning, and rate limits
     economy_daily_base = _parse_int("ECONOMY_DAILY_BASE", os.getenv("ECONOMY_DAILY_BASE"), 100)
-    economy_welcome_bonus = _parse_int(
-        "ECONOMY_WELCOME_BONUS", os.getenv("ECONOMY_WELCOME_BONUS"), 200
+    economy_welcome_bonus = max(
+        0,
+        _parse_int("ECONOMY_WELCOME_BONUS", os.getenv("ECONOMY_WELCOME_BONUS"), 200),
     )
-    economy_voice_interval_seconds = _parse_int(
-        "ECONOMY_VOICE_INTERVAL_SECONDS", os.getenv("ECONOMY_VOICE_INTERVAL_SECONDS"), 300
+    # Floored at 30s: 0 (or a very small value) would make the voice tracker busy-loop.
+    economy_voice_interval_seconds = max(
+        30,
+        _parse_int(
+            "ECONOMY_VOICE_INTERVAL_SECONDS", os.getenv("ECONOMY_VOICE_INTERVAL_SECONDS"), 300
+        ),
     )
-    economy_voice_reward = _parse_int("ECONOMY_VOICE_REWARD", os.getenv("ECONOMY_VOICE_REWARD"), 5)
-    economy_command_reward = _parse_int(
-        "ECONOMY_COMMAND_REWARD", os.getenv("ECONOMY_COMMAND_REWARD"), 5
+    # 0 is a valid "feature disabled" value; callers must skip crediting rather than call
+    # credit_wallet with a non-positive amount (which raises ValueError).
+    economy_voice_reward = max(
+        0, _parse_int("ECONOMY_VOICE_REWARD", os.getenv("ECONOMY_VOICE_REWARD"), 5)
+    )
+    economy_command_reward = max(
+        0, _parse_int("ECONOMY_COMMAND_REWARD", os.getenv("ECONOMY_COMMAND_REWARD"), 5)
     )
     economy_command_rate_limit = _parse_int(
         "ECONOMY_COMMAND_RATE_LIMIT", os.getenv("ECONOMY_COMMAND_RATE_LIMIT"), 5

@@ -132,11 +132,18 @@ class EconomyCog(commands.Cog, name="Economy"):
     @app_commands.command(
         name="leaderboard", description="Show the top Renown balances on the server."
     )
-    async def leaderboard(self, interaction: discord.Interaction) -> None:
+    @app_commands.describe(page="Page number to jump to (defaults to page 1)")
+    async def leaderboard(
+        self, interaction: discord.Interaction, page: Optional[int] = None
+    ) -> None:
         """Anyone can page through the leaderboard, not just whoever ran the command."""
         await interaction.response.defer(thinking=True)
+        initial_page = page if page is not None and page >= 1 else 1
         view = LeaderboardPaginator(
-            bot=self.bot, author_id=interaction.user.id, bot_avatar_url=self._avatar_url()
+            bot=self.bot,
+            author_id=interaction.user.id,
+            initial_page=initial_page,
+            bot_avatar_url=self._avatar_url(),
         )
         embed = await view.build_embed()
         msg = await send(interaction, embed=embed, view=view)
@@ -161,6 +168,13 @@ class EconomyCog(commands.Cog, name="Economy"):
                 include_quip=False,
             )
             await send(interaction, embed=embed, ephemeral=True)
+            return
+
+        if user.bot:
+            await self._send_domain_error(
+                interaction,
+                InvalidPaymentError("You can only adjust another human member of the server."),
+            )
             return
 
         await interaction.response.defer(ephemeral=True)

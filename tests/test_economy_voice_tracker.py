@@ -22,11 +22,12 @@ def _channel(members: list[MagicMock]) -> MagicMock:
     return channel
 
 
-def _bot_with_guild(channels: list[MagicMock]) -> MagicMock:
+def _bot_with_guild(channels: list[MagicMock], afk_channel: MagicMock | None = None) -> MagicMock:
     bot = MagicMock()
     bot.config.guild_id = 1
     guild = MagicMock()
     guild.voice_channels = channels
+    guild.afk_channel = afk_channel
     bot.get_guild.return_value = guild
     bot.db.credit_wallet = AsyncMock()
     return bot
@@ -75,6 +76,62 @@ async def test_tick_does_nothing_when_the_guild_is_not_found() -> None:
     bot.db.credit_wallet = AsyncMock()
     tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
     await tracker.tick()
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_the_guild_afk_channel() -> None:
+    """Review Focus: idle members parked in the AFK channel must not farm Renown."""
+    afk_channel = _channel([_member(1), _member(2)])
+    bot = _bot_with_guild([afk_channel], afk_channel=afk_channel)
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tick_still_credits_other_channels_when_the_afk_channel_has_humans() -> None:
+    afk_channel = _channel([_member(1), _member(2)])
+    other_channel = _channel([_member(3), _member(4)])
+    bot = _bot_with_guild([afk_channel, other_channel], afk_channel=afk_channel)
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    credited_ids = {call.args[0] for call in bot.db.credit_wallet.await_args_list}
+    assert credited_ids == {3, 4}
+
+
+@pytest.mark.asyncio
+async def test_tick_continues_crediting_siblings_after_one_members_credit_fails() -> None:
+    """Review Focus: one member's credit_wallet failure must not abort the rest of the tick."""
+    channel = _channel([_member(1), _member(2), _member(3)])
+    bot = _bot_with_guild([channel])
+
+    async def credit_side_effect(user_id: int, *args: object, **kwargs: object) -> None:
+        if user_id == 2:
+            raise RuntimeError("transient db error")
+
+    bot.db.credit_wallet = AsyncMock(side_effect=credit_side_effect)
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    attempted_ids = {call.args[0] for call in bot.db.credit_wallet.await_args_list}
+    assert attempted_ids == {1, 2, 3}  # member 2's failure did not stop 1 and 3 from being tried
+
+
+@pytest.mark.asyncio
+async def test_tick_does_nothing_when_the_reward_is_disabled() -> None:
+    """Review Focus: ECONOMY_VOICE_REWARD=0 must not call credit_wallet at all."""
+    channel = _channel([_member(1), _member(2)])
+    bot = _bot_with_guild([channel])
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=0)
+
+    await tracker.tick()
+
     bot.db.credit_wallet.assert_not_awaited()
 
 

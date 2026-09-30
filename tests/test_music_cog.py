@@ -7,10 +7,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
-from yokai.cogs.music import MusicCog, _eta_seconds, _track_url
+from yokai.cogs.music import MUSIC_COMMAND_NAMES, MusicCog, _eta_seconds, _track_url
 from yokai.music.models import LoopMode, MusicQueue, PlayerState, Track
 
 PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI"
+
+
+def test_music_command_names_matches_the_cogs_actually_registered_commands() -> None:
+    """Review Focus: catches drift if a new music command is added but MUSIC_COMMAND_NAMES
+
+    (which gates Renown command rewards in bot.py) isn't updated to match it.
+    """
+    bot = MagicMock()
+    bot.user = None
+    cog = MusicCog(bot)
+    registered_names = {cmd.name for cmd in cog.get_app_commands()}
+    assert registered_names == MUSIC_COMMAND_NAMES
 
 
 def make_interaction() -> MagicMock:

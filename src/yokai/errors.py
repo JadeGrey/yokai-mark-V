@@ -168,7 +168,12 @@ class DailyOnCooldownError(YokaiError):
         remaining = max(retry_after_s, 0)
         hours, rem = divmod(remaining, 3600)
         minutes = rem // 60
-        wait_str = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+        if hours:
+            wait_str = f"{hours}h {minutes}m"
+        elif minutes:
+            wait_str = f"{minutes}m"
+        else:
+            wait_str = "less than a minute"
         super().__init__(
             f"You already claimed your daily reward. Try again in {wait_str}.",
             user_hint="Daily rewards reset 24 hours after your last claim.",

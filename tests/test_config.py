@@ -126,3 +126,45 @@ def test_economy_defaults_and_overrides() -> None:
         assert cfg.economy_voice_reward == 1
         assert cfg.economy_command_reward == 2
         assert cfg.economy_command_rate_limit == 3
+
+
+def test_economy_voice_interval_is_floored_at_thirty_seconds() -> None:
+    """Review Focus: a tiny/zero interval must not busy-loop the voice tracker."""
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    for raw in ("0", "1", "29", "-100"):
+        with patch.dict(os.environ, {**base, "ECONOMY_VOICE_INTERVAL_SECONDS": raw}, clear=True):
+            cfg = load_config(env_path=Path("non_existent_env"))
+            assert cfg.economy_voice_interval_seconds == 30
+
+    with patch.dict(os.environ, {**base, "ECONOMY_VOICE_INTERVAL_SECONDS": "45"}, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_voice_interval_seconds == 45
+
+
+def test_economy_welcome_bonus_cannot_go_negative() -> None:
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    with patch.dict(os.environ, {**base, "ECONOMY_WELCOME_BONUS": "-50"}, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_welcome_bonus == 0
+
+
+def test_economy_voice_and_command_rewards_can_be_disabled_but_not_negative() -> None:
+    """Review Focus: 0 must be allowed (feature off); negative values must clamp to 0."""
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    with patch.dict(
+        os.environ,
+        {**base, "ECONOMY_VOICE_REWARD": "0", "ECONOMY_COMMAND_REWARD": "0"},
+        clear=True,
+    ):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_voice_reward == 0
+        assert cfg.economy_command_reward == 0
+
+    with patch.dict(
+        os.environ,
+        {**base, "ECONOMY_VOICE_REWARD": "-5", "ECONOMY_COMMAND_REWARD": "-5"},
+        clear=True,
+    ):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_voice_reward == 0
+        assert cfg.economy_command_reward == 0

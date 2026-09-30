@@ -52,6 +52,13 @@ def test_daily_on_cooldown_error_under_an_hour() -> None:
     assert "h" not in err.message.split("Try again in ")[1]
 
 
+def test_daily_on_cooldown_error_under_a_minute_does_not_say_zero_minutes() -> None:
+    """Review Focus: a sub-60s wait must not display as the nonsensical '0m'."""
+    err = err_mod.DailyOnCooldownError(retry_after_s=40)
+    assert "0m" not in err.message
+    assert "less than a minute" in err.message
+
+
 def test_insufficient_funds_error_reports_amounts() -> None:
     err = err_mod.InsufficientFundsError(balance=40, amount=100)
     assert err.title == "Not enough Renown"

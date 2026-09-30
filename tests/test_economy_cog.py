@@ -215,11 +215,31 @@ async def test_economy_admin_allows_the_owner() -> None:
     interaction = make_interaction(999)  # the owner
     target = MagicMock(spec=discord.Member)
     target.id = 222
+    target.bot = False
 
     with patch("yokai.cogs.economy.send", new=AsyncMock()) as sent:
         await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
 
     bot.db.admin_adjust_wallet.assert_awaited_once_with(222, 100, welcome_bonus=200)
+    assert sent.await_args.kwargs["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_economy_admin_rejects_a_bot_target() -> None:
+    """Review Focus: /economy-admin must not be able to create a wallet for a bot."""
+    bot = make_bot()
+    bot.db.admin_adjust_wallet = AsyncMock()
+    cog = EconomyCog(bot)
+    interaction = make_interaction(999)  # the owner
+    target = MagicMock(spec=discord.Member)
+    target.id = 222
+    target.bot = True
+
+    with patch("yokai.cogs.economy.send", new=AsyncMock()) as sent:
+        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
+
+    bot.db.admin_adjust_wallet.assert_not_awaited()
+    interaction.response.defer.assert_not_awaited()
     assert sent.await_args.kwargs["ephemeral"] is True
 
 
@@ -234,9 +254,46 @@ async def test_leaderboard_defers_and_sends_a_paginator_view() -> None:
     message = MagicMock(spec=discord.Message)
 
     with patch("yokai.cogs.economy.send", new=AsyncMock(return_value=message)) as sent:
-        await cog.leaderboard.callback(cog, interaction)
+        await cog.leaderboard.callback(cog, interaction, page=None)
 
     interaction.response.defer.assert_awaited_once()
     view = sent.await_args.kwargs["view"]
     assert isinstance(view, LeaderboardPaginator)
+    assert view.current_page == 1
     assert view.message is message
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_page_param_sets_the_starting_page() -> None:
+    from yokai.ui.views import LeaderboardPaginator
+
+    bot = make_bot()
+    bot.db.get_leaderboard = AsyncMock(return_value=([_wallet(111, 500)], 50))
+    cog = EconomyCog(bot)
+    interaction = make_interaction(111)
+    message = MagicMock(spec=discord.Message)
+
+    with patch("yokai.cogs.economy.send", new=AsyncMock(return_value=message)) as sent:
+        await cog.leaderboard.callback(cog, interaction, page=3)
+
+    view = sent.await_args.kwargs["view"]
+    assert isinstance(view, LeaderboardPaginator)
+    assert view.current_page == 3
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_treats_a_sub_one_page_as_page_one() -> None:
+    from yokai.ui.views import LeaderboardPaginator
+
+    bot = make_bot()
+    bot.db.get_leaderboard = AsyncMock(return_value=([_wallet(111, 500)], 1))
+    cog = EconomyCog(bot)
+    interaction = make_interaction(111)
+    message = MagicMock(spec=discord.Message)
+
+    with patch("yokai.cogs.economy.send", new=AsyncMock(return_value=message)) as sent:
+        await cog.leaderboard.callback(cog, interaction, page=0)
+
+    view = sent.await_args.kwargs["view"]
+    assert isinstance(view, LeaderboardPaginator)
+    assert view.current_page == 1

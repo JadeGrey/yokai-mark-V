@@ -158,8 +158,10 @@ class YokaiBot(commands.Bot):
         except Exception as exc:
             logger.error("Failed to log command execution in database: %s", exc)
 
-        if cmd_name in MUSIC_COMMAND_NAMES and self.command_reward_limiter.try_consume(
-            interaction.user.id
+        if (
+            self.config.economy_command_reward > 0
+            and cmd_name in MUSIC_COMMAND_NAMES
+            and self.command_reward_limiter.try_consume(interaction.user.id)
         ):
             try:
                 await self.db.credit_wallet(

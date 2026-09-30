@@ -173,6 +173,22 @@ async def test_music_command_reward_respects_the_rate_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_music_command_completion_skips_credit_when_reward_is_disabled() -> None:
+    """Review Focus: ECONOMY_COMMAND_REWARD=0 must skip crediting, not call credit_wallet(0)."""
+    bot = make_bot(economy_command_reward=0)
+    bot.db.log_command = AsyncMock()
+    bot.db.credit_wallet = AsyncMock()
+    interaction = MagicMock()
+    interaction.user.id = 111
+    command = MagicMock()
+    command.qualified_name = "play"
+
+    await bot.on_app_command_completion(interaction, command)
+
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_voice_earn_tracker_starts_and_stops_with_the_bot() -> None:
     bot = make_bot()
     bot.db.initialize = AsyncMock()

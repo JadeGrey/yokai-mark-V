@@ -45,18 +45,31 @@ class VoiceEarnTracker:
                 logger.error("Voice-earn tick failed: %s", exc)
 
     async def tick(self) -> None:
-        """Credit every non-bot human in a voice channel that has 2 or more non-bot humans."""
+        """Credit every non-bot human in a voice channel that has 2 or more non-bot humans.
+
+        The guild's AFK channel is skipped so idle members parked there can't farm Renown.
+        A single member's credit failure is caught and logged so it doesn't abort crediting
+        the rest of that tick.
+        """
+        if self.reward <= 0:
+            return
         guild = self.bot.get_guild(self.bot.config.guild_id)
         if guild is None:
             return
+        afk_channel = guild.afk_channel
         for channel in guild.voice_channels:
+            if afk_channel is not None and channel.id == afk_channel.id:
+                continue
             humans = [m for m in channel.members if not m.bot]
             if len(humans) < 2:
                 continue
             for member in humans:
-                await self.bot.db.credit_wallet(
-                    member.id,
-                    self.reward,
-                    reason="voice",
-                    welcome_bonus=self.bot.config.economy_welcome_bonus,
-                )
+                try:
+                    await self.bot.db.credit_wallet(
+                        member.id,
+                        self.reward,
+                        reason="voice",
+                        welcome_bonus=self.bot.config.economy_welcome_bonus,
+                    )
+                except Exception as exc:
+                    logger.error("Voice-earn credit failed for user %d: %s", member.id, exc)
