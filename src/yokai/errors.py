@@ -157,3 +157,43 @@ class VoiceChannelError(VoiceError):
         user_hint: Optional[str] = "Join a voice channel and try again.",
     ) -> None:
         super().__init__(message, user_hint=user_hint)
+
+
+class DailyOnCooldownError(YokaiError):
+    """Raised when /daily is claimed again before 24h have passed since the last claim."""
+
+    title = "Already claimed"
+
+    def __init__(self, retry_after_s: int) -> None:
+        remaining = max(retry_after_s, 0)
+        hours, rem = divmod(remaining, 3600)
+        minutes = rem // 60
+        wait_str = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+        super().__init__(
+            f"You already claimed your daily reward. Try again in {wait_str}.",
+            user_hint="Daily rewards reset 24 hours after your last claim.",
+        )
+        self.retry_after_s = retry_after_s
+
+
+class InsufficientFundsError(YokaiError):
+    """Raised when a payment or debit would exceed the payer's balance."""
+
+    title = "Not enough Renown"
+
+    def __init__(self, balance: int, amount: int) -> None:
+        super().__init__(
+            f"You have **{balance:,}** Renown, which isn't enough to send **{amount:,}**.",
+            user_hint="Earn more with /daily or by using Yokai in voice.",
+        )
+        self.balance = balance
+        self.amount = amount
+
+
+class InvalidPaymentError(YokaiError):
+    """Raised when a /pay request targets an invalid recipient or amount."""
+
+    title = "Invalid payment"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, user_hint="Pick a positive whole number and a real member.")

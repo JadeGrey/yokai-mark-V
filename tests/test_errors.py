@@ -37,3 +37,31 @@ def test_special_domain_error_titles() -> None:
     assert err_mod.VoicePermissionError("Connect", "General").title == "Missing permission"
     assert err_mod.VoiceError("boom").title == "Voice problem"
     assert err_mod.YokaiError("boom").title == "That didn't work"
+
+
+def test_daily_on_cooldown_error_reports_wait_time() -> None:
+    err = err_mod.DailyOnCooldownError(retry_after_s=5400)
+    assert err.title == "Already claimed"
+    assert "1h 30m" in err.message
+    assert err.retry_after_s == 5400
+
+
+def test_daily_on_cooldown_error_under_an_hour() -> None:
+    err = err_mod.DailyOnCooldownError(retry_after_s=120)
+    assert "2m" in err.message
+    assert "h" not in err.message.split("Try again in ")[1]
+
+
+def test_insufficient_funds_error_reports_amounts() -> None:
+    err = err_mod.InsufficientFundsError(balance=40, amount=100)
+    assert err.title == "Not enough Renown"
+    assert "40" in err.message
+    assert "100" in err.message
+    assert err.balance == 40
+    assert err.amount == 100
+
+
+def test_invalid_payment_error_carries_the_message() -> None:
+    err = err_mod.InvalidPaymentError("You can only pay another human member of the server.")
+    assert err.title == "Invalid payment"
+    assert "human member" in err.message

@@ -7,7 +7,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "yokai"
 TITLE_LITERAL = re.compile(r'\btitle\s*=\s*"([^"]+)"')
-PROPER_NOUNS = {"YouTube", "Spotify", "Yokai", "DAVE"}
+PROPER_NOUNS = {"YouTube", "Spotify", "Yokai", "DAVE", "Renown"}
 
 
 def _title_case_offenders() -> list[str]:
