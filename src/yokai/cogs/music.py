@@ -26,6 +26,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+MUSIC_COMMAND_NAMES: frozenset[str] = frozenset(
+    {
+        "play",
+        "pause",
+        "resume",
+        "skip",
+        "stop",
+        "queue",
+        "nowplaying",
+        "remove",
+        "clear",
+        "shuffle",
+        "loop",
+        "volume",
+        "recommend",
+    }
+)
+
 
 def _observe_task(task: asyncio.Task[object]) -> None:
     """Retrieve a background task's exception so asyncio does not log it as never retrieved."""

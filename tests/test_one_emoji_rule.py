@@ -8,7 +8,14 @@ from pathlib import Path
 from tests.embed_helpers import EMOJI_RE
 
 SRC = Path("src/yokai")
-CHECKED = ["cogs/meta.py", "cogs/music.py", "ui/views.py", "music/player.py", "bot.py"]
+CHECKED = [
+    "cogs/meta.py",
+    "cogs/music.py",
+    "cogs/economy.py",
+    "ui/views.py",
+    "music/player.py",
+    "bot.py",
+]
 
 
 def test_feature_modules_contain_no_emoji_in_embed_text() -> None:
