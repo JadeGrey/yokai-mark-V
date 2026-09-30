@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import subprocess
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence
 import discord
 
 from yokai.music.models import PlayerState
-from yokai.theme import quip_bank
+from yokai.theme import LIST_PAGE_SIZE, quip_bank
 from yokai.ui.embeds import EmbedFactory
 
 if TYPE_CHECKING:
@@ -160,6 +161,64 @@ class QueuePaginator(BaseView):
             self.current_page += 1
         self._update_buttons()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+
+class LeaderboardPaginator(BaseView):
+    """Interactive paginator for the Renown leaderboard. Open to anyone, not just the caller."""
+
+    def __init__(
+        self,
+        bot: Any,
+        author_id: int,
+        initial_page: int = 1,
+        page_size: int = LIST_PAGE_SIZE,
+        bot_avatar_url: Optional[str] = None,
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(allowed_user_ids=None, timeout=timeout)
+        self.bot = bot
+        self.author_id = author_id
+        self.current_page = initial_page
+        self.page_size = page_size
+        self.bot_avatar_url = bot_avatar_url
+        self.total_pages = 1
+
+    def _update_buttons(self) -> None:
+        self.prev_button.disabled = self.current_page <= 1
+        self.next_button.disabled = self.current_page >= self.total_pages
+
+    async def build_embed(self) -> discord.Embed:
+        offset = (self.current_page - 1) * self.page_size
+        wallets, total = await self.bot.db.get_leaderboard(limit=self.page_size, offset=offset)
+        self.total_pages = max(1, math.ceil(total / self.page_size)) if total else 1
+        self.current_page = min(max(self.current_page, 1), self.total_pages)
+        self._update_buttons()
+        rank_start = (self.current_page - 1) * self.page_size + 1
+        entries = [(rank_start + i, w.user_id, w.balance) for i, w in enumerate(wallets)]
+        return EmbedFactory.leaderboard_page(
+            entries=entries,
+            page=self.current_page,
+            total_pages=self.total_pages,
+            bot_avatar_url=self.bot_avatar_url,
+        )
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if self.current_page > 1:
+            self.current_page -= 1
+        embed = await self.build_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+        embed = await self.build_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
 
 
 class RecommendView(BaseView):
