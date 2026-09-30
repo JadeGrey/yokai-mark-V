@@ -49,6 +49,14 @@ class Config:
     audio_buffer_mb: int = 500
     audio_buffer_dir: Path = Path("data/cache")
 
+    # Economy: Renown wallet, earning, and rate limits
+    economy_daily_base: int = 100
+    economy_welcome_bonus: int = 200
+    economy_voice_interval_seconds: int = 300
+    economy_voice_reward: int = 5
+    economy_command_reward: int = 5
+    economy_command_rate_limit: int = 5
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -130,6 +138,22 @@ def load_config(env_path: Path | str | None = None) -> Config:
     audio_buffer_mb = max(0, _parse_int("AUDIO_BUFFER_MB", os.getenv("AUDIO_BUFFER_MB"), 500))
     audio_buffer_dir = Path(os.getenv("AUDIO_BUFFER_DIR", "data/cache").strip() or "data/cache")
 
+    # Economy: Renown wallet, earning, and rate limits
+    economy_daily_base = _parse_int("ECONOMY_DAILY_BASE", os.getenv("ECONOMY_DAILY_BASE"), 100)
+    economy_welcome_bonus = _parse_int(
+        "ECONOMY_WELCOME_BONUS", os.getenv("ECONOMY_WELCOME_BONUS"), 200
+    )
+    economy_voice_interval_seconds = _parse_int(
+        "ECONOMY_VOICE_INTERVAL_SECONDS", os.getenv("ECONOMY_VOICE_INTERVAL_SECONDS"), 300
+    )
+    economy_voice_reward = _parse_int("ECONOMY_VOICE_REWARD", os.getenv("ECONOMY_VOICE_REWARD"), 5)
+    economy_command_reward = _parse_int(
+        "ECONOMY_COMMAND_REWARD", os.getenv("ECONOMY_COMMAND_REWARD"), 5
+    )
+    economy_command_rate_limit = _parse_int(
+        "ECONOMY_COMMAND_RATE_LIMIT", os.getenv("ECONOMY_COMMAND_RATE_LIMIT"), 5
+    )
+
     return Config(
         discord_token=token,
         guild_id=guild_id,
@@ -150,4 +174,10 @@ def load_config(env_path: Path | str | None = None) -> Config:
         recommend_count=recommend_count,
         audio_buffer_mb=audio_buffer_mb,
         audio_buffer_dir=audio_buffer_dir,
+        economy_daily_base=economy_daily_base,
+        economy_welcome_bonus=economy_welcome_bonus,
+        economy_voice_interval_seconds=economy_voice_interval_seconds,
+        economy_voice_reward=economy_voice_reward,
+        economy_command_reward=economy_command_reward,
+        economy_command_rate_limit=economy_command_rate_limit,
     )

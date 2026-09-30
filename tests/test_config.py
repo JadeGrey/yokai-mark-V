@@ -96,3 +96,33 @@ def test_negative_audio_buffer_means_disabled() -> None:
     env = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2", "AUDIO_BUFFER_MB": "-5"}
     with patch.dict(os.environ, env, clear=True):
         assert load_config(env_path=Path("non_existent_env")).audio_buffer_mb == 0
+
+
+def test_economy_defaults_and_overrides() -> None:
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    with patch.dict(os.environ, base, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_daily_base == 100
+        assert cfg.economy_welcome_bonus == 200
+        assert cfg.economy_voice_interval_seconds == 300
+        assert cfg.economy_voice_reward == 5
+        assert cfg.economy_command_reward == 5
+        assert cfg.economy_command_rate_limit == 5
+
+    custom = {
+        **base,
+        "ECONOMY_DAILY_BASE": "50",
+        "ECONOMY_WELCOME_BONUS": "10",
+        "ECONOMY_VOICE_INTERVAL_SECONDS": "60",
+        "ECONOMY_VOICE_REWARD": "1",
+        "ECONOMY_COMMAND_REWARD": "2",
+        "ECONOMY_COMMAND_RATE_LIMIT": "3",
+    }
+    with patch.dict(os.environ, custom, clear=True):
+        cfg = load_config(env_path=Path("non_existent_env"))
+        assert cfg.economy_daily_base == 50
+        assert cfg.economy_welcome_bonus == 10
+        assert cfg.economy_voice_interval_seconds == 60
+        assert cfg.economy_voice_reward == 1
+        assert cfg.economy_command_reward == 2
+        assert cfg.economy_command_rate_limit == 3
