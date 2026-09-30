@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import time
@@ -83,6 +84,11 @@ class Database:
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
         self._conn: Optional[aiosqlite.Connection] = None
+        # Serializes every wallet read-modify-write sequence. aiosqlite uses a single
+        # connection shared by all coroutines; without this, two coroutines can interleave
+        # between the read and the write of a wallet balance (see the concurrency
+        # regression tests in tests/test_economy_storage.py for what that allows).
+        self._write_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Open connection, enable WAL mode, and apply migrations."""
@@ -273,7 +279,11 @@ class Database:
         await self.conn.commit()
 
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
-        """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent)."""
+        """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).
+
+        Private helper: does NOT take `_write_lock` itself. Every caller must already hold
+        it for the duration of its own read-modify-write sequence.
+        """
         cursor = await self.conn.execute(
             "INSERT OR IGNORE INTO wallets (user_id, balance, daily_streak, created_ts) "
             "VALUES (?, ?, 0, ?);",
@@ -321,9 +331,10 @@ class Database:
     async def ensure_wallet(self, user_id: int, welcome_bonus: int) -> Wallet:
         """Get-or-create: creates the wallet with the welcome bonus on first touch."""
         now = int(time.time())
-        await self._ensure_wallet(user_id, welcome_bonus, now)
-        await self.conn.commit()
-        wallet = await self.get_wallet(user_id)
+        async with self._write_lock:
+            await self._ensure_wallet(user_id, welcome_bonus, now)
+            await self.conn.commit()
+            wallet = await self.get_wallet(user_id)
         assert wallet is not None
         return wallet
 
@@ -339,16 +350,17 @@ class Database:
         if amount <= 0:
             raise ValueError("credit_wallet amount must be positive")
         now = int(time.time())
-        await self._ensure_wallet(user_id, welcome_bonus, now)
-        await self.conn.execute(
-            "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, user_id)
-        )
-        wallet = await self.get_wallet(user_id)
-        assert wallet is not None
-        await self._insert_transaction(
-            user_id, amount, reason, counterparty_id, wallet.balance, now
-        )
-        await self.conn.commit()
+        async with self._write_lock:
+            await self._ensure_wallet(user_id, welcome_bonus, now)
+            await self.conn.execute(
+                "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, user_id)
+            )
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            await self._insert_transaction(
+                user_id, amount, reason, counterparty_id, wallet.balance, now
+            )
+            await self.conn.commit()
         return wallet.balance
 
     async def pay(
@@ -358,54 +370,75 @@ class Database:
         if amount <= 0:
             raise ValueError("pay amount must be positive")
         now = int(time.time())
-        await self._ensure_wallet(sender_id, welcome_bonus, now)
-        sender = await self.get_wallet(sender_id)
-        assert sender is not None
-        if sender.balance < amount:
-            await self.conn.rollback()
-            raise InsufficientFundsError(balance=sender.balance, amount=amount)
+        async with self._write_lock:
+            await self._ensure_wallet(sender_id, welcome_bonus, now)
+            sender = await self.get_wallet(sender_id)
+            assert sender is not None
+            if sender.balance < amount:
+                await self.conn.rollback()
+                raise InsufficientFundsError(balance=sender.balance, amount=amount)
 
-        await self._ensure_wallet(recipient_id, welcome_bonus, now)
-        await self.conn.execute(
-            "UPDATE wallets SET balance = balance - ? WHERE user_id = ?;", (amount, sender_id)
-        )
-        await self.conn.execute(
-            "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, recipient_id)
-        )
-        sender_balance = sender.balance - amount
-        recipient = await self.get_wallet(recipient_id)
-        assert recipient is not None
-        await self._insert_transaction(
-            sender_id, -amount, "pay_sent", recipient_id, sender_balance, now
-        )
-        await self._insert_transaction(
-            recipient_id, amount, "pay_received", sender_id, recipient.balance, now
-        )
-        await self.conn.commit()
+            await self._ensure_wallet(recipient_id, welcome_bonus, now)
+
+            # Defense-in-depth: even though `_write_lock` already serializes every wallet
+            # mutation, guard the debit with a conditional UPDATE so a future caller that
+            # forgets to take the lock still cannot push the sender negative.
+            cursor = await self.conn.execute(
+                "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
+                (amount, sender_id, amount),
+            )
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                raise InsufficientFundsError(balance=sender.balance, amount=amount)
+
+            await self.conn.execute(
+                "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                (amount, recipient_id),
+            )
+            sender_balance = sender.balance - amount
+            recipient = await self.get_wallet(recipient_id)
+            assert recipient is not None
+            await self._insert_transaction(
+                sender_id, -amount, "pay_sent", recipient_id, sender_balance, now
+            )
+            await self._insert_transaction(
+                recipient_id, amount, "pay_received", sender_id, recipient.balance, now
+            )
+            await self.conn.commit()
         return sender_balance, recipient.balance
 
     async def claim_daily(
         self, user_id: int, base: int, welcome_bonus: int, now: int, rng: random.Random
     ) -> DailyClaimResult:
         """Roll and apply a /daily payout, or raise DailyOnCooldownError."""
-        await self._ensure_wallet(user_id, welcome_bonus, now)
-        wallet = await self.get_wallet(user_id)
-        assert wallet is not None
-        remaining = cooldown_remaining_s(wallet.last_daily_ts, now)
-        if remaining is not None:
-            await self.conn.rollback()
-            raise DailyOnCooldownError(remaining)
+        async with self._write_lock:
+            await self._ensure_wallet(user_id, welcome_bonus, now)
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            remaining = cooldown_remaining_s(wallet.last_daily_ts, now)
+            if remaining is not None:
+                await self.conn.rollback()
+                raise DailyOnCooldownError(remaining)
 
-        streak_day = next_streak(wallet.daily_streak, wallet.last_daily_ts, now)
-        payout = roll_daily_payout(base, streak_day, rng)
-        await self.conn.execute(
-            "UPDATE wallets SET balance = balance + ?, last_daily_ts = ?, daily_streak = ? "
-            "WHERE user_id = ?;",
-            (payout, now, streak_day, user_id),
-        )
-        new_balance = wallet.balance + payout
-        await self._insert_transaction(user_id, payout, "daily", None, new_balance, now)
-        await self.conn.commit()
+            streak_day = next_streak(wallet.daily_streak, wallet.last_daily_ts, now)
+            payout = roll_daily_payout(base, streak_day, rng)
+
+            # Defense-in-depth: condition the update on the `last_daily_ts` we just read, so
+            # a claim that somehow raced past `_write_lock` still cannot double-pay.
+            cursor = await self.conn.execute(
+                "UPDATE wallets SET balance = balance + ?, last_daily_ts = ?, daily_streak = ? "
+                "WHERE user_id = ? AND last_daily_ts IS ?;",
+                (payout, now, streak_day, user_id, wallet.last_daily_ts),
+            )
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                fresh = await self.get_wallet(user_id)
+                fresh_remaining = cooldown_remaining_s(fresh.last_daily_ts, now) if fresh else None
+                raise DailyOnCooldownError(fresh_remaining or 0)
+
+            new_balance = wallet.balance + payout
+            await self._insert_transaction(user_id, payout, "daily", None, new_balance, now)
+            await self.conn.commit()
         return DailyClaimResult(payout=payout, streak_day=streak_day, new_balance=new_balance)
 
     async def admin_adjust_wallet(
@@ -416,16 +449,17 @@ class Database:
         Returns (applied_delta, new_balance).
         """
         now = int(time.time())
-        await self._ensure_wallet(user_id, welcome_bonus, now)
-        wallet = await self.get_wallet(user_id)
-        assert wallet is not None
-        new_balance = max(0, wallet.balance + delta)
-        applied = new_balance - wallet.balance
-        await self.conn.execute(
-            "UPDATE wallets SET balance = ? WHERE user_id = ?;", (new_balance, user_id)
-        )
-        await self._insert_transaction(user_id, applied, "admin", None, new_balance, now)
-        await self.conn.commit()
+        async with self._write_lock:
+            await self._ensure_wallet(user_id, welcome_bonus, now)
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            new_balance = max(0, wallet.balance + delta)
+            applied = new_balance - wallet.balance
+            await self.conn.execute(
+                "UPDATE wallets SET balance = ? WHERE user_id = ?;", (new_balance, user_id)
+            )
+            await self._insert_transaction(user_id, applied, "admin", None, new_balance, now)
+            await self.conn.commit()
         return applied, new_balance
 
     async def get_leaderboard(self, limit: int, offset: int) -> tuple[list[Wallet], int]:

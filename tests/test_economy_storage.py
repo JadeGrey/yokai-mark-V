@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import aiosqlite
 import pytest
 
 from yokai.errors import DailyOnCooldownError, InsufficientFundsError
@@ -39,10 +41,6 @@ async def test_an_existing_v1_database_upgrades_without_losing_data() -> None:
         db_path = Path(tmp_dir) / "existing_v1.db"
 
         # Simulate a database already at schema v1, with real rows in it.
-        v1_only = Database(db_path)
-        v1_only._conn = None
-        import aiosqlite
-
         conn = await aiosqlite.connect(db_path)
         await conn.executescript(MIGRATION_V1)
         await conn.execute("PRAGMA user_version = 1;")
@@ -190,4 +188,58 @@ async def test_leaderboard_orders_by_balance_descending_with_a_total_count() -> 
         page2, total2 = await db.get_leaderboard(limit=2, offset=2)
         assert total2 == 3
         assert [w.user_id for w in page2] == [1]
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_pay_calls_never_let_the_sender_go_negative() -> None:
+    """Review Focus: regression test for the double-spend race fixed by `_write_lock`.
+
+    Before the lock, two concurrent `pay(1, x, 200)` calls against a 200-balance sender
+    both succeeded, leaving the sender at -200. With the lock, exactly one succeeds and
+    the other correctly sees insufficient funds.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        await db.ensure_wallet(1, welcome_bonus=200)
+
+        results = await asyncio.gather(
+            db.pay(1, 2, 200, welcome_bonus=200),
+            db.pay(1, 3, 200, welcome_bonus=200),
+            return_exceptions=True,
+        )
+
+        successes = [r for r in results if not isinstance(r, Exception)]
+        failures = [r for r in results if isinstance(r, InsufficientFundsError)]
+        assert len(successes) == 1
+        assert len(failures) == 1
+
+        sender = await db.get_wallet(1)
+        assert sender is not None
+        assert sender.balance == 0  # never negative
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_claim_daily_calls_only_pay_out_once() -> None:
+    """Review Focus: regression test for the double daily-claim race fixed by `_write_lock`."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        rng = MagicMock()
+        rng.uniform.return_value = 1.0
+        now = int(time.time())
+
+        results = await asyncio.gather(
+            db.claim_daily(1, base=100, welcome_bonus=0, now=now, rng=rng),
+            db.claim_daily(1, base=100, welcome_bonus=0, now=now, rng=rng),
+            return_exceptions=True,
+        )
+
+        successes = [r for r in results if not isinstance(r, Exception)]
+        failures = [r for r in results if isinstance(r, DailyOnCooldownError)]
+        assert len(successes) == 1
+        assert len(failures) == 1
+
+        wallet = await db.get_wallet(1)
+        assert wallet is not None and wallet.balance == 100  # exactly one claim landed
         await db.close()
