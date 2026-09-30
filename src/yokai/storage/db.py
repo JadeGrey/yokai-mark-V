@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from pathlib import Path
 from typing import Optional
 
 import aiosqlite
 
+from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
+from yokai.economy.models import DailyClaimResult, Wallet
+from yokai.errors import DailyOnCooldownError, InsufficientFundsError
+
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -46,6 +51,29 @@ CREATE TABLE IF NOT EXISTS spotify_match_cache (
   confidence REAL NOT NULL,
   ts INTEGER NOT NULL
 );
+"""
+
+MIGRATION_V2 = """
+CREATE TABLE IF NOT EXISTS wallets (
+  user_id INTEGER PRIMARY KEY,
+  balance INTEGER NOT NULL DEFAULT 0,
+  last_daily_ts INTEGER,
+  daily_streak INTEGER NOT NULL DEFAULT 0,
+  created_ts INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS renown_transactions (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  delta INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  counterparty_id INTEGER,
+  balance_after INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_renown_tx_user ON renown_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_renown_tx_ts ON renown_transactions(ts);
 """
 
 
@@ -96,6 +124,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 1;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 1.")
+
+        if version < 2:
+            logger.info("Applying SQLite migration v2...")
+            await self.conn.executescript(MIGRATION_V2)
+            await self.conn.execute("PRAGMA user_version = 2;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 2.")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
@@ -236,3 +271,178 @@ class Database:
         """
         await self.conn.execute(query, (spotify_id, video_id, confidence, now))
         await self.conn.commit()
+
+    async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
+        """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent)."""
+        cursor = await self.conn.execute(
+            "INSERT OR IGNORE INTO wallets (user_id, balance, daily_streak, created_ts) "
+            "VALUES (?, ?, 0, ?);",
+            (user_id, welcome_bonus, now),
+        )
+        if cursor.rowcount and cursor.rowcount > 0 and welcome_bonus:
+            await self._insert_transaction(
+                user_id, welcome_bonus, "welcome", None, welcome_bonus, now
+            )
+
+    async def _insert_transaction(
+        self,
+        user_id: int,
+        delta: int,
+        reason: str,
+        counterparty_id: Optional[int],
+        balance_after: int,
+        ts: int,
+    ) -> None:
+        await self.conn.execute(
+            "INSERT INTO renown_transactions "
+            "(ts, user_id, delta, reason, counterparty_id, balance_after) "
+            "VALUES (?, ?, ?, ?, ?, ?);",
+            (ts, user_id, delta, reason, counterparty_id, balance_after),
+        )
+
+    async def get_wallet(self, user_id: int) -> Optional[Wallet]:
+        """Read-only lookup. Does NOT create a wallet or grant the welcome bonus."""
+        query = (
+            "SELECT user_id, balance, last_daily_ts, daily_streak, created_ts "
+            "FROM wallets WHERE user_id = ?;"
+        )
+        async with self.conn.execute(query, (user_id,)) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        return Wallet(
+            user_id=row[0],
+            balance=row[1],
+            last_daily_ts=row[2],
+            daily_streak=row[3],
+            created_ts=row[4],
+        )
+
+    async def ensure_wallet(self, user_id: int, welcome_bonus: int) -> Wallet:
+        """Get-or-create: creates the wallet with the welcome bonus on first touch."""
+        now = int(time.time())
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        await self.conn.commit()
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        return wallet
+
+    async def credit_wallet(
+        self,
+        user_id: int,
+        amount: int,
+        reason: str,
+        welcome_bonus: int,
+        counterparty_id: Optional[int] = None,
+    ) -> int:
+        """Add `amount` (must be positive) to a wallet, creating it with the welcome bonus first."""
+        if amount <= 0:
+            raise ValueError("credit_wallet amount must be positive")
+        now = int(time.time())
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, user_id)
+        )
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        await self._insert_transaction(
+            user_id, amount, reason, counterparty_id, wallet.balance, now
+        )
+        await self.conn.commit()
+        return wallet.balance
+
+    async def pay(
+        self, sender_id: int, recipient_id: int, amount: int, welcome_bonus: int
+    ) -> tuple[int, int]:
+        """Atomically move `amount` from sender to recipient. Raises InsufficientFundsError."""
+        if amount <= 0:
+            raise ValueError("pay amount must be positive")
+        now = int(time.time())
+        await self._ensure_wallet(sender_id, welcome_bonus, now)
+        sender = await self.get_wallet(sender_id)
+        assert sender is not None
+        if sender.balance < amount:
+            await self.conn.rollback()
+            raise InsufficientFundsError(balance=sender.balance, amount=amount)
+
+        await self._ensure_wallet(recipient_id, welcome_bonus, now)
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance - ? WHERE user_id = ?;", (amount, sender_id)
+        )
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, recipient_id)
+        )
+        sender_balance = sender.balance - amount
+        recipient = await self.get_wallet(recipient_id)
+        assert recipient is not None
+        await self._insert_transaction(
+            sender_id, -amount, "pay_sent", recipient_id, sender_balance, now
+        )
+        await self._insert_transaction(
+            recipient_id, amount, "pay_received", sender_id, recipient.balance, now
+        )
+        await self.conn.commit()
+        return sender_balance, recipient.balance
+
+    async def claim_daily(
+        self, user_id: int, base: int, welcome_bonus: int, now: int, rng: random.Random
+    ) -> DailyClaimResult:
+        """Roll and apply a /daily payout, or raise DailyOnCooldownError."""
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        remaining = cooldown_remaining_s(wallet.last_daily_ts, now)
+        if remaining is not None:
+            await self.conn.rollback()
+            raise DailyOnCooldownError(remaining)
+
+        streak_day = next_streak(wallet.daily_streak, wallet.last_daily_ts, now)
+        payout = roll_daily_payout(base, streak_day, rng)
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance + ?, last_daily_ts = ?, daily_streak = ? "
+            "WHERE user_id = ?;",
+            (payout, now, streak_day, user_id),
+        )
+        new_balance = wallet.balance + payout
+        await self._insert_transaction(user_id, payout, "daily", None, new_balance, now)
+        await self.conn.commit()
+        return DailyClaimResult(payout=payout, streak_day=streak_day, new_balance=new_balance)
+
+    async def admin_adjust_wallet(
+        self, user_id: int, delta: int, welcome_bonus: int
+    ) -> tuple[int, int]:
+        """Apply `delta` (positive or negative), floored at 0.
+
+        Returns (applied_delta, new_balance).
+        """
+        now = int(time.time())
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        new_balance = max(0, wallet.balance + delta)
+        applied = new_balance - wallet.balance
+        await self.conn.execute(
+            "UPDATE wallets SET balance = ? WHERE user_id = ?;", (new_balance, user_id)
+        )
+        await self._insert_transaction(user_id, applied, "admin", None, new_balance, now)
+        await self.conn.commit()
+        return applied, new_balance
+
+    async def get_leaderboard(self, limit: int, offset: int) -> tuple[list[Wallet], int]:
+        """Wallets ordered by balance desc (ties by user_id asc), plus the total wallet count."""
+        async with self.conn.execute("SELECT COUNT(*) FROM wallets;") as cursor:
+            total_row = await cursor.fetchone()
+            total = total_row[0] if total_row else 0
+        query = (
+            "SELECT user_id, balance, last_daily_ts, daily_streak, created_ts FROM wallets "
+            "ORDER BY balance DESC, user_id ASC LIMIT ? OFFSET ?;"
+        )
+        async with self.conn.execute(query, (limit, offset)) as cursor:
+            rows = await cursor.fetchall()
+        wallets = [
+            Wallet(
+                user_id=r[0], balance=r[1], last_daily_ts=r[2], daily_streak=r[3], created_ts=r[4]
+            )
+            for r in rows
+        ]
+        return wallets, total

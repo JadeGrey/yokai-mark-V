@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from yokai.storage.db import Database
+from yokai.storage.db import CURRENT_SCHEMA_VERSION, Database
 
 
 @pytest.mark.asyncio
@@ -21,7 +21,7 @@ async def test_database_lifecycle_and_migrations() -> None:
         # Check user_version
         async with db.conn.execute("PRAGMA user_version;") as cursor:
             row = await cursor.fetchone()
-            assert row is not None and row[0] == 1
+            assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
 
         # Check ping
         latency = await db.ping()
