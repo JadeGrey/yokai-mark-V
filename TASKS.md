@@ -165,5 +165,49 @@ For each later phase: *"Plan and implement Phase N of `TASKS.md`, following `AGE
 
 ---
 
+## Phase 7 — Economy: Core wallet
+
+**Goal:** A server-only Renown currency: a wallet per user, `/balance`, `/daily`, `/pay`,
+`/leaderboard`, an owner-only `/economy-admin`, and passive earning from voice presence and
+music-command usage. Spec: `docs/superpowers/specs/2026-09-29-economy-core-design.md`. Plan:
+`docs/superpowers/plans/2026-09-29-economy-core-plan.md`.
+
+- [x] E1. Economy configuration (`ECONOMY_*` variables in `config.py` and `.env.example`).
+- [x] E2. Typed errors: `DailyOnCooldownError`, `InsufficientFundsError`, `InvalidPaymentError`.
+- [x] E3. Wallet models and pure `/daily` math (`economy/models.py`, `economy/daily.py`).
+- [x] E4. Command-reward rate limiter (`economy/ratelimit.py`).
+- [x] E5. Wallet storage: migration v2 (`wallets`, `renown_transactions`), get/ensure/credit/debit/
+      pay/claim_daily/admin_adjust/leaderboard on `Database`.
+- [x] E6. Background voice-presence Renown tick (`economy/voice_tracker.py`).
+- [x] E7. Theme additions: Renown coin emoji, `daily_claim`/`pay_sent` quips.
+- [x] E8. Economy embed builders: `balance`, `daily_claim`, `pay_sent`, `leaderboard_page`,
+      `economy_admin`.
+- [x] E9. Public leaderboard paginator view (`ui/views.py`).
+- [x] E10. Economy slash commands (`cogs/economy.py`): `/balance`, `/daily`, `/pay`,
+      `/leaderboard`, `/economy-admin`.
+- [x] E11. Wired into `bot.py`: voice tracker lifecycle, music-command reward via the existing
+      `on_app_command_completion` hook.
+- [x] E12. Embed preview page updated with every new embed shape.
+
+**Acceptance criteria**
+- A brand-new user's first `/balance` or `/daily` grants the welcome bonus exactly once.
+- `/daily` pays out with the random and streak multipliers described in the spec, refuses a
+  second claim within 24h (ephemerally), and resets the streak after a 48h gap. *(manual + unit)*
+- `/pay` moves Renown between two users atomically, refuses self-pay, bot targets, and
+  insufficient balance before deferring.
+- Sitting in a voice channel with at least one other human earns Renown on each tick; a lone
+  human earns nothing. *(manual, requires two real accounts in a voice channel)*
+- Using music commands earns Renown up to 5 rewarded calls per minute; further calls in the
+  same window earn nothing but still work normally. *(manual + unit)*
+- `/leaderboard` paginates correctly and is usable by anyone, not just the caller.
+- `/economy-admin` is refused for non-owners and floors a large deduction at 0.
+- An existing pre-Phase-7 database (`data/yokai.db` at schema v1) upgrades to v2 on the next
+  startup without losing any `command_log`/`play_events`/`spotify_match_cache` rows.
+- `pytest` and `ruff check` and `ruff format --check` are clean.
+
+**STOP — owner review.**
+
+---
+
 ## Later (do not start without owner approval)
 Hybrid recommender using local play/skip data, custom model, autoplay, `/search` picker, lyrics, Lavalink engine, new entertainment and QoL modules, `/privacy` data commands.
