@@ -582,6 +582,98 @@ class EmbedFactory:
             fields=_grid(fields),
         )
 
+    @classmethod
+    def balance(
+        cls,
+        user_mention: str,
+        balance: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        return cls._create_base(
+            title=f"{Emoji.COIN} Renown balance",
+            description=f"{user_mention} has **{balance:,}** Renown.",
+            color=COLOR_BRAND,
+            context="Economy",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def daily_claim(
+        cls,
+        user_mention: str,
+        payout: int,
+        streak_day: int,
+        new_balance: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        fields: list[FieldSpec] = [
+            ("Streak", f"Day `{streak_day}`", True),
+            ("New balance", f"**{new_balance:,}**", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.COIN} Daily claimed",
+            description=f"{user_mention} claimed **{payout:,}** Renown.",
+            color=COLOR_SUCCESS,
+            context="Economy",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("daily_claim"),
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def pay_sent(
+        cls,
+        sender_mention: str,
+        recipient_mention: str,
+        amount: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        return cls._create_base(
+            title=f"{Emoji.COIN} Renown sent",
+            description=f"{sender_mention} sent **{amount:,}** Renown to {recipient_mention}.",
+            color=COLOR_SUCCESS,
+            context="Economy",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("pay_sent"),
+        )
+
+    @classmethod
+    def leaderboard_page(
+        cls,
+        entries: Sequence[tuple[int, int, int]],  # (rank, user_id, balance)
+        page: int,
+        total_pages: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        lines = [f"`#{rank}` <@{uid}> — **{bal:,}** Renown" for rank, uid, bal in entries]
+        body = "\n".join(lines) if lines else "No wallets yet."
+        return cls._create_base(
+            title=f"{Emoji.COIN} Renown leaderboard",
+            description=body,
+            color=COLOR_BRAND,
+            context=f"Page {page}/{max(total_pages, 1)}",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def economy_admin(
+        cls,
+        target_mention: str,
+        delta_applied: int,
+        new_balance: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        verb = "Granted" if delta_applied >= 0 else "Deducted"
+        fields: list[FieldSpec] = [("New balance", f"**{new_balance:,}**", True)]
+        return cls._create_base(
+            title=f"{Emoji.COIN} Balance adjusted",
+            description=f"{verb} **{abs(delta_applied):,}** Renown for {target_mention}.",
+            color=COLOR_SUCCESS,
+            context="Economy admin",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
 
 def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH) -> str:
     """A bar of `length` glyphs with one head marker; never an emoji."""

@@ -544,6 +544,54 @@ def test_import_summary_note_is_appended_on_its_own_line() -> None:
     assert plain.description == "**Mix**"
 
 
+def test_balance_embed_shows_mention_and_amount() -> None:
+    embed = EmbedFactory.balance(user_mention="<@42>", balance=1234)
+    assert "<@42>" in embed.description
+    assert "1,234" in embed.description
+    assert emoji_count(embed) <= 1
+
+
+def test_daily_claim_embed_shows_payout_streak_and_new_balance() -> None:
+    embed = EmbedFactory.daily_claim(
+        user_mention="<@42>", payout=150, streak_day=4, new_balance=350
+    )
+    assert "150" in embed.description
+    fields = {f.name: f.value for f in embed.fields if f.name != "​"}
+    assert fields["Streak"] == "Day `4`"
+    assert "350" in fields["New balance"]
+    assert emoji_count(embed) <= 1
+
+
+def test_pay_sent_embed_shows_both_parties_and_amount() -> None:
+    embed = EmbedFactory.pay_sent(sender_mention="<@1>", recipient_mention="<@2>", amount=75)
+    assert "<@1>" in embed.description and "<@2>" in embed.description
+    assert "75" in embed.description
+    assert emoji_count(embed) <= 1
+
+
+def test_leaderboard_page_lists_ranked_entries() -> None:
+    embed = EmbedFactory.leaderboard_page(
+        entries=[(1, 10, 500), (2, 20, 300)], page=1, total_pages=1
+    )
+    assert "<@10>" in embed.description and "<@20>" in embed.description
+    assert "500" in embed.description
+    assert embed.footer.text == "Yokai · Page 1/1"
+    assert emoji_count(embed) <= 1
+
+
+def test_leaderboard_page_empty_state() -> None:
+    embed = EmbedFactory.leaderboard_page(entries=[], page=1, total_pages=1)
+    assert "No wallets yet." in embed.description
+
+
+def test_economy_admin_embed_shows_grant_and_deduction() -> None:
+    granted = EmbedFactory.economy_admin(target_mention="<@5>", delta_applied=100, new_balance=200)
+    assert "Granted" in granted.description and "100" in granted.description
+    deducted = EmbedFactory.economy_admin(target_mention="<@5>", delta_applied=-50, new_balance=0)
+    assert "Deducted" in deducted.description and "50" in deducted.description
+    assert emoji_count(granted) <= 1
+
+
 def _send_interaction(avatar: object) -> MagicMock:
     interaction = MagicMock()
     interaction.response.is_done.return_value = False
