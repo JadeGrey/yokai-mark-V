@@ -27,6 +27,7 @@ class Emoji:
     PING: Final[str] = "📡"
     STOP: Final[str] = "⏹️"
     SKIP: Final[str] = "⏭️"
+    COIN: Final[str] = "🪙"
 
 
 # Layout tokens shared by every embed builder
@@ -111,6 +112,16 @@ QUIP_VARIANTS: Final[Mapping[str, Sequence[str]]] = {
         "Nothing to watch. Heading out.",
         "Standing down. Catch you later.",
         "Channel is quiet. Disengaging.",
+    ),
+    "daily_claim": (
+        "Renown deposited.",
+        "Collected. See you tomorrow.",
+        "Logged and paid out.",
+    ),
+    "pay_sent": (
+        "Transaction clean.",
+        "Sent without a trace.",
+        "Debt settled, presumably.",
     ),
 }
 

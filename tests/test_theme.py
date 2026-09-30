@@ -31,11 +31,17 @@ def test_quip_variants_minimum_count() -> None:
         "error_lead",
         "ping_good",
         "idle_leave",
+        "daily_claim",
+        "pay_sent",
     ]
     for key in required_keys:
         assert key in QUIP_VARIANTS, f"Missing required quip key: {key}"
         variants = QUIP_VARIANTS[key]
         assert len(variants) >= 3, f"Quip key '{key}' has fewer than 3 variants ({len(variants)})"
+
+
+def test_coin_emoji_exists_for_economy_embeds() -> None:
+    assert Emoji.COIN
 
 
 def test_quip_bank_no_repeat() -> None:
