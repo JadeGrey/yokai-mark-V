@@ -1,0 +1,88 @@
+"""Tests for the voice-presence Renown tick (Review Focus: 2+ human requirement, bots excluded)."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from yokai.economy.voice_tracker import VoiceEarnTracker
+
+
+def _member(user_id: int, is_bot: bool = False) -> MagicMock:
+    member = MagicMock()
+    member.id = user_id
+    member.bot = is_bot
+    return member
+
+
+def _channel(members: list[MagicMock]) -> MagicMock:
+    channel = MagicMock()
+    channel.members = members
+    return channel
+
+
+def _bot_with_guild(channels: list[MagicMock]) -> MagicMock:
+    bot = MagicMock()
+    bot.config.guild_id = 1
+    guild = MagicMock()
+    guild.voice_channels = channels
+    bot.get_guild.return_value = guild
+    bot.db.credit_wallet = AsyncMock()
+    return bot
+
+
+@pytest.mark.asyncio
+async def test_tick_credits_every_human_in_a_channel_with_two_or_more_humans() -> None:
+    channel = _channel([_member(1), _member(2), _member(99, is_bot=True)])
+    bot = _bot_with_guild([channel])
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    credited_ids = {call.args[0] for call in bot.db.credit_wallet.await_args_list}
+    assert credited_ids == {1, 2}
+    for call in bot.db.credit_wallet.await_args_list:
+        assert call.args[1] == 5
+        assert call.kwargs["reason"] == "voice"
+
+
+@pytest.mark.asyncio
+async def test_tick_does_not_credit_a_channel_with_only_one_human() -> None:
+    """Review Focus: one human plus the bot itself (2 members, 1 human) must not pay out."""
+    channel = _channel([_member(1), _member(99, is_bot=True)])
+    bot = _bot_with_guild([channel])
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tick_does_not_credit_an_empty_channel() -> None:
+    bot = _bot_with_guild([_channel([])])
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+    await tracker.tick()
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_tick_does_nothing_when_the_guild_is_not_found() -> None:
+    bot = MagicMock()
+    bot.config.guild_id = 1
+    bot.get_guild.return_value = None
+    bot.db.credit_wallet = AsyncMock()
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+    await tracker.tick()
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_start_and_stop_manage_the_background_task() -> None:
+    bot = _bot_with_guild([])
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+    tracker.start()
+    assert tracker._task is not None
+    await tracker.stop()
+    assert tracker._task is None
