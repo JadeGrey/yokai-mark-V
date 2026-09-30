@@ -119,3 +119,73 @@ async def test_tree_error_for_unexpected_exceptions_is_generic_but_specific_enou
     embed = sent.await_args.kwargs["embed"]
     assert embed.title == "❌ Something broke"
     assert "kaboom" not in (embed.description or "")
+
+
+@pytest.mark.asyncio
+async def test_music_command_completion_credits_renown_within_the_rate_limit() -> None:
+    bot = make_bot()
+    bot.db.log_command = AsyncMock()
+    bot.db.credit_wallet = AsyncMock()
+    interaction = MagicMock()
+    interaction.user.id = 111
+    command = MagicMock()
+    command.qualified_name = "play"
+
+    await bot.on_app_command_completion(interaction, command)
+
+    bot.db.credit_wallet.assert_awaited_once_with(
+        111,
+        bot.config.economy_command_reward,
+        reason="command",
+        welcome_bonus=bot.config.economy_welcome_bonus,
+    )
+
+
+@pytest.mark.asyncio
+async def test_non_music_command_completion_does_not_credit_renown() -> None:
+    bot = make_bot()
+    bot.db.log_command = AsyncMock()
+    bot.db.credit_wallet = AsyncMock()
+    interaction = MagicMock()
+    interaction.user.id = 111
+    command = MagicMock()
+    command.qualified_name = "ping"
+
+    await bot.on_app_command_completion(interaction, command)
+
+    bot.db.credit_wallet.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_music_command_reward_respects_the_rate_limit() -> None:
+    bot = make_bot(economy_command_rate_limit=2)
+    bot.db.log_command = AsyncMock()
+    bot.db.credit_wallet = AsyncMock()
+    interaction = MagicMock()
+    interaction.user.id = 111
+    command = MagicMock()
+    command.qualified_name = "skip"
+
+    for _ in range(3):
+        await bot.on_app_command_completion(interaction, command)
+
+    assert bot.db.credit_wallet.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_voice_earn_tracker_starts_and_stops_with_the_bot() -> None:
+    bot = make_bot()
+    bot.db.initialize = AsyncMock()
+    bot.db.close = AsyncMock()
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    bot.spotify.close = AsyncMock()
+    with patch.object(bot.voice_earn_tracker, "start") as start_mock:
+        await bot.setup_hook()
+    start_mock.assert_called_once()
+
+    with patch.object(bot.voice_earn_tracker, "stop", new=AsyncMock()) as stop_mock:
+        await bot.close()
+    stop_mock.assert_awaited_once()

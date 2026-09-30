@@ -12,7 +12,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from yokai.cogs.music import MUSIC_COMMAND_NAMES
 from yokai.config import Config
+from yokai.economy.ratelimit import CommandRewardLimiter
+from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
 from yokai.health import HealthReport, check_health
 from yokai.music.buffer import AudioBuffer
@@ -73,6 +76,14 @@ class YokaiBot(commands.Bot):
         self.players: dict[int, GuildPlayer] = {}
         self.start_time = time.time()
         self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
+        self.command_reward_limiter = CommandRewardLimiter(
+            limit=config.economy_command_rate_limit, window_s=60.0
+        )
+        self.voice_earn_tracker = VoiceEarnTracker(
+            bot=self,
+            interval_s=config.economy_voice_interval_seconds,
+            reward=config.economy_voice_reward,
+        )
 
         # Standard default intents with zero privileged intents
         intents = discord.Intents.default()
@@ -114,6 +125,7 @@ class YokaiBot(commands.Bot):
         logger.info("Loading extensions...")
         await self.load_extension("yokai.cogs.meta")
         await self.load_extension("yokai.cogs.music")
+        await self.load_extension("yokai.cogs.economy")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)
@@ -123,6 +135,8 @@ class YokaiBot(commands.Bot):
             logger.info("Synced %d slash command(s) to guild %d", len(synced), self.config.guild_id)
         except Exception as exc:
             logger.error("Failed to sync commands to guild %d: %s", self.config.guild_id, exc)
+
+        self.voice_earn_tracker.start()
 
     async def on_ready(self) -> None:
         """Log startup status once connected to Discord gateway."""
@@ -136,13 +150,26 @@ class YokaiBot(commands.Bot):
         interaction: discord.Interaction,
         command: app_commands.Command | app_commands.ContextMenu,
     ) -> None:
-        """Central audit hook recording successful slash commands to command_log."""
+        """Central audit hook: records commands and credits Renown for eligible music commands."""
+        cmd_name = command.qualified_name
         try:
-            cmd_name = command.qualified_name
             await self.db.log_command(interaction.user.id, cmd_name)
             logger.debug("Logged command /%s by user %d", cmd_name, interaction.user.id)
         except Exception as exc:
             logger.error("Failed to log command execution in database: %s", exc)
+
+        if cmd_name in MUSIC_COMMAND_NAMES and self.command_reward_limiter.try_consume(
+            interaction.user.id
+        ):
+            try:
+                await self.db.credit_wallet(
+                    interaction.user.id,
+                    self.config.economy_command_reward,
+                    reason="command",
+                    welcome_bonus=self.config.economy_welcome_bonus,
+                )
+            except Exception as exc:
+                logger.error("Failed to credit music-command Renown reward: %s", exc)
 
     async def on_tree_error(
         self,
@@ -230,6 +257,7 @@ class YokaiBot(commands.Bot):
                 await p.stop()
             except Exception as exc:
                 logger.debug("Error stopping player during shutdown: %s", exc)
+        await self.voice_earn_tracker.stop()
         try:
             await self.spotify.close()
         except Exception as exc:
