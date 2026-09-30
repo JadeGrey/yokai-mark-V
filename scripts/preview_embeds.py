@@ -440,6 +440,47 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 bot_avatar_url=av,
             ),
         ),
+        (
+            "Renown balance",
+            EmbedFactory.balance(user_mention="<@42>", balance=1250, bot_avatar_url=av),
+        ),
+        (
+            "Daily claimed",
+            EmbedFactory.daily_claim(
+                user_mention="<@42>", payout=180, streak_day=5, new_balance=1430, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Renown sent",
+            EmbedFactory.pay_sent(
+                sender_mention="<@42>", recipient_mention="<@7>", amount=250, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Renown leaderboard",
+            EmbedFactory.leaderboard_page(
+                entries=[(1, 42, 4200), (2, 7, 3100), (3, 13, 900)],
+                page=1,
+                total_pages=1,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Renown leaderboard (empty)",
+            EmbedFactory.leaderboard_page(entries=[], page=1, total_pages=1, bot_avatar_url=av),
+        ),
+        (
+            "Economy admin (grant)",
+            EmbedFactory.economy_admin(
+                target_mention="<@7>", delta_applied=500, new_balance=3600, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Economy admin (deduction)",
+            EmbedFactory.economy_admin(
+                target_mention="<@7>", delta_applied=-200, new_balance=0, bot_avatar_url=av
+            ),
+        ),
     ]
     return samples
 
