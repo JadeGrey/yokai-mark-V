@@ -312,3 +312,58 @@ async def test_place_bet_above_initial_welcome_bonus_fails_cleanly() -> None:
         rows = await _tx_rows(db, 1)
         assert len(rows) == 0
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_gamble_stats_count_a_doubled_hand_as_one_play() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        first = await db.place_bet(1, 10, "blackjack", WELCOME, group_id="h1")
+        second = await db.place_bet(1, 10, "blackjack", WELCOME, group_id="h1")
+        await db.settle_bet(first, 20)
+        await db.settle_bet(second, 20)
+        assert await db.get_gamble_stats(1) == [("blackjack", 1, 20, 40)]
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_unrelated_commits_wait_for_the_write_lock() -> None:
+    """log_command, record_play_event and set_spotify_match must not commit mid-escrow."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        calls = (
+            db.log_command(1, "x"),
+            db.record_play_event(1, "vid", "t", None, None, "search", "completed"),
+            db.set_spotify_match("sp", "vid", 0.9),
+        )
+        await db._write_lock.acquire()
+        tasks = [asyncio.create_task(c) for c in calls]
+        await asyncio.sleep(0.05)
+        assert not any(task.done() for task in tasks)
+        db._write_lock.release()
+        await asyncio.gather(*tasks)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_log_command_cannot_commit_a_half_done_place_bet() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        await db.ensure_wallet(1, WELCOME)
+
+        async def slow_fail(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(0.05)  # lets log_command try to run mid-transaction
+            raise RuntimeError("boom")
+
+        with patch.object(db, "_insert_transaction", new=slow_fail):
+            results = await asyncio.gather(
+                db.place_bet(1, 50, "slots", WELCOME),
+                db.log_command(1, "x"),
+                return_exceptions=True,
+            )
+        assert isinstance(results[0], RuntimeError)
+        assert await _balance(db, 1) == WELCOME
+        async with db.conn.execute("SELECT COUNT(*) FROM gambling_bets;") as cursor:
+            row = await cursor.fetchone()
+        assert row is not None and row[0] == 0
+        await db.close()

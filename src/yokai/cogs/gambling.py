@@ -236,8 +236,13 @@ class GamblingCog(commands.Cog, name="Gambling"):
             await self._defer(interaction)
             embed = await view.start()
             message = await send(interaction, embed=embed, view=None if view.finished else view)
-            if not view.finished and isinstance(message, discord.Message):
-                view.message = message
+            if not view.finished:
+                if isinstance(message, discord.Message):
+                    view.message = message
+                else:
+                    # send() swallows failures and returns None; without a message the view
+                    # never registers, so refund and free the player instead of leaking both.
+                    await view.abort()
         except BaseException:
             if view is not None:
                 await view.abort()

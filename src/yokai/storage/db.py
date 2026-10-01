@@ -173,8 +173,9 @@ class Database:
         """Record command execution to command_log."""
         now = int(time.time())
         query = "INSERT INTO command_log (ts, user_id, command) VALUES (?, ?, ?);"
-        await self.conn.execute(query, (now, user_id, command))
-        await self.conn.commit()
+        async with self._write_lock:
+            await self.conn.execute(query, (now, user_id, command))
+            await self.conn.commit()
 
     async def record_play_event(
         self,
@@ -195,11 +196,12 @@ class Database:
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
-        await self.conn.execute(
-            query,
-            (now, user_id, video_id, title, artist, duration_s, origin, outcome, listened_s),
-        )
-        await self.conn.commit()
+        async with self._write_lock:
+            await self.conn.execute(
+                query,
+                (now, user_id, video_id, title, artist, duration_s, origin, outcome, listened_s),
+            )
+            await self.conn.commit()
 
     async def get_usage_stats(
         self, period_days: Optional[int] = None
@@ -299,8 +301,9 @@ class Database:
         INSERT OR REPLACE INTO spotify_match_cache (spotify_id, video_id, confidence, ts)
         VALUES (?, ?, ?, ?);
         """
-        await self.conn.execute(query, (spotify_id, video_id, confidence, now))
-        await self.conn.commit()
+        async with self._write_lock:
+            await self.conn.execute(query, (spotify_id, video_id, confidence, now))
+            await self.conn.commit()
 
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
         """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).
@@ -619,7 +622,8 @@ class Database:
     async def get_gamble_stats(self, user_id: int) -> list[tuple[str, int, int, int]]:
         """Per-game (game, plays, wagered, returned) over a user's settled bets."""
         query = (
-            "SELECT game, COUNT(*), SUM(stake), SUM(payout) FROM gambling_bets "
+            "SELECT game, COUNT(DISTINCT COALESCE(group_id, id)), SUM(stake), SUM(payout) "
+            "FROM gambling_bets "
             "WHERE user_id = ? AND status = 'settled' GROUP BY game ORDER BY game ASC;"
         )
         async with self.conn.execute(query, (user_id,)) as cursor:

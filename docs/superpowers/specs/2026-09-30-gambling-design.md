@@ -11,7 +11,7 @@ Let members spend and win Renown in solo and multiplayer casino-style games, wit
 
 - Solo games: slots, blackjack, roulette.
 - Multiplayer: head-to-head duel, jackpot, crash, multiplayer blackjack table, Texas hold'em poker.
-- Every stake is escrowed up front; every win, loss, push and refund writes an audited `renown_transactions` row.
+- Every stake is escrowed up front; every stake, win, push and refund writes an audited `renown_transactions` row; a loss (payout 0) is recorded in the `gambling_bets` row only.
 - No path to a negative balance, a double payout, or a stake lost to a bot restart.
 - All game logic lives in pure, seedable engines tested without Discord or the network.
 - `pytest` and `ruff` clean. No new dependency. No new Discord intent.
@@ -49,7 +49,7 @@ Engines take a `random.Random`, return dataclasses, and import nothing from `dis
 Stakes leave the wallet when a game starts.
 
 - `Database.place_bet(user_id, amount, game, lobby_id=None) -> bet_id`: under `_write_lock`, ensure wallet, conditional `UPDATE ... WHERE balance >= ?` (same guard as `pay()`), insert a `gambling_bets` row (`status='open'`) and a `renown_transactions` row (reason `bet:<game>`). Raises `InsufficientFundsError`.
-- `Database.settle_bet(bet_id, payout)`: in one transaction, mark the bet `settled`, store `payout`, and credit the wallet if `payout > 0` (reason `win:<game>` or `push:<game>`). Idempotent: a bet that is not `open` raises and changes nothing, so a double-settle cannot double-pay.
+- `Database.settle_bet(bet_id, payout)`: in one transaction, mark the bet `settled`, store `payout`, and credit the wallet if `payout > 0` (reason `win:<game>` or `push:<game>`). A loss (payout 0) writes no transaction row; the `gambling_bets` row records it. Idempotent: a bet that is not `open` raises and changes nothing, so a double-settle cannot double-pay.
 - `Database.refund_bet(bet_id)`: credit the stake, mark `refunded` (reason `refund:<game>`). Same idempotency guard.
 - Blackjack double-down and poker rebuys are additional bets sharing a `group_id`; settlement is per bet.
 - Startup sweep: before the bot accepts commands, refund every `open` bet left by a previous process. In-flight state (lobbies, hands) is in memory only and is therefore cancelled. Poker players get their original buy-in back; chips won or lost in the interrupted session are not preserved (accepted, see §12).
@@ -88,7 +88,7 @@ CREATE INDEX idx_gambling_bets_status ON gambling_bets(status);
 
 ### Blackjack — `/blackjack bet`
 - 6-deck shoe, fresh per hand; blackjack pays 3:2; dealer stands on all 17s; no insurance; no splits; double on any first two cards.
-- Buttons: Hit, Stand, Double (Double hidden if the extra stake cannot be placed).
+- Buttons: Hit, Stand, Double (Double is disabled if the extra stake cannot be placed).
 - On the 3-minute view timeout the hand auto-stands and settles normally (the player is not forfeited).
 
 ### Roulette — `/roulette bet choice [pick]`

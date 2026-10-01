@@ -311,3 +311,22 @@ async def test_blackjack_place_bet_crash_releases_the_player() -> None:
             await cog.blackjack.callback(cog, interaction, bet=10)
         assert not bot.active_games.is_active(111)
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_hand_message_failing_to_send_refunds_and_frees_the_player() -> None:
+    """The real send() returns None on failure instead of raising."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        with (
+            patch(
+                "yokai.cogs.gambling.blackjack_engine.build_shoe",
+                return_value=cards("10h 6d 9c 5s 7c"),
+            ),
+            patch("yokai.cogs.gambling.send", new=AsyncMock(return_value=None)),
+        ):
+            await cog.blackjack.callback(cog, interaction, bet=10)
+        assert await _balance(db, 111) == WELCOME
+        assert not bot.active_games.is_active(111)
+        await db.close()
