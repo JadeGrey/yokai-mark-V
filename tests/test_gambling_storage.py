@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import aiosqlite
 import pytest
@@ -224,4 +225,90 @@ async def test_gamble_stats_sum_settled_bets_per_game() -> None:
         await db.refund_bet(refunded)  # refunded: not counted
         assert await db.get_gamble_stats(1) == [("blackjack", 1, 10, 20), ("slots", 2, 20, 40)]
         assert await db.get_gamble_stats(99) == []
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_failure_mid_place_bet_leaves_nothing_behind() -> None:
+    """Review Focus: unexpected exception during place_bet rolls back everything."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        with patch.object(db, "_insert_transaction", new_callable=AsyncMock) as mock_tx:
+            mock_tx.side_effect = RuntimeError("Simulated failure")
+            with pytest.raises(RuntimeError, match="Simulated failure"):
+                await db.place_bet(1, 50, "slots", WELCOME)
+        assert await _balance(db, 1) == WELCOME
+        async with db.conn.execute("SELECT COUNT(*) FROM gambling_bets;") as cursor:
+            row = await cursor.fetchone()
+        assert row is not None and row[0] == 0
+        await db.log_command(1, "x")
+        assert await _balance(db, 1) == WELCOME
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_failure_mid_finish_bet_leaves_nothing_behind() -> None:
+    """Review Focus: unexpected exception during settle_bet rolls back the status change."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        bet_id = await db.place_bet(1, 100, "slots", WELCOME)
+        with patch.object(db, "_insert_transaction", new_callable=AsyncMock) as mock_tx:
+            mock_tx.side_effect = RuntimeError("Simulated failure")
+            with pytest.raises(RuntimeError, match="Simulated failure"):
+                await db.settle_bet(bet_id, 250)
+        await db.log_command(1, "x")
+        assert await _balance(db, 1) == 100
+        async with db.conn.execute(
+            "SELECT status FROM gambling_bets WHERE id = ?;", (bet_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        assert row is not None and row[0] == "open"
+        await db.settle_bet(bet_id, 250)
+        assert await _balance(db, 1) == 350
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_settles_pay_once() -> None:
+    """Two settle_bet calls on the same bet; only one succeeds."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        bet_id = await db.place_bet(1, 100, "slots", WELCOME)
+        results = await asyncio.gather(
+            db.settle_bet(bet_id, 200),
+            db.settle_bet(bet_id, 200),
+            return_exceptions=True,
+        )
+        wins = [r for r in results if isinstance(r, int)]
+        fails = [r for r in results if isinstance(r, BetNotOpenError)]
+        assert len(wins) == 1 and len(fails) == 1
+        assert await _balance(db, 1) == WELCOME - 100 + 200
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_settle_with_partial_payout_writes_payout_reason() -> None:
+    """Settlement with 0 < payout < stake should write 'payout:<game>' reason."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        bet_id = await db.place_bet(1, 100, "slots", WELCOME)
+        await db.settle_bet(bet_id, 40)
+        rows = await _tx_rows(db, 1)
+        assert rows[-1] == (40, "payout:slots", 140)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_place_bet_above_initial_welcome_bonus_fails_cleanly() -> None:
+    """Placing a bet larger than welcome bonus when user has no wallet.
+
+    Should fail without creating wallet.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db = await _fresh_db(tmp_dir)
+        with pytest.raises(InsufficientFundsError):
+            await db.place_bet(1, WELCOME + 1, "slots", WELCOME)
+        assert await db.get_wallet(1) is None
+        rows = await _tx_rows(db, 1)
+        assert len(rows) == 0
         await db.close()

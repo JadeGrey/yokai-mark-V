@@ -503,27 +503,40 @@ class Database:
             raise ValueError("place_bet amount must be positive")
         now = int(time.time())
         async with self._write_lock:
-            await self._ensure_wallet(user_id, welcome_bonus, now)
-            cursor = await self.conn.execute(
-                "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
-                (amount, user_id, amount),
-            )
             wallet = await self.get_wallet(user_id)
-            assert wallet is not None
-            if cursor.rowcount == 0:
+            if wallet is None:
+                if amount > welcome_bonus:
+                    raise InsufficientFundsError(balance=0, amount=amount, action="bet")
+                await self._ensure_wallet(user_id, welcome_bonus, now)
+                await self.conn.commit()
+                wallet = await self.get_wallet(user_id)
+                assert wallet is not None
+            try:
+                cursor = await self.conn.execute(
+                    "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
+                    (amount, user_id, amount),
+                )
+                wallet = await self.get_wallet(user_id)
+                assert wallet is not None
+                if cursor.rowcount == 0:
+                    await self.conn.rollback()
+                    raise InsufficientFundsError(
+                        balance=wallet.balance, amount=amount, action="bet"
+                    )
+                insert = await self.conn.execute(
+                    "INSERT INTO gambling_bets "
+                    "(ts, user_id, game, stake, status, payout, lobby_id, group_id) "
+                    "VALUES (?, ?, ?, ?, 'open', 0, ?, ?);",
+                    (now, user_id, game, amount, lobby_id, group_id),
+                )
+                bet_id = insert.lastrowid
+                await self._insert_transaction(
+                    user_id, -amount, f"bet:{game}", None, wallet.balance, now
+                )
+                await self.conn.commit()
+            except BaseException:
                 await self.conn.rollback()
-                raise InsufficientFundsError(balance=wallet.balance, amount=amount, action="bet")
-            insert = await self.conn.execute(
-                "INSERT INTO gambling_bets "
-                "(ts, user_id, game, stake, status, payout, lobby_id, group_id) "
-                "VALUES (?, ?, ?, ?, 'open', 0, ?, ?);",
-                (now, user_id, game, amount, lobby_id, group_id),
-            )
-            bet_id = insert.lastrowid
-            await self._insert_transaction(
-                user_id, -amount, f"bet:{game}", None, wallet.balance, now
-            )
-            await self.conn.commit()
+                raise
         assert bet_id is not None
         return bet_id
 
@@ -531,44 +544,51 @@ class Database:
         """Close an open bet exactly once, crediting `payout` (the stake when refunding)."""
         now = int(time.time())
         async with self._write_lock:
-            async with self.conn.execute(
-                "SELECT user_id, game, stake FROM gambling_bets WHERE id = ? AND status = 'open';",
-                (bet_id,),
-            ) as cursor:
-                row = await cursor.fetchone()
-            if row is None:
-                raise BetNotOpenError(bet_id)
-            user_id, game, stake = row
-            credit = stake if refund else payout
-            status = "refunded" if refund else "settled"
-            # Conditioned on status = 'open', so a racing second close can never double-pay.
-            cursor = await self.conn.execute(
-                "UPDATE gambling_bets SET status = ?, payout = ? WHERE id = ? AND status = 'open';",
-                (status, credit, bet_id),
-            )
-            if cursor.rowcount == 0:
+            try:
+                async with self.conn.execute(
+                    "SELECT user_id, game, stake FROM gambling_bets "
+                    "WHERE id = ? AND status = 'open';",
+                    (bet_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row is None:
+                    raise BetNotOpenError(bet_id)
+                user_id, game, stake = row
+                credit = stake if refund else payout
+                status = "refunded" if refund else "settled"
+                # Conditioned on status = 'open', so a racing second close can never
+                # double-pay.
+                cursor = await self.conn.execute(
+                    "UPDATE gambling_bets SET status = ?, payout = ? "
+                    "WHERE id = ? AND status = 'open';",
+                    (status, credit, bet_id),
+                )
+                if cursor.rowcount == 0:
+                    await self.conn.rollback()
+                    raise BetNotOpenError(bet_id)
+                if credit > 0:
+                    await self.conn.execute(
+                        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                        (credit, user_id),
+                    )
+                wallet = await self.get_wallet(user_id)
+                assert wallet is not None
+                if credit > 0:
+                    if refund:
+                        prefix = "refund"
+                    elif credit > stake:
+                        prefix = "win"
+                    elif credit == stake:
+                        prefix = "push"
+                    else:
+                        prefix = "payout"
+                    await self._insert_transaction(
+                        user_id, credit, f"{prefix}:{game}", None, wallet.balance, now
+                    )
+                await self.conn.commit()
+            except BaseException:
                 await self.conn.rollback()
-                raise BetNotOpenError(bet_id)
-            if credit > 0:
-                await self.conn.execute(
-                    "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
-                    (credit, user_id),
-                )
-            wallet = await self.get_wallet(user_id)
-            assert wallet is not None
-            if credit > 0:
-                if refund:
-                    prefix = "refund"
-                elif credit > stake:
-                    prefix = "win"
-                elif credit == stake:
-                    prefix = "push"
-                else:
-                    prefix = "payout"
-                await self._insert_transaction(
-                    user_id, credit, f"{prefix}:{game}", None, wallet.balance, now
-                )
-            await self.conn.commit()
+                raise
         return wallet.balance
 
     async def settle_bet(self, bet_id: int, payout: int) -> int:
