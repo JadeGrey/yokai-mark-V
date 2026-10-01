@@ -57,6 +57,10 @@ class Config:
     economy_command_reward: int = 5
     economy_command_rate_limit: int = 5
 
+    # Gambling: stake limits
+    gambling_min_bet: int = 10
+    gambling_max_bet: int = 5000
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -163,6 +167,12 @@ def load_config(env_path: Path | str | None = None) -> Config:
         "ECONOMY_COMMAND_RATE_LIMIT", os.getenv("ECONOMY_COMMAND_RATE_LIMIT"), 5
     )
 
+    # Gambling: stake limits (a bet of 0 or less is never valid, so the floor is 1)
+    gambling_min_bet = max(1, _parse_int("GAMBLING_MIN_BET", os.getenv("GAMBLING_MIN_BET"), 10))
+    gambling_max_bet = _parse_int("GAMBLING_MAX_BET", os.getenv("GAMBLING_MAX_BET"), 5000)
+    if gambling_max_bet < gambling_min_bet:
+        raise ConfigError("GAMBLING_MAX_BET must be greater than or equal to GAMBLING_MIN_BET.")
+
     return Config(
         discord_token=token,
         guild_id=guild_id,
@@ -189,4 +199,6 @@ def load_config(env_path: Path | str | None = None) -> Config:
         economy_voice_reward=economy_voice_reward,
         economy_command_reward=economy_command_reward,
         economy_command_rate_limit=economy_command_rate_limit,
+        gambling_min_bet=gambling_min_bet,
+        gambling_max_bet=gambling_max_bet,
     )
