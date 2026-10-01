@@ -182,13 +182,13 @@ class DailyOnCooldownError(YokaiError):
 
 
 class InsufficientFundsError(YokaiError):
-    """Raised when a payment or debit would exceed the payer's balance."""
+    """Raised when a payment, bet or debit would exceed the payer's balance."""
 
     title = "Not enough Renown"
 
-    def __init__(self, balance: int, amount: int) -> None:
+    def __init__(self, balance: int, amount: int, action: str = "send") -> None:
         super().__init__(
-            f"You have **{balance:,}** Renown, which isn't enough to send **{amount:,}**.",
+            f"You have **{balance:,}** Renown, which isn't enough to {action} **{amount:,}**.",
             user_hint="Earn more with /daily or by using Yokai in voice.",
         )
         self.balance = balance
@@ -202,3 +202,48 @@ class InvalidPaymentError(YokaiError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, user_hint="Pick a positive whole number and a real member.")
+
+
+class BetOutOfRangeError(YokaiError):
+    """Raised when a stake is outside the configured minimum and maximum."""
+
+    title = "Bet out of range"
+
+    def __init__(self, minimum: int, maximum: int) -> None:
+        super().__init__(
+            f"Bets must be a whole number from **{minimum:,}** to **{maximum:,}** Renown.",
+            user_hint="Pick an amount inside that range and try again.",
+        )
+        self.minimum = minimum
+        self.maximum = maximum
+
+
+class AlreadyInGameError(YokaiError):
+    """Raised when a member starts a game while another of theirs is still running."""
+
+    title = "Already in a game"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You already have a game in progress.",
+            user_hint="Finish your current game first.",
+        )
+
+
+class BetNotOpenError(YokaiError):
+    """Raised when settling or refunding a bet that is not open (settled twice, or unknown)."""
+
+    title = "Bet already settled"
+
+    def __init__(self, bet_id: int) -> None:
+        super().__init__(f"Bet #{bet_id} is not open.")
+        self.bet_id = bet_id
+
+
+class InvalidGameChoiceError(YokaiError):
+    """Raised when a game option (such as a roulette bet type or pick) is invalid."""
+
+    title = "Invalid choice"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, user_hint="Check the command options and try again.")
