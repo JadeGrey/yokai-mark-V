@@ -192,6 +192,7 @@ async def test_music_command_completion_skips_credit_when_reward_is_disabled() -
 async def test_voice_earn_tracker_starts_and_stops_with_the_bot() -> None:
     bot = make_bot()
     bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=0)
     bot.db.close = AsyncMock()
     bot.audio_buffer.start = AsyncMock()
     bot.searcher.warm_up = AsyncMock()
@@ -205,3 +206,21 @@ async def test_voice_earn_tracker_starts_and_stops_with_the_bot() -> None:
     with patch.object(bot.voice_earn_tracker, "stop", new=AsyncMock()) as stop_mock:
         await bot.close()
     stop_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_refunds_open_bets_and_loads_the_gambling_cog() -> None:
+    """Review Focus: a restart returns every stake left open by the previous process."""
+    bot = make_bot()
+    bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=3)
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    with patch.object(bot.voice_earn_tracker, "start"):
+        await bot.setup_hook()
+    bot.db.refund_open_bets.assert_awaited_once()
+    loaded = [call.args[0] for call in bot.load_extension.await_args_list]
+    assert "yokai.cogs.gambling" in loaded
+    assert not bot.active_games.is_active(1)

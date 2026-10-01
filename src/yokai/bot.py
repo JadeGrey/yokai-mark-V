@@ -17,6 +17,7 @@ from yokai.config import Config
 from yokai.economy.ratelimit import CommandRewardLimiter
 from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
+from yokai.gambling.sessions import ActiveGames
 from yokai.health import HealthReport, check_health
 from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
@@ -74,6 +75,7 @@ class YokaiBot(commands.Bot):
         self.matcher = TrackMatcher(ytdlp_resolver=self.resolver, db=self.db)
         self.recommender = YTMusicRadioRecommender()
         self.players: dict[int, GuildPlayer] = {}
+        self.active_games = ActiveGames()
         self.start_time = time.time()
         self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
         self.command_reward_limiter = CommandRewardLimiter(
@@ -117,6 +119,9 @@ class YokaiBot(commands.Bot):
         """Initialize database, load cogs, and synchronize slash commands to single guild."""
         logger.info("Initializing SQLite storage at %s...", self.config.db_path)
         await self.db.initialize()
+        refunded = await self.db.refund_open_bets()
+        if refunded:
+            logger.info("Refunded %d gambling bet(s) left open by the previous run.", refunded)
         await self.audio_buffer.start()
         # ytmusicapi's first call is slow (about 1.5 s); pay it now, not on someone's /play
         self._warmup_task = asyncio.create_task(self.searcher.warm_up())
@@ -126,6 +131,7 @@ class YokaiBot(commands.Bot):
         await self.load_extension("yokai.cogs.meta")
         await self.load_extension("yokai.cogs.music")
         await self.load_extension("yokai.cogs.economy")
+        await self.load_extension("yokai.cogs.gambling")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)

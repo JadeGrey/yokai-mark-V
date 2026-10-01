@@ -12,7 +12,9 @@ CHECKED = [
     "cogs/meta.py",
     "cogs/music.py",
     "cogs/economy.py",
+    "cogs/gambling.py",
     "ui/views.py",
+    "ui/game_views.py",
     "music/player.py",
     "bot.py",
 ]
