@@ -10,10 +10,12 @@ import discord
 import pytest
 from discord import app_commands
 
+from tests.card_helpers import cards
 from yokai.cogs.gambling import GamblingCog
 from yokai.gambling.engines.slots import SlotsResult
 from yokai.gambling.sessions import ActiveGames
 from yokai.storage.db import Database
+from yokai.ui.game_views import BlackjackView
 
 WELCOME = 200
 SEVENS = SlotsResult(("SEVEN", "SEVEN", "SEVEN"), 500)  # 50x
@@ -213,4 +215,85 @@ async def test_gamble_stats_reports_settled_games() -> None:
             await cog.gamble_stats.callback(cog, _interaction(111), user=None)
         embed = sent.await_args.kwargs["embed"]
         assert "`slots`" in embed.description and "+30" in embed.description
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_natural_pays_immediately_and_sends_no_buttons() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        with (
+            patch(
+                "yokai.cogs.gambling.blackjack_engine.build_shoe",
+                return_value=cards("As Kd Ks 9h"),
+            ),
+            patch("yokai.cogs.gambling.send", new=AsyncMock(return_value=_pending())) as sent,
+        ):
+            await cog.blackjack.callback(cog, interaction, bet=10)
+        assert sent.await_args.kwargs["view"] is None
+        assert await _balance(db, 111) == WELCOME - 10 + 25
+        assert not bot.active_games.is_active(111)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_in_play_keeps_the_player_claimed_until_the_hand_ends() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        pending = _pending()
+        with (
+            patch(
+                "yokai.cogs.gambling.blackjack_engine.build_shoe",
+                return_value=cards("10h 6d 9c 5s 7c"),
+            ),
+            patch("yokai.cogs.gambling.send", new=AsyncMock(return_value=pending)) as sent,
+        ):
+            await cog.blackjack.callback(cog, interaction, bet=10)
+        view = sent.await_args.kwargs["view"]
+        assert isinstance(view, BlackjackView)
+        assert view.message is pending
+        assert bot.active_games.is_active(111)
+        assert await _balance(db, 111) == WELCOME - 10
+
+        press = MagicMock()
+        press.user.id = 111
+        press.response.is_done = MagicMock(return_value=False)
+        press.response.edit_message = AsyncMock()
+        await view.stand_button.callback(press)
+        assert await _balance(db, 111) == WELCOME - 10 + 20
+        assert not bot.active_games.is_active(111)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_rejects_a_bad_bet_before_deferring() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        with patch("yokai.cogs.gambling.send", new=AsyncMock()) as sent:
+            await cog.blackjack.callback(cog, interaction, bet=1)
+        assert sent.await_args.kwargs["ephemeral"] is True
+        interaction.response.defer.assert_not_awaited()
+        assert await db.get_wallet(111) is None
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_failure_after_the_bet_refunds_it() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        with (
+            patch(
+                "yokai.cogs.gambling.blackjack_engine.build_shoe",
+                return_value=cards("10h 6d 9c 5s 7c"),
+            ),
+            patch("yokai.cogs.gambling.send", new=AsyncMock(side_effect=RuntimeError("boom"))),
+            pytest.raises(RuntimeError),
+        ):
+            await cog.blackjack.callback(cog, interaction, bet=10)
+        assert await _balance(db, 111) == WELCOME
+        assert not bot.active_games.is_active(111)
         await db.close()

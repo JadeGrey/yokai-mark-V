@@ -3,20 +3,28 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import uuid
 from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from yokai.errors import InsufficientFundsError, InvalidGameChoiceError, YokaiError
+from yokai.errors import (
+    BetNotOpenError,
+    InsufficientFundsError,
+    InvalidGameChoiceError,
+    YokaiError,
+)
+from yokai.gambling.engines import blackjack as blackjack_engine
 from yokai.gambling.engines import roulette as roulette_engine
 from yokai.gambling.engines import slots as slots_engine
 from yokai.gambling.escrow import escrowed_bet, validate_bet
 from yokai.gambling.rng import new_rng
 from yokai.theme import Emoji
 from yokai.ui.embeds import EmbedFactory, send
-from yokai.ui.game_views import SlotsView
+from yokai.ui.game_views import BlackjackView, SlotsView
 from yokai.ui.views import BaseView
 
 if TYPE_CHECKING:
@@ -188,6 +196,53 @@ class GamblingCog(commands.Cog, name="Gambling"):
             await self._send_domain_error(interaction, err)
         finally:
             self.bot.active_games.release(user_id)
+
+    @app_commands.command(name="blackjack", description="Play a hand of blackjack for Renown.")
+    @app_commands.describe(bet="Renown to wager (whole number)")
+    async def blackjack(self, interaction: discord.Interaction, bet: int) -> None:
+        if not await self._begin(interaction, bet):
+            return
+        user_id = interaction.user.id
+        group_id = uuid.uuid4().hex
+        try:
+            bet_id = await self.bot.db.place_bet(
+                user_id, bet, "blackjack", self._welcome(), group_id=group_id
+            )
+        except YokaiError as err:
+            self.bot.active_games.release(user_id)
+            await self._send_domain_error(interaction, err)
+            return
+
+        view: Optional[BlackjackView] = None
+        try:
+            wallet = await self.bot.db.get_wallet(user_id)
+            game = blackjack_engine.BlackjackGame(blackjack_engine.build_shoe(new_rng()))
+            view = BlackjackView(
+                game=game,
+                db=self.bot.db,
+                user_id=user_id,
+                user_mention=f"<@{user_id}>",
+                stake=bet,
+                bet_id=bet_id,
+                group_id=group_id,
+                welcome_bonus=self._welcome(),
+                can_double=wallet is not None and wallet.balance >= bet,
+                release=lambda: self.bot.active_games.release(user_id),
+                bot_avatar_url=self._avatar_url(),
+            )
+            await self._defer(interaction)
+            embed = await view.start()
+            message = await send(interaction, embed=embed, view=None if view.finished else view)
+            if not view.finished and isinstance(message, discord.Message):
+                view.message = message
+        except BaseException:
+            if view is not None:
+                await view.abort()
+            else:
+                with contextlib.suppress(BetNotOpenError):
+                    await self.bot.db.refund_bet(bet_id)
+                self.bot.active_games.release(user_id)
+            raise
 
     @app_commands.command(
         name="gamble-stats", description="Show your (or another member's) gambling record."
