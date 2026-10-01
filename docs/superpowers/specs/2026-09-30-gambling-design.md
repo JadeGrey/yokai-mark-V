@@ -82,7 +82,7 @@ CREATE INDEX idx_gambling_bets_status ON gambling_bets(status);
 - Buttons use `BaseView` with `allowed_user_ids=[caller]`, time out, and disable themselves.
 
 ### Slots — `/slots bet`
-- Three reels from a weighted symbol table; paytable is a constant (three of a kind 5x–50x by symbol, any two cherries 1.5x, else 0).
+- Three reels from a weighted symbol table (CHERRY 40, LEMON 30, BELL 15, BAR 10, SEVEN 5 per 100); paytable is a constant (three of a kind 5x–50x by symbol, exactly two cherries 1.4x, else 0). Reels render as text names (`[CHERRY] [BELL] [SEVEN]`), never emoji, because AGENTS.md allows one emoji per embed. Exact RTP 95.03%.
 - Weights tuned for RTP ~95%; a test computes exact RTP from the table and asserts 94–96%.
 - Result delivered by editing one message at most twice (spin, result). "Spin again" button repeats the same stake.
 
@@ -124,7 +124,7 @@ CREATE INDEX idx_gambling_bets_status ON gambling_bets(status);
 - `/poker buyin` opens a 2–6 player table lobby (60 s join window). Buy-in is escrowed and becomes the chip stack (min/max configurable).
 - Hands repeat until one player holds all chips, everyone but the host leaves, the table idles out, or the hand cap (`GAMBLING_POKER_MAX_HANDS`, default 30) is reached; then remaining chips are credited back via `settle_bet`.
 - Blinds fixed at 1% / 2% of the buy-in (rounded up), button rotates each hand, no escalation. No-limit, standard min-raise. No rake.
-- Public embed edited in place (community cards, pot, stacks, turn). Hole cards via a **My cards** button that replies ephemerally. Cards render as text (`A♠ K♥`).
+- Public embed edited in place (community cards, pot, stacks, turn). Hole cards via a **My cards** button that replies ephemerally. Cards render in poker notation (`As Kh 10d`, suit letters c/d/h/s), never suit glyphs, because the one-emoji test counts `♠♥♦♣` as emoji.
 - Acting player's buttons: Fold, Check/Call, Raise (modal, validated against min-raise and stack), All-in. 45 s turn timer: check if free, else fold; two consecutive timeouts remove and cash out the player. A player who leaves the server mid-hand is folded and cashed out after the hand.
 - Engine: self-written 5-of-7 evaluator (category + kicker tuple, wheel straight handled); pure betting state machine (blinds -> preflop -> flop -> turn -> river -> showdown); side pots built from contribution levels; ties split evenly with the odd chip to the first player left of the button. No new dependency.
 
@@ -152,6 +152,7 @@ New commands (all slash, guild-scoped, logged through `command_log`): `/slots`, 
 - New typed errors in `errors.py`: `BetOutOfRangeError`, `AlreadyInGameError`, `LobbyClosedError`, `NotYourTurnError` (reusing `InsufficientFundsError`).
 - New `EmbedFactory` builders per game state (slots result, blackjack hand, roulette result, lobby, crash tick, poker table, gamble stats) and new `theme.py` quip keys (win, loss, push, crash, bust, all-in), 3+ variants each, one quip and one emoji per embed at most. Error text stays plain.
 - No raw `send_message` / `channel.send` in feature code; errors ephemeral; `allowed_mentions` none, mentions only inside embeds.
+- Embeds: every gambling embed has at most one emoji and contains no suit glyphs.
 
 ## 10. Testing strategy
 

@@ -209,5 +209,43 @@ music-command usage. Spec: `docs/superpowers/specs/2026-09-29-economy-core-desig
 
 ---
 
+## Phase 8 — Economy: Gambling G1 (escrow + solo games)
+
+**Goal:** The shared bet-escrow foundation and the three solo games. Spec:
+`docs/superpowers/specs/2026-09-30-gambling-design.md` (§11, phase G1). Plan:
+`docs/superpowers/plans/2026-10-01-gambling-g1-plan.md`. G2 (lobbies, duel, jackpot), G3 (crash,
+blackjack table) and G4 (poker) get their own plans after this phase is reviewed.
+
+- [x] G1.1 `GAMBLING_MIN_BET` / `GAMBLING_MAX_BET` configuration.
+- [x] G1.2 Typed errors: `BetOutOfRangeError`, `AlreadyInGameError`, `BetNotOpenError`,
+      `InvalidGameChoiceError`; `InsufficientFundsError` gains an `action` word.
+- [x] G1.3 Migration v3 (`gambling_bets`) and `Database` escrow: `place_bet`, `settle_bet`,
+      `refund_bet`, `refund_open_bets`, `get_gamble_stats`.
+- [x] G1.4 `gambling/` package: `rng`, `escrow` (`validate_bet`, `escrowed_bet`), `sessions`.
+- [x] G1.5 Pure engines: slots, roulette, blackjack.
+- [x] G1.6 Theme emoji/quips and game embeds; preview page samples.
+- [x] G1.7 `/slots`, `/roulette`, `/gamble-stats`; startup refund of open bets; cog loaded.
+- [x] G1.8 Interactive `/blackjack` (hit, stand, double, timeout auto-stand).
+
+**Acceptance criteria**
+- Every stake is debited when a game starts; every win, push and refund credits through an audited
+  `renown_transactions` row; a loss is recorded in `gambling_bets`.
+- A bet outside the min/max, above the balance, or while another game is running is rejected
+  ephemerally before any defer, and costs nothing.
+- Restarting the bot mid-hand returns the stake of every open bet at startup.
+- Slots RTP is 94–96% (exact enumeration test); every roulette bet type has a 36/37 return;
+  blackjack follows the spec's rules (3:2, dealer stands on all 17s, double on two cards, no
+  splits or insurance).
+- A blackjack hand left idle auto-stands and settles when the view times out.
+- No embed has more than one emoji; cards and reels use text notation.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* `/slots`, `/roulette` (each bet type), `/blackjack` (hit, stand,
+  double, natural, bust) and `/gamble-stats` behave as described; a second game is refused while
+  one is running; kill the process mid-hand and confirm the stake is back after restart.
+
+**STOP — owner review.**
+
+---
+
 ## Later (do not start without owner approval)
 Hybrid recommender using local play/skip data, custom model, autoplay, `/search` picker, lyrics, Lavalink engine, new entertainment and QoL modules, `/privacy` data commands.
