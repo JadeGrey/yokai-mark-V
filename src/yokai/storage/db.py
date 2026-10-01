@@ -13,11 +13,11 @@ import aiosqlite
 
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
-from yokai.errors import DailyOnCooldownError, InsufficientFundsError
+from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS renown_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_renown_tx_user ON renown_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_renown_tx_ts ON renown_transactions(ts);
+"""
+
+MIGRATION_V3 = """
+CREATE TABLE IF NOT EXISTS gambling_bets (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  game TEXT NOT NULL,
+  stake INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  payout INTEGER NOT NULL DEFAULT 0,
+  lobby_id TEXT,
+  group_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_gambling_bets_user ON gambling_bets(user_id);
+CREATE INDEX IF NOT EXISTS idx_gambling_bets_status ON gambling_bets(status);
 """
 
 
@@ -137,6 +154,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 2;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 2.")
+
+        if version < 3:
+            logger.info("Applying SQLite migration v3...")
+            await self.conn.executescript(MIGRATION_V3)
+            await self.conn.execute("PRAGMA user_version = 3;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 3.")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
@@ -461,6 +485,125 @@ class Database:
             await self._insert_transaction(user_id, applied, "admin", None, new_balance, now)
             await self.conn.commit()
         return applied, new_balance
+
+    async def place_bet(
+        self,
+        user_id: int,
+        amount: int,
+        game: str,
+        welcome_bonus: int,
+        lobby_id: Optional[str] = None,
+        group_id: Optional[str] = None,
+    ) -> int:
+        """Escrow `amount` from the wallet into a new open bet; returns the bet id.
+
+        Raises InsufficientFundsError (action "bet") when the balance is too low.
+        """
+        if amount <= 0:
+            raise ValueError("place_bet amount must be positive")
+        now = int(time.time())
+        async with self._write_lock:
+            await self._ensure_wallet(user_id, welcome_bonus, now)
+            cursor = await self.conn.execute(
+                "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
+                (amount, user_id, amount),
+            )
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                raise InsufficientFundsError(balance=wallet.balance, amount=amount, action="bet")
+            insert = await self.conn.execute(
+                "INSERT INTO gambling_bets "
+                "(ts, user_id, game, stake, status, payout, lobby_id, group_id) "
+                "VALUES (?, ?, ?, ?, 'open', 0, ?, ?);",
+                (now, user_id, game, amount, lobby_id, group_id),
+            )
+            bet_id = insert.lastrowid
+            await self._insert_transaction(
+                user_id, -amount, f"bet:{game}", None, wallet.balance, now
+            )
+            await self.conn.commit()
+        assert bet_id is not None
+        return bet_id
+
+    async def _finish_bet(self, bet_id: int, payout: int, refund: bool) -> int:
+        """Close an open bet exactly once, crediting `payout` (the stake when refunding)."""
+        now = int(time.time())
+        async with self._write_lock:
+            async with self.conn.execute(
+                "SELECT user_id, game, stake FROM gambling_bets WHERE id = ? AND status = 'open';",
+                (bet_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row is None:
+                raise BetNotOpenError(bet_id)
+            user_id, game, stake = row
+            credit = stake if refund else payout
+            status = "refunded" if refund else "settled"
+            # Conditioned on status = 'open', so a racing second close can never double-pay.
+            cursor = await self.conn.execute(
+                "UPDATE gambling_bets SET status = ?, payout = ? WHERE id = ? AND status = 'open';",
+                (status, credit, bet_id),
+            )
+            if cursor.rowcount == 0:
+                await self.conn.rollback()
+                raise BetNotOpenError(bet_id)
+            if credit > 0:
+                await self.conn.execute(
+                    "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                    (credit, user_id),
+                )
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            if credit > 0:
+                if refund:
+                    prefix = "refund"
+                elif credit > stake:
+                    prefix = "win"
+                elif credit == stake:
+                    prefix = "push"
+                else:
+                    prefix = "payout"
+                await self._insert_transaction(
+                    user_id, credit, f"{prefix}:{game}", None, wallet.balance, now
+                )
+            await self.conn.commit()
+        return wallet.balance
+
+    async def settle_bet(self, bet_id: int, payout: int) -> int:
+        """Settle an open bet with a total `payout` (0 = loss); returns the new balance."""
+        if payout < 0:
+            raise ValueError("settle_bet payout must not be negative")
+        return await self._finish_bet(bet_id, payout, refund=False)
+
+    async def refund_bet(self, bet_id: int) -> int:
+        """Return an open bet's stake to the wallet; returns the new balance."""
+        return await self._finish_bet(bet_id, 0, refund=True)
+
+    async def refund_open_bets(self) -> int:
+        """Refund every bet still open (left behind by a previous process); returns the count."""
+        async with self.conn.execute(
+            "SELECT id FROM gambling_bets WHERE status = 'open' ORDER BY id;"
+        ) as cursor:
+            bet_ids = [r[0] for r in await cursor.fetchall()]
+        refunded = 0
+        for bet_id in bet_ids:
+            try:
+                await self.refund_bet(bet_id)
+            except BetNotOpenError:
+                continue
+            refunded += 1
+        return refunded
+
+    async def get_gamble_stats(self, user_id: int) -> list[tuple[str, int, int, int]]:
+        """Per-game (game, plays, wagered, returned) over a user's settled bets."""
+        query = (
+            "SELECT game, COUNT(*), SUM(stake), SUM(payout) FROM gambling_bets "
+            "WHERE user_id = ? AND status = 'settled' GROUP BY game ORDER BY game ASC;"
+        )
+        async with self.conn.execute(query, (user_id,)) as cursor:
+            return [(r[0], r[1], r[2], r[3]) for r in await cursor.fetchall()]
 
     async def get_leaderboard(self, limit: int, offset: int) -> tuple[list[Wallet], int]:
         """Wallets ordered by balance desc (ties by user_id asc), plus the total wallet count."""
