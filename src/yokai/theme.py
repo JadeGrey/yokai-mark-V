@@ -28,6 +28,8 @@ class Emoji:
     STOP: Final[str] = "⏹️"
     SKIP: Final[str] = "⏭️"
     COIN: Final[str] = "🪙"
+    SLOTS: Final[str] = "🎰"
+    DICE: Final[str] = "🎲"
 
 
 # Layout tokens shared by every embed builder
@@ -122,6 +124,36 @@ QUIP_VARIANTS: Final[Mapping[str, Sequence[str]]] = {
         "Transaction clean.",
         "Sent without a trace.",
         "Debt settled, presumably.",
+    ),
+    "game_win": (
+        "Paid out. Don't spend it all in one place.",
+        "The house flinches.",
+        "Clean win.",
+        "Lucky. Or skilled. Probably lucky.",
+    ),
+    "game_loss": (
+        "The house thanks you.",
+        "Not this round.",
+        "Better odds next time.",
+        "That one's on the house, technically.",
+    ),
+    "game_push": (
+        "Dead even.",
+        "Stake returned. Nobody wins.",
+        "A wash.",
+        "Nothing gained, nothing lost.",
+    ),
+    "game_blackjack": (
+        "Twenty-one on the deal. Smooth.",
+        "Natural. Textbook.",
+        "Blackjack. Three to two.",
+        "Straight to the top.",
+    ),
+    "game_bust": (
+        "Over the line.",
+        "Too greedy.",
+        "Bust. It happens.",
+        "One card too many.",
     ),
 }
 

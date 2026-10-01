@@ -21,6 +21,7 @@ from pathlib import Path
 import discord
 
 from yokai.music.models import Track
+from yokai.theme import Emoji
 from yokai.ui.embeds import EmbedFactory
 
 PAGE_STYLE = """
@@ -479,6 +480,70 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             "Economy admin (deduction)",
             EmbedFactory.economy_admin(
                 target_mention="<@7>", delta_applied=-200, new_balance=0, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Slots (spinning)",
+            EmbedFactory.spinning("Slots", "`[ ? ] [ ? ] [ ? ]`", Emoji.SLOTS, bot_avatar_url=av),
+        ),
+        (
+            "Slots (win)",
+            EmbedFactory.slots_result(
+                "<@42>", ("SEVEN", "SEVEN", "SEVEN"), 10, 500, 690, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Slots (loss)",
+            EmbedFactory.slots_result(
+                "<@42>", ("BAR", "LEMON", "BELL"), 10, 0, 190, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Roulette (straight win)",
+            EmbedFactory.roulette_result(
+                "<@42>", "straight 17", 17, "black", 10, 360, 550, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Blackjack (in play)",
+            EmbedFactory.blackjack_hand(
+                "<@42>", ["10h", "6c"], 16, ["9d", "??"], None, 10, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Blackjack (natural)",
+            EmbedFactory.blackjack_hand(
+                "<@42>",
+                ["As", "Kd"],
+                21,
+                ["Ks", "9h"],
+                19,
+                10,
+                "blackjack",
+                25,
+                215,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Blackjack (bust)",
+            EmbedFactory.blackjack_hand(
+                "<@42>",
+                ["10h", "6c", "10d"],
+                26,
+                ["9d", "8s"],
+                17,
+                10,
+                "bust",
+                0,
+                190,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Gambling record",
+            EmbedFactory.gamble_stats(
+                "<@42>", [("blackjack", 1, 10, 20), ("slots", 2, 20, 40)], bot_avatar_url=av
             ),
         ),
     ]

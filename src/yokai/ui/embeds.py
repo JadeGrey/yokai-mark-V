@@ -100,6 +100,31 @@ def _list_line(pos: int, title: str, artist: Optional[str], duration_s: Optional
     return f"`{pos:>2}.` **{escape_md(clamp(title, 60))}**{artist_part}{dur_part}"
 
 
+def _signed(amount: int) -> str:
+    """Signed whole number with thousands separators: +490, -10, 0."""
+    if amount > 0:
+        return f"+{amount:,}"
+    return f"{amount:,}" if amount < 0 else "0"
+
+
+def _result_style(stake: int, payout: int) -> tuple[int, str]:
+    """Accent colour and quip key for a settled game, from stake versus total payout."""
+    if payout > stake:
+        return COLOR_SUCCESS, "game_win"
+    if payout == stake:
+        return COLOR_BRAND, "game_push"
+    return COLOR_WARNING, "game_loss"
+
+
+_BLACKJACK_VERDICTS = {
+    "blackjack": "Blackjack!",
+    "win": "You win",
+    "push": "Push",
+    "lose": "Dealer wins",
+    "bust": "Bust",
+}
+
+
 class EmbedFactory:
     """Factory creating uniform Discord embeds with enforced limits."""
 
@@ -670,6 +695,149 @@ class EmbedFactory:
             description=f"{verb} **{abs(delta_applied):,}** Renown for {target_mention}.",
             color=COLOR_SUCCESS,
             context="Economy admin",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def spinning(
+        cls,
+        title: str,
+        description: str,
+        icon: str,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        return cls._create_base(
+            title=f"{icon} {title}",
+            description=description,
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def slots_result(
+        cls,
+        user_mention: str,
+        reels: Sequence[str],
+        stake: int,
+        payout: int,
+        new_balance: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        color, quip_key = _result_style(stake, payout)
+        reel_text = " ".join(f"[{name}]" for name in reels)
+        fields: list[FieldSpec] = [
+            ("Stake", f"**{stake:,}**", True),
+            ("Net", f"**{_signed(payout - stake)}**", True),
+            ("Balance", f"**{new_balance:,}**", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.SLOTS} Slots",
+            description=f"{user_mention}\n`{reel_text}`",
+            color=color,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get(quip_key),
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def roulette_result(
+        cls,
+        user_mention: str,
+        bet_label: str,
+        pocket: int,
+        pocket_colour: str,
+        stake: int,
+        payout: int,
+        new_balance: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        color, quip_key = _result_style(stake, payout)
+        fields: list[FieldSpec] = [
+            ("Stake", f"**{stake:,}**", True),
+            ("Net", f"**{_signed(payout - stake)}**", True),
+            ("Balance", f"**{new_balance:,}**", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.DICE} Roulette",
+            description=(
+                f"{user_mention}\nBet: **{escape_md(bet_label)}**\n"
+                f"The ball landed on **{pocket}** ({pocket_colour})."
+            ),
+            color=color,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get(quip_key),
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def blackjack_hand(
+        cls,
+        user_mention: str,
+        player_cards: Sequence[str],
+        player_total: int,
+        dealer_cards: Sequence[str],
+        dealer_total: Optional[int],
+        stake: int,
+        verdict: Optional[str] = None,
+        payout: Optional[int] = None,
+        new_balance: Optional[int] = None,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        dealer_suffix = f" ({dealer_total})" if dealer_total is not None else ""
+        lines = [
+            user_mention,
+            f"**Your hand** `{' '.join(player_cards)}` ({player_total})",
+            f"**Dealer** `{' '.join(dealer_cards)}`{dealer_suffix}",
+        ]
+        fields: list[FieldSpec] = [("Stake", f"**{stake:,}**", True)]
+        color = COLOR_BRAND
+        quip: Optional[str] = None
+        if verdict is not None:
+            returned = payout if payout is not None else 0
+            color, quip_key = _result_style(stake, returned)
+            if verdict == "blackjack":
+                quip_key = "game_blackjack"
+            elif verdict == "bust":
+                quip_key = "game_bust"
+            quip = quip_bank.get(quip_key)
+            lines.append(f"**{_BLACKJACK_VERDICTS[verdict]}**")
+            fields.append(("Net", f"**{_signed(returned - stake)}**", True))
+            if new_balance is not None:
+                fields.append(("Balance", f"**{new_balance:,}**", True))
+        return cls._create_base(
+            title=f"{Emoji.DICE} Blackjack",
+            description="\n".join(lines),
+            color=color,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def gamble_stats(
+        cls,
+        user_mention: str,
+        rows: Sequence[tuple[str, int, int, int]],  # (game, plays, wagered, returned)
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        lines = [
+            f"`{game}` — **{plays:,}** plays · wagered **{wagered:,}** · "
+            f"net **{_signed(returned - wagered)}**"
+            for game, plays, wagered, returned in rows
+        ]
+        body = "\n".join(lines) if lines else "No settled games yet."
+        total_net = sum(returned - wagered for _, _, wagered, returned in rows)
+        fields: list[FieldSpec] = [("Total net", f"**{_signed(total_net)}**", True)] if rows else []
+        return cls._create_base(
+            title=f"{Emoji.DICE} Gambling record",
+            description=f"{user_mention}\n{body}",
+            color=COLOR_BRAND,
+            context="Gambling",
             bot_avatar_url=bot_avatar_url,
             fields=_grid(fields),
         )
