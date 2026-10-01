@@ -297,3 +297,17 @@ async def test_blackjack_failure_after_the_bet_refunds_it() -> None:
         assert await _balance(db, 111) == WELCOME
         assert not bot.active_games.is_active(111)
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_blackjack_place_bet_crash_releases_the_player() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cog, bot, db = await _setup(tmp_dir)
+        interaction = _interaction()
+        with (
+            patch.object(db, "place_bet", new=AsyncMock(side_effect=RuntimeError("db down"))),
+            pytest.raises(RuntimeError),
+        ):
+            await cog.blackjack.callback(cog, interaction, bet=10)
+        assert not bot.active_games.is_active(111)
+        await db.close()

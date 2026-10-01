@@ -145,8 +145,10 @@ class BlackjackView(BaseView):
             for bet_id in bet_ids:
                 balance = await self.db.settle_bet(bet_id, per_bet)
         except Exception:
-            await self._refund_all()
-            self._close()
+            try:
+                await self._refund_all()
+            finally:
+                self._close()
             raise
         self._result = (self.stake * len(bet_ids), per_bet * len(bet_ids), balance)
         self._close()
@@ -164,8 +166,10 @@ class BlackjackView(BaseView):
         async with self._lock:
             if self._closed:
                 return
-            await self._refund_all()
-            self._close()
+            try:
+                await self._refund_all()
+            finally:
+                self._close()
 
     async def _ack_if_closed(self, interaction: discord.Interaction) -> bool:
         """Swallow a press that arrives after the hand ended (e.g. a double click)."""

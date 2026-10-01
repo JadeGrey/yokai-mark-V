@@ -208,4 +208,37 @@ async def test_a_settlement_failure_refunds_and_frees_the_player() -> None:
             await view.stand_button.callback(_interaction())
         assert await _balance(db) == WELCOME
         assert released == [1]
+        assert view.finished is False
+        assert all(item.disabled for item in view.children)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_a_failing_refund_still_frees_the_player_and_keeps_the_original_error() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db, view, released = await _make(tmp_dir, WIN_ON_STAND)
+        await view.start()
+        with (
+            patch.object(db, "settle_bet", new=AsyncMock(side_effect=RuntimeError("settle"))),
+            patch.object(db, "refund_bet", new=AsyncMock(side_effect=RuntimeError("refund"))),
+            pytest.raises(RuntimeError),
+        ):
+            await view.stand_button.callback(_interaction())
+        assert released == [1]
+        assert view.finished is False
+        assert all(item.disabled for item in view.children)
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_abort_frees_the_player_even_when_the_refund_fails() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db, view, released = await _make(tmp_dir, IN_PLAY)
+        await view.start()
+        with (
+            patch.object(db, "refund_bet", new=AsyncMock(side_effect=RuntimeError("refund"))),
+            pytest.raises(RuntimeError),
+        ):
+            await view.abort()
+        assert released == [1]
         await db.close()

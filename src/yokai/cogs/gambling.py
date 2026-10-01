@@ -212,6 +212,9 @@ class GamblingCog(commands.Cog, name="Gambling"):
             self.bot.active_games.release(user_id)
             await self._send_domain_error(interaction, err)
             return
+        except BaseException:
+            self.bot.active_games.release(user_id)
+            raise
 
         view: Optional[BlackjackView] = None
         try:
@@ -239,9 +242,11 @@ class GamblingCog(commands.Cog, name="Gambling"):
             if view is not None:
                 await view.abort()
             else:
-                with contextlib.suppress(BetNotOpenError):
-                    await self.bot.db.refund_bet(bet_id)
-                self.bot.active_games.release(user_id)
+                try:
+                    with contextlib.suppress(BetNotOpenError):
+                        await self.bot.db.refund_bet(bet_id)
+                finally:
+                    self.bot.active_games.release(user_id)
             raise
 
     @app_commands.command(
