@@ -20,7 +20,14 @@ from typing import TYPE_CHECKING, Any, Coroutine, Optional
 
 import discord
 
-from yokai.errors import UnmatchedTrackError, VoiceError, YokaiError
+from yokai.errors import (
+    LoginRequiredError,
+    NotFoundError,
+    UnavailableError,
+    UnmatchedTrackError,
+    VoiceError,
+    YokaiError,
+)
 from yokai.music.buffer import AudioBuffer, redact_urls
 from yokai.music.models import LoopMode, MusicQueue, PlayerState, StreamInfo, Track
 from yokai.music.resolvers.base import Resolver
@@ -39,6 +46,8 @@ WATCHDOG_SILENT_TICKS = 2  # consecutive "PLAYING but voice idle" ticks before r
 PREBUILD_LEAD_S = 8  # start the next FFmpeg this many seconds before the track ends
 PREMATURE_END_MARGIN_S = 10  # ending this far before the known duration counts as cut off
 MAX_RESUME_ATTEMPTS = 2
+# Load failures that a second extraction cannot fix, so the retry is skipped.
+_PERMANENT_LOAD_ERRORS = (LoginRequiredError, NotFoundError, UnavailableError)
 RESUMED_END_GRACE_S = 5  # a resumed source ending this soon after its offset = real end
 INSTANT_END_FLOOR_S = 5  # a clean end before this many seconds of a track = dead stream
 INSTANT_END_MIN_DURATION_S = 30  # ...but only for tracks at least this long
@@ -360,6 +369,8 @@ class GuildPlayer:
                 logger.warning("Stream attempt %d failed for %s: %s", attempt, track.video_id, exc)
                 self._prefetched = None
                 self.resolver.invalidate_stream(track.video_id)
+                if isinstance(exc, _PERMANENT_LOAD_ERRORS):
+                    break  # a login wall or a removed video will not change on a retry
         raise error
 
     def _take_prepared(self, track: Track) -> Optional[_Prepared]:

@@ -13,7 +13,7 @@ import discord
 import pytest
 
 from tests.test_player import DummyAudioSource, FakeResolver, FakeVoiceClient
-from yokai.errors import BotCheckError
+from yokai.errors import BotCheckError, LoginRequiredError
 from yokai.music import player as player_module
 from yokai.music.buffer import AudioBuffer
 from yokai.music.models import LoopMode, PlayerState, StreamInfo, Track
@@ -158,6 +158,14 @@ class SelectiveResolver(FakeResolver):
         if track.video_id in self.fail:
             raise BotCheckError()
         return await super().get_stream(track, background=background)
+
+
+class AgeGatedResolver(FakeResolver):
+    """Every stream lookup hits an age gate (a permanent, per-video failure)."""
+
+    async def get_stream(self, track: Track, *, background: bool = False) -> StreamInfo:
+        self.stream_call_count += 1
+        raise LoginRequiredError("This video is age-restricted and requires authentication.")
 
 
 # --------------------------------------------------------------- skip / stop races
@@ -977,3 +985,18 @@ async def test_stop_clears_the_buffer(ffmpeg, tmp_path: Path) -> None:
     await player.play_next()
     await player.stop()
     buffer.clear.assert_awaited_once()
+
+
+async def test_age_gated_track_is_not_retried(ffmpeg) -> None:
+    resolver = AgeGatedResolver()
+    player, _vc, bot = make_player(resolver)
+    player.text_channel = MagicMock()
+    player.text_channel.send = AsyncMock()
+    player.queue.add(make_track("gated"))
+
+    await player.play_next()
+    await settle()
+
+    assert resolver.stream_call_count == 1  # a login wall will not clear on a second try
+    assert outcomes(bot, "gated") == ["error"]
+    assert player.text_channel.send.await_count == 1

@@ -133,8 +133,10 @@ async def test_error_mapping_and_health_degradation() -> None:
     ):
         with pytest.raises(LoginRequiredError):
             await resolver.get_stream(track)
-        assert resolver.consecutive_failures == 1
+        # a per-video problem says nothing about YouTube's health
+        assert resolver.consecutive_failures == 0
         assert resolver.is_degraded is False
+        assert len(resolver.error_ring_buffer) == 1
 
     # 2. Country block -> UnavailableError
     with patch.object(
@@ -144,8 +146,9 @@ async def test_error_mapping_and_health_degradation() -> None:
     ):
         with pytest.raises(UnavailableError):
             await resolver.get_stream(track)
-        assert resolver.consecutive_failures == 2
+        assert resolver.consecutive_failures == 0
         assert resolver.is_degraded is False
+        assert len(resolver.error_ring_buffer) == 2
 
     # 3. HTTP 403 / Bot check -> BotCheckError -> Triggers DEGRADED
     with patch.object(
@@ -153,11 +156,12 @@ async def test_error_mapping_and_health_degradation() -> None:
         "extract_info",
         side_effect=Exception("HTTP Error 403: Forbidden"),
     ):
-        with pytest.raises(BotCheckError):
-            await resolver.get_stream(track)
-        assert resolver.consecutive_failures == 3
-        assert resolver.is_degraded is True
-        assert len(resolver.error_ring_buffer) == 3
+        for attempt in (1, 2, 3):
+            with pytest.raises(BotCheckError):
+                await resolver.get_stream(track)
+            assert resolver.consecutive_failures == attempt
+            assert resolver.is_degraded is (attempt == 3)
+        assert len(resolver.error_ring_buffer) == 5
 
     # 4. Success restores health
     with patch.object(yt_dlp.YoutubeDL, "extract_info", return_value={"url": "http://stream.url"}):

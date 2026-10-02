@@ -126,8 +126,9 @@ class YtDlpResolver(Resolver):
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(target, download=False) or {}
 
-    def _note_failure(self, context: str, message: str) -> None:
-        self.consecutive_failures += 1
+    def _note_failure(self, context: str, message: str, counts_toward_health: bool = True) -> None:
+        if counts_toward_health:
+            self.consecutive_failures += 1
         if self.consecutive_failures >= 3:
             if not self.is_degraded:
                 logger.warning(
@@ -141,15 +142,25 @@ class YtDlpResolver(Resolver):
     def _map_and_record_error(self, exc: Exception, context: str) -> YokaiError:
         """Map raw yt-dlp exceptions to typed domain errors and update health state."""
         err_msg = str(exc)
-        self._note_failure(context, err_msg or type(exc).__name__)
-        if isinstance(exc, YokaiError):
-            return exc
+        mapped = exc if isinstance(exc, YokaiError) else self._classify(err_msg, exc)
+        # Age gates, private or region-blocked videos are about one video, not YouTube's health.
+        per_video = isinstance(mapped, (LoginRequiredError, UnavailableError, NotFoundError))
+        self._note_failure(
+            context, err_msg or type(exc).__name__, counts_toward_health=not per_video
+        )
+        return mapped
+
+    @staticmethod
+    def _classify(err_msg: str, exc: Exception) -> YokaiError:
 
         err_lower = err_msg.lower()
         sanitized = err_msg.splitlines()[0] if err_msg else type(exc).__name__
 
         if "sign in to confirm your age" in err_lower or "confirm your age" in err_lower:
-            return LoginRequiredError("This video is age-restricted and requires authentication.")
+            return LoginRequiredError(
+                "This video is age-restricted and requires authentication.",
+                user_hint="The owner can enable it by setting `YTDLP_COOKIES_FILE`.",
+            )
         if "private video" in err_lower or "members-only" in err_lower:
             return LoginRequiredError("This video is private or members-only.")
         if (
