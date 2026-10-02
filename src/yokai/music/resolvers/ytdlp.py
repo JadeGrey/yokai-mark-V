@@ -39,6 +39,7 @@ STREAM_EXPIRY_SAFETY_S = 120
 DEFAULT_STREAM_TTL_S = 1800
 STREAM_CACHE_MAX = 256
 _EXPIRE_RE = re.compile(r"[?&/]expire[=/](\d+)")
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def stream_expiry(url: str, now: Optional[float] = None) -> float:
@@ -141,7 +142,7 @@ class YtDlpResolver(Resolver):
 
     def _map_and_record_error(self, exc: Exception, context: str) -> YokaiError:
         """Map raw yt-dlp exceptions to typed domain errors and update health state."""
-        err_msg = str(exc)
+        err_msg = _ANSI_ESCAPE.sub("", str(exc))
         mapped = exc if isinstance(exc, YokaiError) else self._classify(err_msg, exc)
         # Age gates, private or region-blocked videos are about one video, not YouTube's health.
         per_video = isinstance(mapped, (LoginRequiredError, UnavailableError, NotFoundError))
@@ -156,7 +157,7 @@ class YtDlpResolver(Resolver):
         err_lower = err_msg.lower()
         sanitized = err_msg.splitlines()[0] if err_msg else type(exc).__name__
 
-        if "sign in to confirm your age" in err_lower or "confirm your age" in err_lower:
+        if "confirm your age" in err_lower or "age-restricted" in err_lower:
             return LoginRequiredError(
                 "This video is age-restricted and requires authentication.",
                 user_hint="The owner can enable it by setting `YTDLP_COOKIES_FILE`.",

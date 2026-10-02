@@ -361,3 +361,33 @@ async def test_fast_profile_is_tried_first_then_default(monkeypatch: pytest.Monk
         info = await resolver.get_stream(Track(video_id="vid_fast", title="T", duration_s=100))
     assert info.url == "https://googlevideo.com/default"
     assert seen == [fast, None]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Sign in to confirm your age",
+        "[0;31mERROR:[0m [youtube] vid_123: Sorry, this content is age-restricted",
+    ],
+)
+async def test_age_gate_wordings_map_to_login_required(message: str) -> None:
+    resolver = YtDlpResolver()
+    track = Track(video_id="vid_123", title="Test", duration_s=180)
+
+    with patch.object(yt_dlp.YoutubeDL, "extract_info", side_effect=Exception(message)):
+        with pytest.raises(LoginRequiredError):
+            await resolver.get_stream(track)
+
+    assert resolver.consecutive_failures == 0
+
+
+def test_unmapped_errors_do_not_carry_terminal_colour_codes() -> None:
+    resolver = YtDlpResolver()
+
+    mapped = resolver._map_and_record_error(
+        Exception("[0;31mERROR:[0m [youtube] vid: something odd"), "stream 'vid'"
+    )
+
+    assert "" not in mapped.message
+    assert "ERROR: [youtube] vid: something odd" in mapped.message
