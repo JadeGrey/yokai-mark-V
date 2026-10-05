@@ -49,7 +49,8 @@ class VoiceEarnTracker:
 
         The guild's AFK channel is skipped so idle members parked there can't farm Renown.
         A single member's credit failure is caught and logged so it doesn't abort crediting
-        the rest of that tick.
+        the rest of that tick. Blacklisted members still count toward the 2-human minimum but
+        are never credited.
         """
         if self.reward <= 0:
             return
@@ -64,6 +65,8 @@ class VoiceEarnTracker:
             if len(humans) < 2:
                 continue
             for member in humans:
+                if await self.bot.moderation.is_blacklisted(member.id):
+                    continue
                 try:
                     await self.bot.db.credit_wallet(
                         member.id,

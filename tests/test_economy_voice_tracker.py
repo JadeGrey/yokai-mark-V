@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from tests.moderation_helpers import fake_moderation
 from yokai.economy.voice_tracker import VoiceEarnTracker
 
 
@@ -30,6 +31,7 @@ def _bot_with_guild(channels: list[MagicMock], afk_channel: MagicMock | None = N
     guild.afk_channel = afk_channel
     bot.get_guild.return_value = guild
     bot.db.credit_wallet = AsyncMock()
+    bot.moderation = fake_moderation(owner_id=0)  # nobody blacklisted
     return bot
 
 
@@ -143,3 +145,17 @@ async def test_start_and_stop_manage_the_background_task() -> None:
     assert tracker._task is not None
     await tracker.stop()
     assert tracker._task is None
+
+
+@pytest.mark.asyncio
+async def test_tick_does_not_credit_a_blacklisted_member() -> None:
+    """Review Focus 6: a blacklisted human earns nothing; the other human still does."""
+    channel = _channel([_member(1), _member(2)])
+    bot = _bot_with_guild([channel])
+    bot.moderation = fake_moderation(owner_id=0, blacklisted={1})
+    tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
+
+    await tracker.tick()
+
+    credited_ids = {call.args[0] for call in bot.db.credit_wallet.await_args_list}
+    assert credited_ids == {2}
