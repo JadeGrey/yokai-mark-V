@@ -12,6 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from yokai import __version__
 from yokai.cogs.music import MUSIC_COMMAND_NAMES
 from yokai.config import Config
 from yokai.economy.ratelimit import CommandRewardLimiter
@@ -19,6 +20,7 @@ from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
 from yokai.gambling.sessions import ActiveGames
 from yokai.health import HealthReport, check_health
+from yokai.heartbeat import HeartbeatWriter
 from yokai.moderation import ModerationStore, YokaiTree
 from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
@@ -46,6 +48,7 @@ class YokaiBot(commands.Bot):
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
         self.moderation = ModerationStore(self.db, config.owner_id)
+        self.heartbeat = HeartbeatWriter(self.db, __version__)
         self.presence = PresenceManager(self)
         self.searcher = YtMusicSearcher(max_track_seconds=config.max_track_seconds)
         self.resolver = YtDlpResolver(
@@ -153,6 +156,7 @@ class YokaiBot(commands.Bot):
         user_str = f"{bot_user.name}#{bot_user.discriminator}" if bot_user else "Yokai"
         logger.info("Yokai online as %s (Guild ID: %d)", user_str, self.config.guild_id)
         logger.info("Initial presence confirmed: IDLE, Watching for plant")
+        self.heartbeat.start()
 
     async def on_app_command_completion(
         self,
@@ -269,6 +273,7 @@ class YokaiBot(commands.Bot):
             except Exception as exc:
                 logger.debug("Error stopping player during shutdown: %s", exc)
         await self.voice_earn_tracker.stop()
+        await self.heartbeat.stop()
         try:
             await self.spotify.close()
         except Exception as exc:

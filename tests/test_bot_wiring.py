@@ -247,3 +247,20 @@ async def test_a_blacklisted_user_is_stopped_at_the_tree() -> None:
     with patch("yokai.moderation.gate.send", new=AsyncMock()) as sent:
         assert await bot.tree.interaction_check(interaction) is False
     sent.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_ready_starts_the_heartbeat_and_close_stops_it() -> None:
+    bot = make_bot()
+    bot.db.close = AsyncMock()
+    bot.spotify.close = AsyncMock()
+    with patch.object(bot.heartbeat, "start") as start_mock:
+        await bot.on_ready()
+    start_mock.assert_called_once()
+
+    with (
+        patch.object(bot.heartbeat, "stop", new=AsyncMock()) as stop_mock,
+        patch.object(bot.voice_earn_tracker, "stop", new=AsyncMock()),
+    ):
+        await bot.close()
+    stop_mock.assert_awaited_once()
