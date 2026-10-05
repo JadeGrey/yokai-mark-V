@@ -224,3 +224,26 @@ async def test_setup_hook_refunds_open_bets_and_loads_the_gambling_cog() -> None
     loaded = [call.args[0] for call in bot.load_extension.await_args_list]
     assert "yokai.cogs.gambling" in loaded
     assert not bot.active_games.is_active(1)
+
+
+@pytest.mark.asyncio
+async def test_bot_owns_a_moderation_store_and_the_yokai_tree() -> None:
+    from yokai.moderation import ModerationStore, YokaiTree
+
+    bot = make_bot()
+    assert isinstance(bot.moderation, ModerationStore)
+    assert bot.moderation.owner_id == 456
+    assert isinstance(bot.tree, YokaiTree)
+
+
+@pytest.mark.asyncio
+async def test_a_blacklisted_user_is_stopped_at_the_tree() -> None:
+    bot = make_bot()
+    bot.db.get_moderation_lists = AsyncMock(return_value=(frozenset({7}), frozenset()))
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.user = MagicMock(id=7)
+    interaction.type = discord.InteractionType.application_command
+    interaction.client = bot
+    with patch("yokai.moderation.gate.send", new=AsyncMock()) as sent:
+        assert await bot.tree.interaction_check(interaction) is False
+    sent.assert_awaited_once()

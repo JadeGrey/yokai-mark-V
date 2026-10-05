@@ -19,6 +19,7 @@ from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
 from yokai.gambling.sessions import ActiveGames
 from yokai.health import HealthReport, check_health
+from yokai.moderation import ModerationStore, YokaiTree
 from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
 from yokai.music.recommend import YTMusicRadioRecommender
@@ -44,6 +45,7 @@ class YokaiBot(commands.Bot):
         self.config = config
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
+        self.moderation = ModerationStore(self.db, config.owner_id)
         self.presence = PresenceManager(self)
         self.searcher = YtMusicSearcher(max_track_seconds=config.max_track_seconds)
         self.resolver = YtDlpResolver(
@@ -99,6 +101,7 @@ class YokaiBot(commands.Bot):
             allowed_mentions=discord.AllowedMentions.none(),
             status=discord.Status.idle,
             activity=get_default_activity(),
+            tree_cls=YokaiTree,
         )
 
         # Hook app command tree error handler
