@@ -38,6 +38,12 @@ class BaseView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Validate if the interacting user is authorized to use this view."""
+        # Imported here, not at module level: moderation.gate imports ui.embeds, whose package
+        # imports this module, so a top-level import would be circular.
+        from yokai.moderation.gate import deny_if_blacklisted
+
+        if await deny_if_blacklisted(interaction):
+            return False
         if self.allowed_user_ids is not None and interaction.user.id not in self.allowed_user_ids:
             err_embed = EmbedFactory.error(
                 message="You do not have permission to interact with this control.",
@@ -244,6 +250,12 @@ class RecommendView(BaseView):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Allow interaction if user is original requester or in the bot's voice channel."""
+        # Imported here, not at module level: moderation.gate imports ui.embeds, whose package
+        # imports this module, so a top-level import would be circular.
+        from yokai.moderation.gate import deny_if_blacklisted
+
+        if await deny_if_blacklisted(interaction):
+            return False
         user = interaction.user
         if not isinstance(user, discord.Member):
             return False

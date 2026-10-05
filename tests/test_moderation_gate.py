@@ -8,6 +8,9 @@ import discord
 
 from yokai.moderation.gate import YokaiTree, deny_if_blacklisted
 from yokai.moderation.store import ModerationStore
+from yokai.music.models import MusicQueue, Track
+from yokai.music.player import GuildPlayer
+from yokai.ui.views import BaseView, RecommendView
 
 
 def _store(black: frozenset[int]) -> ModerationStore:
@@ -65,3 +68,36 @@ async def test_tree_interaction_check_follows_the_gate() -> None:
     with patch("yokai.moderation.gate.send", new=AsyncMock()):
         assert await tree.interaction_check(blocked) is False
         assert await tree.interaction_check(allowed) is True
+
+
+async def test_blacklisted_user_is_refused_by_a_live_base_view() -> None:
+    """Review Focus 5: an old button on a still-live view cannot be used once blacklisted."""
+    view = BaseView(allowed_user_ids=None)  # open to everyone, so only the gate can refuse
+    interaction = _interaction(5, _store(frozenset({5})))
+    with patch("yokai.moderation.gate.send", new=AsyncMock()) as sent:
+        assert await view.interaction_check(interaction) is False
+    sent.assert_awaited_once()
+
+
+async def test_non_blacklisted_user_still_passes_an_open_base_view() -> None:
+    view = BaseView(allowed_user_ids=None)
+    interaction = _interaction(10, _store(frozenset({5})))
+    assert await view.interaction_check(interaction) is True
+
+
+async def test_blacklisted_requester_is_refused_by_the_recommend_view() -> None:
+    bot = MagicMock()
+    bot.config.max_queue_size = 50
+    bot.presence = AsyncMock()
+    player = GuildPlayer(guild_id=1, bot=bot, resolver=MagicMock())
+    player.queue = MusicQueue(max_size=50)
+    view = RecommendView(
+        player=player,
+        tracks=[Track(video_id="r1", title="Rec 1", duration_s=100)],
+        requester_id=5,
+        seed_title="Seed",
+    )
+    interaction = _interaction(5, _store(frozenset({5})))
+    interaction.user = MagicMock(spec=discord.Member, id=5)
+    with patch("yokai.moderation.gate.send", new=AsyncMock()):
+        assert await view.interaction_check(interaction) is False
