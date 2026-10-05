@@ -188,11 +188,12 @@ a {
   padding: 0.5rem 0 2rem;
 }
 
+/* The dot sits on the column's left edge like everything else; its ring grows into the margin. */
 .status-mark {
   display: grid;
   flex: none;
-  place-items: center;
-  width: 4.5rem;
+  place-items: center start;
+  width: 2.5rem;
   height: 4.5rem;
 }
 
