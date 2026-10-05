@@ -178,18 +178,18 @@ class MetaCog(commands.Cog, name="Meta"):
 
     @app_commands.command(
         name="diag",
-        description="Run comprehensive system diagnostics (Owner only).",
+        description="Run comprehensive system diagnostics (Admins only).",
     )
     async def diag(self, interaction: discord.Interaction) -> None:
-        """Owner-only diagnostic overview and yt-dlp updater."""
+        """Admin-only diagnostic overview and yt-dlp updater."""
         avatar_url = str(self.bot.user.display_avatar.url) if self.bot.user else None
 
-        # Strict owner authorization check
-        if interaction.user.id != self.bot.config.owner_id:
+        # Admin authorization: the owner or a member of the adminlist
+        if not await self.bot.moderation.is_admin(interaction.user.id):
             embed = EmbedFactory.error(
-                message="Access denied: this command is restricted to the bot owner.",
-                title="Owner only",
-                user_hint="Contact the bot operator if you require diagnostics.",
+                message="Access denied: this command is restricted to Yokai admins.",
+                title="Admins only",
+                user_hint="Ask the bot owner if you need diagnostics.",
                 context="Permissions",
                 bot_avatar_url=avatar_url,
                 include_quip=False,
@@ -277,7 +277,7 @@ class MetaCog(commands.Cog, name="Meta"):
             status="warn" if needs_attention else "ok",
         )
 
-        view = DiagView(owner_id=self.bot.config.owner_id, bot_avatar_url=avatar_url)
+        view = DiagView(admin_id=interaction.user.id, bot_avatar_url=avatar_url)
         msg = await send(interaction, embed=embed, view=view, ephemeral=True)
         if isinstance(msg, discord.Message):
             view.message = msg

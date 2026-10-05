@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
+from tests.moderation_helpers import fake_moderation
 from yokai.cogs.meta import MetaCog, _format_uptime
 from yokai.music.resolvers.ytdlp import YtDlpResolver
 from yokai.storage.db import Database
@@ -279,7 +280,7 @@ def test_ytdlp_resolver_rolling_latency() -> None:
 async def test_diag_view_permissions() -> None:
     """DiagView restricts interactions to the configured owner ID."""
     owner_id = 1111111111
-    view = DiagView(owner_id=owner_id)
+    view = DiagView(admin_id=owner_id)
 
     # Authorized owner
     mock_owner = MagicMock()
@@ -300,7 +301,7 @@ async def test_diag_view_permissions() -> None:
 async def test_diag_view_update_ytdlp_execution() -> None:
     """DiagView runs pip update as argument list without shell=True."""
     owner_id = 1111111111
-    view = DiagView(owner_id=owner_id)
+    view = DiagView(admin_id=owner_id)
 
     mock_interaction = MagicMock()
     mock_interaction.user.id = owner_id
@@ -347,6 +348,7 @@ async def test_diag_command_access_denial_for_non_owner() -> None:
     """MetaCog.diag immediately sends permission denial for non-owners."""
     mock_bot = MagicMock()
     mock_bot.config.owner_id = 123456789
+    mock_bot.moderation = fake_moderation(owner_id=123456789)
     mock_bot.user.display_avatar.url = "https://example.com/avatar.png"
 
     cog = MetaCog(mock_bot)
@@ -369,6 +371,7 @@ async def test_diag_command_owner_execution() -> None:
     """MetaCog.diag gathers telemetry and attaches DiagView for the bot owner."""
     mock_bot = MagicMock()
     mock_bot.config.owner_id = 123456789
+    mock_bot.moderation = fake_moderation(owner_id=123456789, admins={555})
     mock_bot.config.db_path = ":memory:"
     mock_bot.user.display_avatar.url = "https://example.com/avatar.png"
     mock_bot.spotify.get_provider_status.return_value = {
@@ -513,6 +516,7 @@ async def test_bot_error_ring_buffer_on_tree_error() -> None:
 async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
     bot = MagicMock()
     bot.config.owner_id = 42
+    bot.moderation = fake_moderation(owner_id=42)
     bot.config.db_path = ":memory:"
     bot.user = None
     bot.error_ring_buffer = []
@@ -548,3 +552,66 @@ async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
     values = " ".join(f.value for f in embed.fields)
     assert "(outdated)" in values
     assert "⚠️" not in values
+
+
+@pytest.mark.asyncio
+async def test_diag_command_access_denial_message_names_admins() -> None:
+    mock_bot = MagicMock()
+    mock_bot.config.owner_id = 123456789
+    mock_bot.moderation = fake_moderation(owner_id=123456789)
+    mock_bot.user.display_avatar.url = "https://example.com/avatar.png"
+    cog = MetaCog(mock_bot)
+    mock_interaction = MagicMock()
+    mock_interaction.user.id = 999999999
+    mock_interaction.response.is_done.return_value = False
+    mock_interaction.response.send_message = AsyncMock()
+
+    await cog.diag.callback(cog, mock_interaction)
+
+    embed = mock_interaction.response.send_message.call_args[1]["embed"]
+    assert "Yokai admins" in (embed.description or "")
+    assert "Admins only" in (embed.title or "")
+
+
+@pytest.mark.asyncio
+async def test_diag_command_runs_for_an_adminlist_member_and_locks_buttons_to_them() -> None:
+    """An admin who is not the owner can use /diag, and its buttons answer to that admin."""
+    mock_bot = MagicMock()
+    mock_bot.config.owner_id = 123456789
+    mock_bot.moderation = fake_moderation(owner_id=123456789, admins={555})
+    mock_bot.config.db_path = ":memory:"
+    mock_bot.user.display_avatar.url = "https://example.com/avatar.png"
+    mock_bot.spotify.get_provider_status.return_value = {
+        "official_configured": True,
+        "official_circuit_available": True,
+        "official_failures": 0,
+        "scraper_enabled": True,
+        "scraper_circuit_available": True,
+        "scraper_failures": 0,
+    }
+    mock_bot.resolver.consecutive_failures = 0
+    mock_bot.resolver.is_degraded = False
+    mock_bot.health.davey_available = True
+    mock_bot.health.davey_version = "1.0.0"
+    mock_bot.health.ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+    mock_bot.health.ffmpeg_version = "7.1"
+    mock_bot.health.deno_path = "C:/deno/deno.exe"
+    mock_bot.health.deno_version = "2.0.0"
+    mock_bot.health.ytdlp_version = "2026.03.01"
+    mock_bot.health.ytdlp_age_days = 5
+    mock_bot.health.ytdlp_outdated = False
+    mock_bot.error_ring_buffer = []
+    mock_bot.resolver.error_ring_buffer = []
+
+    cog = MetaCog(mock_bot)
+    mock_interaction = MagicMock()
+    mock_interaction.user.id = 555  # admin, not the owner
+    mock_interaction.response.defer = AsyncMock()
+    mock_interaction.response.is_done.return_value = True
+    mock_interaction.followup.send = AsyncMock()
+
+    await cog.diag.callback(cog, mock_interaction)
+
+    view = mock_interaction.followup.send.call_args[1]["view"]
+    assert isinstance(view, DiagView)
+    assert view.allowed_user_ids == {555}

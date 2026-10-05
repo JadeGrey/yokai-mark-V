@@ -151,18 +151,18 @@ class EconomyCog(commands.Cog, name="Economy"):
             view.message = msg
 
     @app_commands.command(
-        name="economy-admin", description="Owner-only: grant or deduct a member's Renown."
+        name="economy-admin", description="Admin-only: grant or deduct a member's Renown."
     )
     @app_commands.describe(user="Member to adjust", amount="Renown to add (negative to deduct)")
     async def economy_admin(
         self, interaction: discord.Interaction, user: discord.Member, amount: int
     ) -> None:
-        """Owner-only balance correction, always ephemeral, floored at 0."""
-        if interaction.user.id != self.bot.config.owner_id:
+        """Admin-only balance correction, always ephemeral, floored at 0."""
+        if not await self.bot.moderation.is_admin(interaction.user.id):
             embed = EmbedFactory.error(
-                message="Access denied: this command is restricted to the bot owner.",
-                title="Owner only",
-                user_hint="Contact the bot operator if you need a balance corrected.",
+                message="Access denied: this command is restricted to Yokai admins.",
+                title="Admins only",
+                user_hint="Ask the bot owner if you need a balance corrected.",
                 context="Permissions",
                 bot_avatar_url=self._avatar_url(),
                 include_quip=False,

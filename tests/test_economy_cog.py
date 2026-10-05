@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 
+from tests.moderation_helpers import fake_moderation
 from yokai.cogs.economy import EconomyCog
 from yokai.economy.models import DailyClaimResult, Wallet
 
@@ -16,6 +17,7 @@ def make_bot() -> MagicMock:
     bot = MagicMock()
     bot.user = None
     bot.config.owner_id = 999
+    bot.moderation = fake_moderation(owner_id=999, admins={555})
     bot.config.economy_welcome_bonus = 200
     bot.config.economy_daily_base = 100
     return bot
@@ -297,3 +299,19 @@ async def test_leaderboard_treats_a_sub_one_page_as_page_one() -> None:
     view = sent.await_args.kwargs["view"]
     assert isinstance(view, LeaderboardPaginator)
     assert view.current_page == 1
+
+
+@pytest.mark.asyncio
+async def test_economy_admin_allows_an_adminlist_member() -> None:
+    bot = make_bot()
+    bot.db.admin_adjust_wallet = AsyncMock(return_value=(100, 300))
+    cog = EconomyCog(bot)
+    interaction = make_interaction(555)  # admin, not the owner
+    target = MagicMock(spec=discord.Member)
+    target.id = 222
+    target.bot = False
+
+    with patch("yokai.cogs.economy.send", new=AsyncMock()):
+        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
+
+    bot.db.admin_adjust_wallet.assert_awaited_once()

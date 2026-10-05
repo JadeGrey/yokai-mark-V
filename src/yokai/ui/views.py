@@ -336,16 +336,16 @@ class RecommendView(BaseView):
 
 
 class DiagView(BaseView):
-    """Owner-only diagnostic view featuring an in-place yt-dlp package updater."""
+    """Admin-only diagnostic view featuring an in-place yt-dlp package updater."""
 
     def __init__(
         self,
-        owner_id: int,
+        admin_id: int,
         bot_avatar_url: Optional[str] = None,
         timeout: float = 180.0,
     ) -> None:
-        super().__init__(allowed_user_ids=[owner_id], timeout=timeout)
-        self.owner_id = owner_id
+        super().__init__(allowed_user_ids=[admin_id], timeout=timeout)
+        self.admin_id = admin_id
         self.bot_avatar_url = bot_avatar_url
         self._lock = asyncio.Lock()
         self._updated = False
