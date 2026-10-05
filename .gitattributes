@@ -1,0 +1,3 @@
+# Vendored admin panel assets are hash-checked by tests; never convert their line endings.
+src/yokai_admin/static/vendor/** -text
+src/yokai_admin/static/fonts/** -text
