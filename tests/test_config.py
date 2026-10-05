@@ -168,3 +168,12 @@ def test_economy_voice_and_command_rewards_can_be_disabled_but_not_negative() ->
         cfg = load_config(env_path=Path("non_existent_env"))
         assert cfg.economy_voice_reward == 0
         assert cfg.economy_command_reward == 0
+
+
+def test_log_dir_defaults_and_overrides() -> None:
+    base = {"DISCORD_TOKEN": "t.o.k", "GUILD_ID": "1", "OWNER_ID": "2"}
+    with patch.dict(os.environ, base, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).log_dir == Path("logs")
+
+    with patch.dict(os.environ, {**base, "LOG_DIR": "elsewhere/logs"}, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).log_dir == Path("elsewhere/logs")

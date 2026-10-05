@@ -26,6 +26,7 @@ class Config:
     # Logging & Storage
     log_level: str = "INFO"
     db_path: Path = Path("data/yokai.db")
+    log_dir: Path = Path("logs")
 
     # Spotify Provider Settings
     spotify_client_id: Optional[str] = None
@@ -119,6 +120,7 @@ def load_config(env_path: Path | str | None = None) -> Config:
     # Optional paths and strings
     log_level = os.getenv("LOG_LEVEL", "INFO").strip().upper()
     db_path = Path(os.getenv("DB_PATH", "data/yokai.db").strip())
+    log_dir = Path(os.getenv("LOG_DIR", "logs").strip() or "logs")
 
     spotify_id = os.getenv("SPOTIFY_CLIENT_ID", "").strip() or None
     spotify_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "").strip() or None
@@ -179,6 +181,7 @@ def load_config(env_path: Path | str | None = None) -> Config:
         owner_id=owner_id,
         log_level=log_level,
         db_path=db_path,
+        log_dir=log_dir,
         spotify_client_id=spotify_id,
         spotify_client_secret=spotify_secret,
         spotify_scraper_enabled=spotify_scraper,

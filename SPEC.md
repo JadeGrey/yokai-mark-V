@@ -286,7 +286,7 @@ Privacy: store Discord user IDs, command names, and play events only. No message
 
 ## 11. Dependencies and configuration
 
-**Runtime:** `discord.py[voice]>=2.7.1`, `davey`, `yt-dlp[default]`, `ytmusicapi`, `httpx`, `aiosqlite`, `python-dotenv`, `spotifyscraper` (exact pin). Use stdlib `difflib` for similarity.
+**Runtime:** `discord.py[voice]>=2.7.1`, `davey`, `yt-dlp[default]`, `ytmusicapi`, `httpx`, `aiosqlite`, `python-dotenv`, `spotifyscraper` (exact pin); admin panel (`yokai_admin`): `fastapi`, `uvicorn`, `jinja2` (`python-multipart` joins in P-A3). Use stdlib `difflib` for similarity.
 **Dev:** `pytest`, `pytest-asyncio`, `ruff`.
 **External tools on PATH:** `ffmpeg`, `deno`.
 
@@ -299,6 +299,8 @@ Privacy: store Discord user IDs, command names, and play events only. No message
 | `OWNER_ID` | required | Owner-only commands |
 | `LOG_LEVEL` | `INFO` | Logging |
 | `DB_PATH` | `data/yokai.db` | SQLite file |
+| `LOG_DIR` | `logs` | Folder of the rotating bot logs (the panel reads it) |
+| `ADMIN_PORT` | `8765` | Local port of the admin panel (127.0.0.1 only) |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | empty | Enables the official provider |
 | `SPOTIFY_SCRAPER_ENABLED` | `true` | Enables the scraper fallback |
 | `YTDLP_COOKIES_FILE` | empty | Optional cookie file (off by default) |

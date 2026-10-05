@@ -29,7 +29,7 @@ def main() -> int:
 
     setup_logging(
         log_level=config.log_level,
-        log_dir="logs",
+        log_dir=config.log_dir,
         secrets=secrets_to_redact,
     )
 

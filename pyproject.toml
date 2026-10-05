@@ -17,6 +17,9 @@ dependencies = [
     "aiosqlite",
     "python-dotenv",
     "spotifyscraper==3.9.2",
+    "fastapi",
+    "uvicorn",
+    "jinja2",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +31,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+yokai_admin = ["templates/**/*", "static/**/*", "modules/*/templates/**/*"]
 
 [tool.ruff]
 line-length = 100
