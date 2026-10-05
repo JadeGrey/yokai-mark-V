@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false}'>
+  <link rel="stylesheet" href="/static/panel.css">
+  <link rel="icon" href="data:,">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <title>{% block title %}Yokai admin{% endblock %}</title>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+<div class="shell">
+  <aside class="rail">
+    <p class="wordmark">Yokai<small>Admin panel</small></p>
+    <nav aria-label="Modules">
+      <ul class="nav">
+        {% for item in nav %}
+          {% if item.error %}
+            <li class="is-broken" title="{{ item.error }}">Module failed to load<small>{{ item.path }}</small></li>
+          {% else %}
+            <li><a href="{{ item.href }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.title }}</a></li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    </nav>
+  </aside>
+  <main class="main">{% block content %}{% endblock %}</main>
+</div>
+</body>
+</html>
