@@ -600,7 +600,7 @@ class EmbedFactory:
 
         return cls._create_base(
             title=f"{Emoji.WARN if needs_attention else Emoji.DRONE} Diagnostic Telemetry",
-            description="Owner-only operational diagnostic overview.",
+            description="Admin-only operational diagnostic overview.",
             color=COLOR_WARNING if needs_attention else COLOR_SUCCESS,
             context="Diagnostic",
             bot_avatar_url=bot_avatar_url,
