@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Iterator, Optional, Sequence
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import Response
 from starlette.testclient import TestClient
 
+from yokai.storage.db import Database
 from yokai_admin.app import create_app
 from yokai_admin.core.auth import SESSION_COOKIE, AuthState
 from yokai_admin.core.module import AdminModule, Tile, TileContext
@@ -85,3 +87,31 @@ def panel_client(
             assert session is not None
             csrf = session.csrf
         yield client, csrf
+
+
+def seed_database(
+    path: Path,
+    *,
+    heartbeat_ts: Optional[int] = None,
+    wallets: int = 0,
+    commands: Sequence[int] = (),
+) -> None:
+    """Create a real v4 database with the given heartbeat, wallets and command timestamps."""
+
+    async def run() -> None:
+        db = Database(path)
+        await db.initialize()
+        try:
+            if heartbeat_ts is not None:
+                await db.write_heartbeat(pid=4242, version="0.1.0", now=heartbeat_ts)
+            for user_id in range(1, wallets + 1):
+                await db.credit_wallet(user_id, 10, reason="daily", welcome_bonus=200)
+            for ts in commands:
+                await db.conn.execute(
+                    "INSERT INTO command_log (ts, user_id, command) VALUES (?, 1, 'play');", (ts,)
+                )
+            await db.conn.commit()
+        finally:
+            await db.close()
+
+    asyncio.run(run())
