@@ -17,7 +17,7 @@ from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFund
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -94,6 +94,41 @@ CREATE INDEX IF NOT EXISTS idx_gambling_bets_user ON gambling_bets(user_id);
 CREATE INDEX IF NOT EXISTS idx_gambling_bets_status ON gambling_bets(status);
 """
 
+MIGRATION_V4 = """
+CREATE TABLE IF NOT EXISTS blacklist (
+  user_id INTEGER PRIMARY KEY,
+  reason TEXT NOT NULL DEFAULT '',
+  added_ts INTEGER NOT NULL,
+  added_by TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admins (
+  user_id INTEGER PRIMARY KEY,
+  added_ts INTEGER NOT NULL,
+  added_by TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  actor TEXT NOT NULL,
+  module TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  detail_json TEXT,
+  reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_ts ON admin_audit(ts);
+
+CREATE TABLE IF NOT EXISTS bot_heartbeat (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  ts INTEGER NOT NULL,
+  pid INTEGER NOT NULL,
+  version TEXT NOT NULL
+);
+"""
+
 
 class Database:
     """Async SQLite database manager."""
@@ -161,6 +196,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 3;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 3.")
+
+        if version < 4:
+            logger.info("Applying SQLite migration v4...")
+            await self.conn.executescript(MIGRATION_V4)
+            await self.conn.execute("PRAGMA user_version = 4;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 4.")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
