@@ -247,5 +247,41 @@ blackjack table) and G4 (poker) get their own plans after this phase is reviewed
 
 ---
 
+## Phase 9 — Admin panel
+
+**Goal:** A local, modular web admin panel for the owner, plus the moderation primitives it
+manages. Spec: `docs/superpowers/specs/2026-10-05-admin-panel-design.md`. Phase P-A1 plan:
+`docs/superpowers/plans/2026-10-05-admin-panel-pa1-moderation.md`. P-A2 to P-A6 each get their
+own plan after the previous phase is reviewed.
+
+- [x] P-A1 Bot-side moderation: migration v4, `ModerationStore`, `YokaiTree` and view gates,
+      admin widening, voice-earning skip, heartbeat.
+- [ ] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
+- [ ] P-A3 Access (blacklist/adminlist) and Audit modules.
+- [ ] P-A4 Users module (profiles, ledger-safe balance edits).
+- [ ] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
+- [ ] P-A6 Logs module (current and rotated, live tail).
+
+**Acceptance criteria (P-A1)**
+- Schema version is 4; a v3 database upgrades with its rows intact.
+- A blacklisted user gets an ephemeral "Access blocked" embed on every slash command and view
+  button; autocomplete is denied silently; the owner can never be blocked.
+- `/diag` and `/economy-admin` work for the owner and for adminlist members, and refuse others
+  with an "Admins only" embed; a user on both lists is not an admin.
+- A change to either table takes effect within about 5 seconds, with no restart.
+- A moderation read failure never breaks commands (last good copy, else fail open).
+- Blacklisted members earn no voice Renown; the other human in the channel still does.
+- `bot_heartbeat` is refreshed every 30 s while connected and cleared on a clean shutdown.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Insert a row into `blacklist` for a test account (columns: `user_id`,
+  `reason`, `added_ts`, `added_by`; any SQLite tool or a short `sqlite3` script works), wait 5
+  seconds, then run `/ping` and press a button as that account: both are refused. Delete the
+  row and confirm access returns. Add an account to `admins` and confirm `/diag` works for it.
+  Watch `bot_heartbeat.ts` advance every 30 s, and vanish after stopping the bot with Ctrl+C.
+
+**STOP — owner review.**
+
+---
+
 ## Later (do not start without owner approval)
 Hybrid recommender using local play/skip data, custom model, autoplay, `/search` picker, lyrics, Lavalink engine, new entertainment and QoL modules, `/privacy` data commands.

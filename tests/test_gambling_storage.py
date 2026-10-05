@@ -56,7 +56,7 @@ async def test_a_v2_database_upgrades_to_v3_without_losing_wallets() -> None:
         await db.initialize()
         async with db.conn.execute("PRAGMA user_version;") as cursor:
             row = await cursor.fetchone()
-        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION == 3
+        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
         assert await _balance(db, 7) == 321
         async with db.conn.execute(
             "SELECT name FROM sqlite_master WHERE name = 'gambling_bets';"
