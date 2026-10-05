@@ -87,3 +87,28 @@ async def test_a_failed_beat_does_not_kill_the_loop() -> None:
         await asyncio.sleep(0.01)
     await writer.stop()
     assert db.write_heartbeat.await_count >= 2
+
+
+async def test_a_closed_connection_valueerror_does_not_kill_the_loop() -> None:
+    """aiosqlite raises ValueError while its connection is closing; the loop must survive."""
+    db = MagicMock()
+    db.write_heartbeat = AsyncMock(side_effect=[ValueError("no active connection"), None, None])
+    db.clear_heartbeat = AsyncMock()
+    writer = HeartbeatWriter(db, version="1", interval_s=0.01)
+    writer.start()
+    for _ in range(200):
+        if db.write_heartbeat.await_count >= 2:
+            break
+        await asyncio.sleep(0.01)
+    await writer.stop()
+    assert db.write_heartbeat.await_count >= 2
+
+
+async def test_stop_survives_a_closed_connection_when_clearing_the_row() -> None:
+    db = MagicMock()
+    db.write_heartbeat = AsyncMock()
+    db.clear_heartbeat = AsyncMock(side_effect=ValueError("no active connection"))
+    writer = HeartbeatWriter(db, version="1", interval_s=60)
+    writer.start()
+    await asyncio.sleep(0)
+    await writer.stop()  # must not raise, or bot.close() would skip closing the database

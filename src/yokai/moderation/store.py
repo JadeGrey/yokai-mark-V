@@ -19,7 +19,8 @@ class ModerationStore:
 
     The panel edits the tables from another process, so there is no push channel: the cache
     simply expires after `ttl_s` seconds and the next check reloads. The owner is special-cased
-    and never touches the database.
+    and never touches the database. A refresh runs inside `interaction_check`, before Discord is
+    acknowledged, so it is capped at `refresh_timeout_s` and a slow read counts as a failed one.
     """
 
     def __init__(
@@ -28,10 +29,12 @@ class ModerationStore:
         owner_id: int,
         ttl_s: float = 5.0,
         clock: Callable[[], float] = time.monotonic,
+        refresh_timeout_s: float = 1.0,
     ) -> None:
         self._db = db
         self.owner_id = owner_id
         self.ttl_s = ttl_s
+        self.refresh_timeout_s = refresh_timeout_s
         self._clock = clock
         self._lock = asyncio.Lock()
         self._loaded_at: Optional[float] = None
@@ -62,8 +65,11 @@ class ModerationStore:
             if self._is_fresh():  # another waiter refreshed while we queued for the lock
                 return
             try:
-                blacklisted, admins = await self._db.get_moderation_lists()
-            except (sqlite3.Error, RuntimeError) as exc:
+                blacklisted, admins = await asyncio.wait_for(
+                    self._db.get_moderation_lists(), timeout=self.refresh_timeout_s
+                )
+            # ValueError: aiosqlite raises it (not sqlite3.Error) once its connection is closed.
+            except (sqlite3.Error, RuntimeError, ValueError, TimeoutError) as exc:
                 # Keep the last good copy (empty, i.e. fail open, if there never was one) and
                 # wait one TTL before trying again so a broken DB is not hit on every command.
                 logger.warning("Could not refresh moderation lists, using the last copy: %s", exc)

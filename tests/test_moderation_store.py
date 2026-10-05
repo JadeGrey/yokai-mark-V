@@ -23,11 +23,15 @@ def make_store(
     black: frozenset[int] = frozenset(),
     admins: frozenset[int] = frozenset(),
     ttl_s: float = 5.0,
+    refresh_timeout_s: float = 1.0,
 ) -> tuple[ModerationStore, MagicMock, FakeClock]:
     db = MagicMock()
     db.get_moderation_lists = AsyncMock(return_value=(black, admins))
     clock = FakeClock()
-    return ModerationStore(db, owner_id=OWNER, ttl_s=ttl_s, clock=clock), db, clock
+    store = ModerationStore(
+        db, owner_id=OWNER, ttl_s=ttl_s, clock=clock, refresh_timeout_s=refresh_timeout_s
+    )
+    return store, db, clock
 
 
 async def test_blacklisted_user_is_reported() -> None:
@@ -99,3 +103,27 @@ async def test_failed_first_load_fails_open_and_does_not_hammer_the_db() -> None
     db.get_moderation_lists.side_effect = None
     db.get_moderation_lists.return_value = (frozenset({5}), frozenset())
     assert await store.is_blacklisted(5) is True
+
+
+async def test_a_closed_connection_valueerror_is_treated_like_a_failed_read() -> None:
+    """aiosqlite raises ValueError (not sqlite3.Error) once its connection is closed."""
+    store, db, _ = make_store(black=frozenset({5}))
+    assert await store.is_blacklisted(5) is True
+
+    store._loaded_at = None  # force a refresh
+    db.get_moderation_lists.side_effect = ValueError("no active connection")
+    assert await store.is_blacklisted(5) is True  # last good copy, no exception
+
+
+async def test_a_hung_refresh_times_out_and_keeps_the_last_copy() -> None:
+    """A slow DB must not hold an interaction past Discord's 3 s acknowledgement window."""
+    store, db, clock = make_store(black=frozenset({5}), refresh_timeout_s=0.05)
+    assert await store.is_blacklisted(5) is True
+
+    async def hang() -> tuple[frozenset[int], frozenset[int]]:
+        await asyncio.sleep(30)
+        return frozenset(), frozenset()
+
+    clock.now += 6
+    db.get_moderation_lists.side_effect = hang
+    assert await asyncio.wait_for(store.is_blacklisted(5), timeout=2) is True

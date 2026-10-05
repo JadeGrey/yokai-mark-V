@@ -47,7 +47,8 @@ class HeartbeatWriter:
         self._task = None
         try:
             await self._db.clear_heartbeat()
-        except (sqlite3.Error, RuntimeError) as exc:
+        # ValueError: aiosqlite raises it (not sqlite3.Error) once its connection is closed.
+        except (sqlite3.Error, RuntimeError, ValueError) as exc:
             logger.warning("Could not clear the heartbeat on shutdown: %s", exc)
 
     async def beat(self) -> None:
@@ -58,6 +59,6 @@ class HeartbeatWriter:
         while True:
             try:
                 await self.beat()
-            except (sqlite3.Error, RuntimeError) as exc:
+            except (sqlite3.Error, RuntimeError, ValueError) as exc:
                 logger.warning("Heartbeat write failed: %s", exc)
             await asyncio.sleep(self.interval_s)

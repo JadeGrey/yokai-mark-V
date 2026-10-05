@@ -116,6 +116,13 @@ gambling results per game, top played tracks, command counts. Edits:
 - *Reset daily cooldown:* clears `last_daily_ts`, audited.
 The panel shows IDs only; it never calls Discord.
 
+*Cross-process write rule (from the P-A1 review, binding on P-A4/P-A5):* the bot's `_write_lock`
+only serializes coroutines inside the bot process, and several bot paths (`pay`, `claim_daily`)
+compute `balance_after` from a balance they read earlier. Panel writes therefore use
+`BEGIN IMMEDIATE`, relative updates (`balance = balance + ?`), and re-read the balance inside the
+same transaction before writing the ledger row. The P-A4 plan must also review whether the bot's
+read-then-write paths need the same treatment.
+
 **Database.** Per-table row counts and file size; paged read-only table browser (table names
 validated against `sqlite_master`); `PRAGMA integrity_check`; VACUUM; backup via the SQLite online
 backup API to `BACKUP_DIR/yokai-<timestamp>.db`; list/delete backups; restore. Restore takes a

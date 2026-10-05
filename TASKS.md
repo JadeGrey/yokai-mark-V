@@ -258,7 +258,8 @@ own plan after the previous phase is reviewed.
       admin widening, voice-earning skip, heartbeat.
 - [ ] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
 - [ ] P-A3 Access (blacklist/adminlist) and Audit modules.
-- [ ] P-A4 Users module (profiles, ledger-safe balance edits).
+- [ ] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
+      cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
 - [ ] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
 - [ ] P-A6 Logs module (current and rotated, live tail).
 
