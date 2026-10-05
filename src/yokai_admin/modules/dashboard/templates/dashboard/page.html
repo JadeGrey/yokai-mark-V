@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Yokai admin{% endblock %}
+{% block content %}
+  {% if load_errors %}
+  <div class="notice" role="status">
+    <strong>{{ load_errors|length }} module{{ "s" if load_errors|length != 1 }} did not load.</strong>
+    <ul>
+      {% for slot in load_errors %}<li><code>{{ slot.path }}</code>: {{ slot.error }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% include "dashboard/_status.html" %}
+{% endblock %}

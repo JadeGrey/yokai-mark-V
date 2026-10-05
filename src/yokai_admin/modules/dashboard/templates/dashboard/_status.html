@@ -1,0 +1,54 @@
+<section id="status" hx-get="/m/dashboard/status" hx-trigger="every 5s" hx-swap="outerHTML">
+  <div class="status">
+    <div class="status-mark">
+      <div class="ping" data-state="{{ 'online' if status and status.state == 'online' else 'offline' }}" aria-hidden="true">
+        <span class="ping-ring"></span><span class="ping-ring"></span>
+      </div>
+    </div>
+    <div>
+      <h1 class="status-word">{% if not status %}No data{% elif status.state == "online" %}Online{% else %}Offline{% endif %}</h1>
+      <p class="status-note">{{ note }}</p>
+    </div>
+  </div>
+
+  {% if stats %}
+  <dl class="readouts">
+    <dt>Database size</dt><dd>{{ db_size }}</dd>
+    <dt>Schema version</dt><dd>{{ stats.schema_version }}</dd>
+    <dt>Wallets</dt><dd>{{ stats.wallets }}</dd>
+    <dt>Commands in the last 24 hours</dt><dd>{{ stats.commands_24h }}</dd>
+    {% if status and status.version %}<dt>Bot version</dt><dd>{{ status.version }}</dd>{% endif %}
+    {% if status and status.pid %}<dt>Process ID</dt><dd>{{ status.pid }}</dd>{% endif %}
+  </dl>
+  {% endif %}
+
+  {% if tiles %}
+  <div class="section">
+    <h3>Modules</h3>
+    <dl class="readouts">
+      {% for result in tiles %}
+        {% if result.tile %}
+          <dt>{{ result.tile.title }}</dt>
+          <dd>
+            <span class="mark" data-status="{{ result.tile.status }}"></span>
+            <span class="sr-only">{{ result.tile.status }}: </span>{{ result.tile.value }}
+            {% if result.tile.detail %}<span class="detail">{{ result.tile.detail }}</span>{% endif %}
+          </dd>
+        {% else %}
+          <dt>{{ result.module_title }}</dt>
+          <dd><span class="mark" data-status="error"></span><span class="sr-only">error: </span>{{ result.error }}</dd>
+        {% endif %}
+      {% endfor %}
+    </dl>
+  </div>
+  {% endif %}
+
+  <div class="section">
+    <h3>Recent errors</h3>
+    {% if errors %}
+      <pre class="log">{{ errors|join("\n") }}</pre>
+    {% else %}
+      <p class="empty">No errors in the current log.</p>
+    {% endif %}
+  </div>
+</section>
