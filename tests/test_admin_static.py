@@ -1,0 +1,56 @@
+"""Tests that the vendored assets are intact and the stylesheet stays offline and accessible."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from pathlib import Path
+
+STATIC = Path("src/yokai_admin/static")
+
+
+def _css() -> str:
+    return (STATIC / "panel.css").read_text(encoding="utf-8")
+
+
+def test_vendored_files_match_their_recorded_hashes() -> None:
+    notes = (STATIC / "VENDORED.md").read_text(encoding="utf-8")
+    entries = re.findall(r"^- (\S+) sha256:([0-9a-f]{64})$", notes, flags=re.MULTILINE)
+    assert {name for name, _ in entries} >= {"vendor/htmx.min.js", "fonts/Archivo-variable.woff2"}
+    for name, digest in entries:
+        assert hashlib.sha256((STATIC / name).read_bytes()).hexdigest() == digest, name
+
+
+def test_the_font_license_ships_with_the_font() -> None:
+    assert "SIL Open Font License" in (STATIC / "fonts" / "OFL.txt").read_text(encoding="utf-8")
+
+
+def test_htmx_is_the_minified_2x_build() -> None:
+    text = (STATIC / "vendor" / "htmx.min.js").read_text(encoding="utf-8")
+    assert "htmx" in text and len(text) > 40_000 and 'version:"2.' in text
+
+
+def test_the_stylesheet_references_nothing_external() -> None:
+    css = _css()
+    assert "http://" not in css and "https://" not in css and "@import" not in css
+
+
+def test_the_stylesheet_defines_the_palette_and_both_themes() -> None:
+    css = _css()
+    for token in ("--hull", "--panel", "--ink", "--slate", "--line", "--sonar"):
+        assert f"{token}:" in css
+    for token in ("--flare", "--lichen", "--amber"):
+        assert f"{token}:" in css
+    assert "prefers-color-scheme: dark" in css
+
+
+def test_motion_respects_reduced_motion_and_focus_is_visible() -> None:
+    css = _css()
+    assert "prefers-reduced-motion: reduce" in css
+    assert ":focus-visible" in css
+
+
+def test_status_markers_differ_by_shape_not_only_color() -> None:
+    css = _css()
+    assert '.mark[data-status="warn"]' in css and '.mark[data-status="error"]' in css
+    assert "border-radius: 0" in css
