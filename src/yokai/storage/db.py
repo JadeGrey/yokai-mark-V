@@ -211,6 +211,32 @@ class Database:
             await cursor.fetchone()
         return (time.perf_counter() - start) * 1000.0
 
+    async def get_moderation_lists(self) -> tuple[frozenset[int], frozenset[int]]:
+        """Return (blacklisted user ids, admin user ids). Read-only; the panel writes these."""
+        async with self.conn.execute("SELECT user_id FROM blacklist;") as cursor:
+            blacklisted = frozenset(row[0] for row in await cursor.fetchall())
+        async with self.conn.execute("SELECT user_id FROM admins;") as cursor:
+            admins = frozenset(row[0] for row in await cursor.fetchall())
+        return blacklisted, admins
+
+    async def write_heartbeat(self, pid: int, version: str, now: Optional[int] = None) -> None:
+        """Upsert the single liveness row the admin panel reads to show bot online/offline."""
+        ts = int(time.time()) if now is None else now
+        async with self._write_lock:
+            await self.conn.execute(
+                "INSERT INTO bot_heartbeat (id, ts, pid, version) VALUES (1, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET ts = excluded.ts, pid = excluded.pid, "
+                "version = excluded.version;",
+                (ts, pid, version),
+            )
+            await self.conn.commit()
+
+    async def clear_heartbeat(self) -> None:
+        """Remove the liveness row so the panel shows offline immediately after a clean stop."""
+        async with self._write_lock:
+            await self.conn.execute("DELETE FROM bot_heartbeat WHERE id = 1;")
+            await self.conn.commit()
+
     async def log_command(self, user_id: int, command: str) -> None:
         """Record command execution to command_log."""
         now = int(time.time())

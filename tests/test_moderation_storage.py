@@ -83,3 +83,33 @@ async def test_bot_heartbeat_allows_only_one_row(db: Database) -> None:
         await db.conn.execute(
             "INSERT INTO bot_heartbeat (id, ts, pid, version) VALUES (2, 1, 1, 'x');"
         )
+
+
+async def test_get_moderation_lists_is_empty_by_default(db: Database) -> None:
+    assert await db.get_moderation_lists() == (frozenset(), frozenset())
+
+
+async def test_get_moderation_lists_returns_both_lists(db: Database) -> None:
+    await db.conn.execute(
+        "INSERT INTO blacklist (user_id, reason, added_ts, added_by) "
+        "VALUES (5, 'spam', 1, 'panel');"
+    )
+    await db.conn.execute(
+        "INSERT INTO admins (user_id, added_ts, added_by) VALUES (7, 1, 'panel');"
+    )
+    await db.conn.commit()
+    assert await db.get_moderation_lists() == (frozenset({5}), frozenset({7}))
+
+
+async def test_write_heartbeat_upserts_a_single_row(db: Database) -> None:
+    await db.write_heartbeat(pid=10, version="0.1.0", now=100)
+    await db.write_heartbeat(pid=11, version="0.1.1", now=130)
+    async with db.conn.execute("SELECT id, ts, pid, version FROM bot_heartbeat;") as cursor:
+        assert [tuple(r) for r in await cursor.fetchall()] == [(1, 130, 11, "0.1.1")]
+
+
+async def test_clear_heartbeat_removes_the_row(db: Database) -> None:
+    await db.write_heartbeat(pid=10, version="0.1.0", now=100)
+    await db.clear_heartbeat()
+    async with db.conn.execute("SELECT COUNT(*) FROM bot_heartbeat;") as cursor:
+        assert (await cursor.fetchone())[0] == 0  # type: ignore[index]
