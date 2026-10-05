@@ -35,7 +35,8 @@ voice, etc.), Discord username lookup, `/blacklist` slash commands. These go on 
 src/yokai/moderation/          bot side: ModerationStore (cache), is_admin / is_blacklisted
 src/yokai/heartbeat.py         bot side: 30 s heartbeat writer task
 src/yokai_admin/
-  __main__.py                  build app, pick port, open browser at token URL
+  __main__.py                  `python -m yokai_admin`: load settings, check schema, serve
+  launch.py                    build_panel (app + single-use launch URL), run (uvicorn on loopback)
   app.py                       FastAPI factory, auth/CSRF/Host middleware, module mounting
   core/
     db.py                      sync sqlite3 access (BEGIN IMMEDIATE, busy_timeout)
@@ -44,7 +45,7 @@ src/yokai_admin/
     module.py                  AdminModule dataclass + registry validation
     templating.py              Jinja env, base layout, nav
   modules/
-    __init__.py                explicit MODULES = [...] list
+    __init__.py                explicit MODULE_PATHS tuple of "package.module:NAME" strings
     dashboard/ users/ database/ access/ logs/ audit/
   static/                      htmx.min.js, css
   templates/                   base.html
@@ -56,11 +57,15 @@ The bot remains the single schema owner. The panel never runs migrations; at sta
 
 ## 4. Module contract
 
-Each module package exports `MODULE = AdminModule(id, title, icon, router, nav_order, tile=None)`.
-`modules/__init__.py` holds an explicit `MODULES` list (no auto-discovery: no import magic, and a
-broken module cannot vanish silently). Adding a feature = one package + one line.
+Each module package exports
+`MODULE = AdminModule(id, title, router, nav_order, templates_dir=None, tile=None)` (no icon: the
+rail is text-only). `modules/__init__.py` holds an explicit `MODULE_PATHS` tuple of
+`"package.module:NAME"` strings (no auto-discovery: no import magic, and a broken module cannot
+vanish silently). The loader imports each path inside an isolation boundary. Adding a feature =
+one package + one line.
 
-- The core builds the sidebar from `MODULES` and mounts each `router` at `/m/<id>`.
+- The core builds the sidebar from the loaded modules and mounts each `router` at `/m/<id>`;
+  each module's own `templates_dir` is added to the template search path.
 - `tile` is an optional callable returning a small dashboard card (`title`, `value`, optional
   `status`). This is how future bot features surface status on the home page.
 - A module that raises at import or while rendering its tile is shown as "errored" in the nav and
@@ -141,8 +146,11 @@ file, download. Log lines are HTML-escaped when rendered.
 ## 8. Security
 
 - Binds to `127.0.0.1` only. On launch, a random token is generated and the browser is opened at
-  `http://127.0.0.1:<port>/?token=...`; the token is exchanged for an HttpOnly,
-  SameSite=Strict session cookie and then dropped from the URL.
+  `http://127.0.0.1:<port>/auth?token=...`; the token works exactly once and is exchanged for an
+  HttpOnly, SameSite=Strict session cookie (12 hours), then the browser is redirected to `/`. The
+  launch URL is printed to the console only, never to a log file.
+- Every response carries a strict Content-Security-Policy (`default-src 'none'`, scripts, styles
+  and fonts from `'self'` only) and `Cache-Control: no-store` for pages; all assets are vendored.
 - Every state-changing request requires a CSRF token; `Host` and `Origin` are validated against
   localhost to defeat DNS rebinding.
 - Never render or log tokens, cookies or environment values. All SQL parameterized.

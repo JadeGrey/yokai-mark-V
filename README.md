@@ -151,6 +151,16 @@ python -m yokai
 
 ---
 
+## Admin panel
+
+A local web panel for the owner (bot status today; users, database tools, access lists and logs arrive in later phases). It runs as its own process, listens on `127.0.0.1` only, and works even while the bot is off.
+
+```powershell
+python -m yokai_admin
+```
+
+It opens your browser through a **single-use link** (also printed in the console). If you close the tab, restart the panel to get a new link. Settings in `.env`: `ADMIN_PORT` (default `8765`), `DB_PATH`, `LOG_DIR`. The panel never needs the Discord token, and it only reads the database in this version.
+
 ## Updating yt-dlp
 
 YouTube frequently updates player algorithms and cipher signatures. Keeping `yt-dlp` up to date ensures uninterrupted streaming:

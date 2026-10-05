@@ -256,7 +256,7 @@ own plan after the previous phase is reviewed.
 
 - [x] P-A1 Bot-side moderation: migration v4, `ModerationStore`, `YokaiTree` and view gates,
       admin widening, voice-earning skip, heartbeat.
-- [ ] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
+- [x] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
 - [ ] P-A3 Access (blacklist/adminlist) and Audit modules.
 - [ ] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
       cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
@@ -279,6 +279,27 @@ own plan after the previous phase is reviewed.
   seconds, then run `/ping` and press a button as that account: both are refused. Delete the
   row and confirm access returns. Add an account to `admins` and confirm `/diag` works for it.
   Watch `bot_heartbeat.ts` advance every 30 s, and vanish after stopping the bot with Ctrl+C.
+
+**Acceptance criteria (P-A2)**
+- `python -m yokai_admin` serves on `127.0.0.1:ADMIN_PORT`, opens the browser through a single-use
+  link, and refuses everything else (no cookie: locked page; used or wrong token: refused;
+  foreign `Host` or `Origin`: refused; state-changing requests without the CSRF header: refused).
+- Every response carries a strict CSP; the panel makes no outbound requests (htmx and the font
+  are vendored with recorded hashes).
+- A module exports `MODULE` and is listed in `MODULE_PATHS`; one that fails to import appears as
+  failed in the nav and on the Dashboard without stopping the panel; duplicate ids stop startup.
+- The Dashboard shows online/offline from the heartbeat (90 s window), database size, schema,
+  wallets, commands in 24 h, module tiles and recent log errors, refreshes every 5 s, and still
+  renders with a reason when the database is missing, too old or unreadable.
+- Hostile text (log lines, module paths, query parameters) is escaped on screen.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(checked in headless Edge while building)* dark theme, light theme, a 500 px layout, the offline
+  state and the sonar ring mid-animation render as designed.
+- *(manual, real browser with the real bot)* Open the panel: the status reads Online and a sonar
+  ring plays about every 5 s; stop the bot with Ctrl+C and within a few seconds the Dashboard
+  reads Offline with no ring; enable "reduce motion" and confirm the ring stops; reuse the launch
+  link in another browser and confirm it is refused; start a second panel and confirm the port
+  message.
 
 **STOP — owner review.**
 
