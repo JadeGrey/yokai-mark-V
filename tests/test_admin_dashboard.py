@@ -76,6 +76,7 @@ def test_the_status_fragment_has_no_shell_and_keeps_polling(tmp_path: Path) -> N
     assert "<html" not in fragment and "<aside" not in fragment
     assert 'hx-get="/m/dashboard/status"' in fragment and 'hx-trigger="every 5s"' in fragment
     assert 'hx-swap="outerHTML"' in fragment
+    assert 'class="stale-note"' in fragment  # shown by panel.js when polling fails
     assert 'id="status"' in full and csrf in full
 
 

@@ -68,8 +68,9 @@ one package + one line.
   each module's own `templates_dir` is added to the template search path.
 - `tile` is an optional callable returning a small dashboard card (`title`, `value`, optional
   `status`). This is how future bot features surface status on the home page.
-- A module that raises at import or while rendering its tile is shown as "errored" in the nav and
-  on the dashboard; the rest of the panel keeps working.
+- A module that fails to import is shown as "failed" in the nav and on the dashboard; one whose
+  tile raises while rendering shows an error row on the dashboard only (a tile read is transient,
+  the module itself still works). The rest of the panel keeps working either way.
 - Duplicate `id`s fail fast at startup.
 
 ## 5. Data model (migration v4, in `yokai/storage/db.py`)
@@ -148,7 +149,10 @@ file, download. Log lines are HTML-escaped when rendered.
 - Binds to `127.0.0.1` only. On launch, a random token is generated and the browser is opened at
   `http://127.0.0.1:<port>/auth?token=...`; the token works exactly once and is exchanged for an
   HttpOnly, SameSite=Strict session cookie (12 hours), then the browser is redirected to `/`. The
-  launch URL is printed to the console only, never to a log file.
+  launch URL is printed to the console only, never to a log file, and only after the port is
+  bound, so a taken port can never send the browser to a link whose server did not start.
+- A live page whose session ended is reloaded into the locked screen (`HX-Refresh`), and a page
+  whose polling fails is marked stale, so an old "Online" never looks current.
 - Every response carries a strict Content-Security-Policy (`default-src 'none'`, scripts, styles
   and fonts from `'self'` only) and `Cache-Control: no-store` for pages; all assets are vendored.
 - Every state-changing request requires a CSRF token; `Host` and `Origin` are validated against

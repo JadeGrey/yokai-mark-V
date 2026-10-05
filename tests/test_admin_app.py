@@ -38,7 +38,7 @@ def test_the_shell_lists_modules_in_order_and_marks_the_active_one(tmp_path: Pat
         assert re.search(r'<a href="/m/demo" aria-current="page">Demo</a>', page)
         assert '<a href="/m/alpha">Alpha</a>' in page
         assert f'"X-CSRF-Token": "{csrf}"' in page  # HTMX sends it on every request
-        assert "htmx.min.js" in page and "panel.css" in page
+        assert "htmx.min.js" in page and "panel.css" in page and "/static/panel.js" in page
 
 
 def test_hostile_text_in_a_page_and_in_a_module_path_is_escaped(tmp_path: Path) -> None:
@@ -81,10 +81,3 @@ def test_static_assets_are_served(tmp_path: Path) -> None:
     with panel_client(tmp_path, [f"{H}:ALPHA"], login=False) as (client, _):
         css = client.get("/static/panel.css")
         assert css.status_code == 200 and "text/css" in css.headers["content-type"]
-
-
-def test_the_startup_hook_runs_once(tmp_path: Path) -> None:
-    calls: list[int] = []
-    with panel_client(tmp_path, [f"{H}:ALPHA"], on_startup=lambda: calls.append(1)):
-        pass
-    assert calls == [1]

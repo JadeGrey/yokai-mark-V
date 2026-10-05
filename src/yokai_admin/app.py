@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Callable, Optional, Sequence
+from typing import Sequence
 
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, Response
@@ -20,26 +19,12 @@ def create_app(
     settings: PanelSettings,
     module_paths: Sequence[str],
     auth: AuthState,
-    *,
-    on_startup: Optional[Callable[[], None]] = None,
 ) -> FastAPI:
     """Build the panel. Duplicate module ids raise `ModuleConfigError`; other module failures
     are shown in the nav and never stop the app."""
     slots = load_modules(module_paths)
 
-    @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        if on_startup is not None:
-            on_startup()
-        yield
-
-    app = FastAPI(
-        title="Yokai admin",
-        lifespan=lifespan,
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-    )
+    app = FastAPI(title="Yokai admin", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
     app.state.slots = slots
     app.state.templates = build_templates(slots)

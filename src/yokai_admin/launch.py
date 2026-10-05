@@ -1,13 +1,12 @@
-"""Starting the panel: build the app and the single-use launch URL, then serve on loopback."""
+"""Starting the panel: build the server and the single-use launch URL, then serve on loopback."""
 
 from __future__ import annotations
 
 import logging
 import webbrowser
-from typing import Callable
+from typing import Callable, Optional
 
 import uvicorn
-from fastapi import FastAPI
 
 from yokai_admin.app import create_app
 from yokai_admin.core.auth import AuthState
@@ -29,39 +28,71 @@ def preflight(settings: PanelSettings) -> None:
         require_schema(conn)
 
 
-def build_panel(
-    settings: PanelSettings, *, opener: Callable[[str], object] = webbrowser.open
-) -> tuple[FastAPI, str]:
-    """Create the app and its launch URL; `opener` is called once when the server starts."""
+class _AnnouncingServer(uvicorn.Server):
+    """A uvicorn server that calls `announce` only once the port is bound.
+
+    uvicorn runs the ASGI lifespan startup *before* it binds the socket, so announcing from a
+    lifespan hook would open the browser even when the port turns out to be taken.
+    """
+
+    def __init__(self, config: uvicorn.Config, announce: Callable[[], None]) -> None:
+        super().__init__(config)
+        self._announce = announce
+
+    async def startup(self, sockets: Optional[list] = None) -> None:  # type: ignore[type-arg]
+        await super().startup(sockets=sockets)  # exits the process (SystemExit) if the bind fails
+        if self.started and not self.should_exit:
+            self._announce()
+
+
+def build_server(
+    settings: PanelSettings,
+    *,
+    opener: Optional[Callable[[str], object]] = webbrowser.open,
+) -> tuple[uvicorn.Server, str]:
+    """Create the server and its single-use launch URL. Nothing is opened or logged until the
+    server has bound its port; then the URL is printed to the console and passed to `opener`."""
     auth = AuthState()
     url = auth_url(settings.port, auth.token)
 
     def announce() -> None:
         # Console only: the root logger of `python -m yokai_admin` has no file handler.
         logger.info("Admin panel ready. This link works once: %s", url)
-        opener(url)
+        if opener is not None:
+            opener(url)
 
-    return create_app(settings, MODULE_PATHS, auth, on_startup=announce), url
-
-
-def run(settings: PanelSettings, *, open_browser: bool = True) -> int:
-    """Serve the panel until stopped. Returns 1 when the port cannot be used."""
-    opener: Callable[[str], object] = webbrowser.open if open_browser else (lambda _url: None)
-    app, _ = build_panel(settings, opener=opener)
-    server = uvicorn.Server(
-        uvicorn.Config(
-            app,
-            host=HOST,
-            port=settings.port,
-            log_config=None,  # keep our own logging setup
-            log_level="warning",
-            access_log=False,  # request lines would include the launch token
-        )
+    config = uvicorn.Config(
+        create_app(settings, MODULE_PATHS, auth),
+        host=HOST,
+        port=settings.port,
+        log_config=None,  # keep our own logging setup
+        log_level="warning",
+        access_log=False,  # request lines would include the launch token
     )
+    return _AnnouncingServer(config, announce), url
+
+
+def run(
+    settings: PanelSettings,
+    *,
+    opener: Optional[Callable[[str], object]] = webbrowser.open,
+) -> int:
+    """Serve the panel until stopped. Returns 0 on a normal stop, 1 when the port is unusable."""
+    server, _ = build_server(settings, opener=opener)
     try:
         server.run()
-    # uvicorn logs a bind failure and then calls sys.exit(1); an OSError can also escape.
-    except (OSError, SystemExit) as exc:
+    except KeyboardInterrupt:
+        logger.info("Admin panel stopped.")
+        return 0
+    except SystemExit:
+        # uvicorn has already logged the operating system's reason, then exits with code 1.
+        logger.error(
+            "Could not listen on %s:%d. Set ADMIN_PORT to a free port in .env.",
+            HOST,
+            settings.port,
+        )
+        return 1
+    except OSError as exc:
         logger.error(
             "Could not listen on %s:%d (%s). Set ADMIN_PORT to a free port in .env.",
             HOST,
@@ -76,4 +107,5 @@ def run(settings: PanelSettings, *, open_browser: bool = True) -> int:
             settings.port,
         )
         return 1
+    logger.info("Admin panel stopped.")
     return 0

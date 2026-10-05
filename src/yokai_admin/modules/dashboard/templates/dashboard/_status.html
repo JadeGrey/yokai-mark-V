@@ -1,4 +1,5 @@
 <section id="status" hx-get="/m/dashboard/status" hx-trigger="every 5s" hx-swap="outerHTML">
+  <p class="stale-note" role="alert">Lost contact with the panel, so this page may be out of date. Restart the panel and reload.</p>
   <div class="status">
     <div class="status-mark">
       <div class="ping" data-state="{{ 'online' if status and status.state == 'online' else 'offline' }}" aria-hidden="true">

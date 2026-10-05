@@ -54,3 +54,11 @@ def test_status_markers_differ_by_shape_not_only_color() -> None:
     css = _css()
     assert '.mark[data-status="warn"]' in css and '.mark[data-status="error"]' in css
     assert "border-radius: 0" in css
+
+
+def test_the_panel_script_marks_the_status_block_stale_when_polling_fails() -> None:
+    script = (STATIC / "panel.js").read_text(encoding="utf-8")
+    for event in ("htmx:sendError", "htmx:responseError", "htmx:timeout"):
+        assert event in script
+    assert "data-stale" in script and "eval(" not in script
+    assert '[data-stale="true"]' in _css()

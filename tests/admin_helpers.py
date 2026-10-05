@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Iterator, Optional, Sequence
+from typing import Iterator, Optional, Sequence
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
@@ -72,12 +72,11 @@ def panel_client(
     db_path: Optional[Path] = None,
     token: str = "t0ken",
     login: bool = True,
-    on_startup: Optional[Callable[[], None]] = None,
 ) -> Iterator[tuple[TestClient, str]]:
     """Run the real app in a TestClient; yields (client, csrf_token) after the token exchange."""
     settings = PanelSettings(db_path=db_path or tmp_path / "yokai.db", log_dir=tmp_path / "logs")
     auth = AuthState(token=token)
-    app = create_app(settings, module_paths, auth, on_startup=on_startup)
+    app = create_app(settings, module_paths, auth)
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as client:
         csrf = ""
         if login:

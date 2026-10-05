@@ -318,6 +318,23 @@ a {
   border-radius: 0;
 }
 
+/* Set by panel.js when a poll fails: an old "Online" must never look current. */
+.stale-note {
+  display: none;
+  margin: 0 0 1.5rem;
+  padding: 0.5rem 1rem;
+  border-left: 3px solid var(--flare);
+}
+
+[data-stale="true"] .stale-note {
+  display: block;
+}
+
+[data-stale="true"] .status,
+[data-stale="true"] .readouts {
+  opacity: 0.45;
+}
+
 .notice {
   margin: 0 0 1.5rem;
   padding: 0.5rem 1rem;

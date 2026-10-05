@@ -154,3 +154,13 @@ def test_security_headers_are_on_every_response_and_pages_are_not_cached(tmp_pat
     assert page.headers["cache-control"] == "no-store"
     assert "cache-control" not in client.get("/static/x.css").headers
     assert "content-security-policy" in client.get("/static/x.css").headers
+
+
+def test_a_locked_htmx_poll_asks_the_browser_to_reload(tmp_path: Path) -> None:
+    """A live page whose session ended must not keep showing stale data: htmx reloads it into
+    the locked page. Plain requests do not get the header."""
+    app, _ = make_app(tmp_path)
+    client = TestClient(app, base_url=BASE)
+    polled = client.get("/", headers={"HX-Request": "true"})
+    assert polled.status_code == 401 and polled.headers["hx-refresh"] == "true"
+    assert "hx-refresh" not in client.get("/").headers

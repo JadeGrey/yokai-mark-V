@@ -81,7 +81,12 @@ class SecurityMiddleware:
 
         session = self.auth.lookup(request.cookies.get(SESSION_COOKIE))
         if session is None:
-            await _text_response(401, _LOCKED_DEFAULT)(scope, receive, send)
+            locked = _text_response(401, _LOCKED_DEFAULT)
+            if request.headers.get("hx-request"):
+                # A live page polling after its session ended must not keep showing old data:
+                # htmx reloads the page, which then lands on the locked screen.
+                locked.headers["HX-Refresh"] = "true"
+            await locked(scope, receive, send)
             return
 
         if method not in SAFE_METHODS:

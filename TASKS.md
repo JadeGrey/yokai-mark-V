@@ -292,6 +292,10 @@ own plan after the previous phase is reviewed.
   wallets, commands in 24 h, module tiles and recent log errors, refreshes every 5 s, and still
   renders with a reason when the database is missing, too old or unreadable.
 - Hostile text (log lines, module paths, query parameters) is escaped on screen.
+- The browser opens and the link is printed only after the port is bound; a taken port exits with
+  code 1 and a hint; Ctrl+C stops the panel quietly (exit 0).
+- A page whose polling fails shows a "Lost contact" notice and dims the old reading; a page whose
+  session ended reloads onto the locked screen.
 - `pytest`, `ruff check` and `ruff format --check` are clean.
 - *(checked in headless Edge while building)* dark theme, light theme, a 500 px layout, the offline
   state and the sonar ring mid-animation render as designed.
