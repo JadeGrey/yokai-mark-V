@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Audit log - Yokai admin{% endblock %}
+{% block content %}
+  <h1 class="page-title">Audit log</h1>
+  <p class="lede">Every change made from this panel, newest first.</p>
+  {% if db_error %}<p class="flash" data-kind="error" role="alert"><span class="sr-only">Problem: </span>{{ db_error }}</p>{% endif %}
+  {% if view %}
+  <form class="filters" method="get" action="/m/audit">
+    <label>Module
+      <select name="module">
+        <option value="">All modules</option>
+        {% for name in view.modules %}<option value="{{ name }}"{% if name == module %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Target (Discord user ID)<input name="target" value="{{ target }}" inputmode="numeric" autocomplete="off"></label>
+    <button type="submit" class="btn">Filter</button>
+    <a href="/m/audit">Clear</a>
+  </form>
+
+  {% if view.rows %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Reason</th><th scope="col">Details</th></tr></thead>
+    <tbody>
+    {% for row in view.rows %}
+      <tr>
+        <td>{{ row.entry.ts|when }}</td>
+        <td>{{ row.label }}</td>
+        <td class="who">{% if row.person %}<strong>{{ row.person.display }}</strong><span class="id">{{ row.person.id }}</span>{% else %}{{ row.entry.target or "-" }}{% endif %}</td>
+        <td>{{ row.entry.reason or "-" }}</td>
+        <td>{{ row.details }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="pager">
+    {% if view.has_newer %}<a href="/m/audit?module={{ module|urlencode }}&amp;target={{ target|urlencode }}&amp;page={{ view.page - 1 }}">Newer</a>{% endif %}
+    {% if view.has_older %}<a href="/m/audit?module={{ module|urlencode }}&amp;target={{ target|urlencode }}&amp;page={{ view.page + 1 }}">Older</a>{% endif %}
+  </p>
+  {% elif module or target %}
+  <p class="empty">No matching entries.</p>
+  {% else %}
+  <p class="empty">No admin actions have been recorded yet.</p>
+  {% endif %}
+  {% endif %}
+{% endblock %}

@@ -10,4 +10,5 @@ from __future__ import annotations
 MODULE_PATHS: tuple[str, ...] = (
     "yokai_admin.modules.dashboard:MODULE",
     "yokai_admin.modules.access:MODULE",
+    "yokai_admin.modules.audit:MODULE",
 )
