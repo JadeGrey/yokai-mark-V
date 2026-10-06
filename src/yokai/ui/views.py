@@ -40,9 +40,9 @@ class BaseView(discord.ui.View):
         """Validate if the interacting user is authorized to use this view."""
         # Imported here, not at module level: moderation.gate imports ui.embeds, whose package
         # imports this module, so a top-level import would be circular.
-        from yokai.moderation.gate import deny_if_blacklisted
+        from yokai.moderation.gate import screen
 
-        if await deny_if_blacklisted(interaction):
+        if await screen(interaction):
             return False
         if self.allowed_user_ids is not None and interaction.user.id not in self.allowed_user_ids:
             err_embed = EmbedFactory.error(
@@ -252,9 +252,9 @@ class RecommendView(BaseView):
         """Allow interaction if user is original requester or in the bot's voice channel."""
         # Imported here, not at module level: moderation.gate imports ui.embeds, whose package
         # imports this module, so a top-level import would be circular.
-        from yokai.moderation.gate import deny_if_blacklisted
+        from yokai.moderation.gate import screen
 
-        if await deny_if_blacklisted(interaction):
+        if await screen(interaction):
             return False
         user = interaction.user
         if not isinstance(user, discord.Member):

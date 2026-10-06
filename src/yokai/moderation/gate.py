@@ -8,6 +8,7 @@ from typing import Optional
 import discord
 from discord import app_commands
 
+from yokai.moderation.names import UserNameCache
 from yokai.moderation.store import ModerationStore
 from yokai.ui.embeds import EmbedFactory, send
 
@@ -49,8 +50,22 @@ async def deny_if_blacklisted(interaction: discord.Interaction) -> bool:
     return True
 
 
+async def screen(interaction: discord.Interaction) -> bool:
+    """Run everything an interaction must pass; True means stop (the user is blacklisted).
+
+    Also remembers the user's current display name for the admin panel.
+    """
+    if await deny_if_blacklisted(interaction):
+        return True
+    names = getattr(interaction.client, "names", None)
+    if isinstance(names, UserNameCache):
+        user = interaction.user
+        await names.touch(user.id, getattr(user, "display_name", None) or getattr(user, "name", ""))
+    return False
+
+
 class YokaiTree(app_commands.CommandTree):
     """Command tree whose global check rejects blacklisted users before any command runs."""
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return not await deny_if_blacklisted(interaction)
+        return not await screen(interaction)

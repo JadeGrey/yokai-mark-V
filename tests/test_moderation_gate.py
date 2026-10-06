@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
-from yokai.moderation.gate import YokaiTree, deny_if_blacklisted
+from yokai.moderation.gate import YokaiTree, deny_if_blacklisted, screen
+from yokai.moderation.names import UserNameCache
 from yokai.moderation.store import ModerationStore
 from yokai.music.models import MusicQueue, Track
 from yokai.music.player import GuildPlayer
@@ -101,3 +102,51 @@ async def test_blacklisted_requester_is_refused_by_the_recommend_view() -> None:
     interaction.user = MagicMock(spec=discord.Member, id=5)
     with patch("yokai.moderation.gate.send", new=AsyncMock()):
         assert await view.interaction_check(interaction) is False
+
+
+def _named_interaction(user_id: int, name: str, store: object, names: object) -> MagicMock:
+    interaction = _interaction(user_id, store)
+    interaction.user = MagicMock(id=user_id, display_name=name)
+    interaction.client.names = names
+    return interaction
+
+
+def _name_db() -> MagicMock:
+    db = MagicMock()
+    db.upsert_user_name = AsyncMock()
+    return db
+
+
+async def test_screen_records_the_name_of_an_allowed_user() -> None:
+    db = _name_db()
+    interaction = _named_interaction(10, "Sami", _store(frozenset({5})), UserNameCache(db))
+    assert await screen(interaction) is False
+    db.upsert_user_name.assert_awaited_once_with(10, "Sami")
+
+
+async def test_screen_does_not_record_or_allow_a_blacklisted_user() -> None:
+    db = _name_db()
+    interaction = _named_interaction(5, "Mallory", _store(frozenset({5})), UserNameCache(db))
+    with patch("yokai.moderation.gate.send", new=AsyncMock()):
+        assert await screen(interaction) is True
+    db.upsert_user_name.assert_not_awaited()
+
+
+async def test_screen_works_when_the_client_has_no_name_cache() -> None:
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), MagicMock())
+    assert await screen(interaction) is False
+
+
+async def test_screen_survives_a_database_error_while_recording() -> None:
+    db = _name_db()
+    db.upsert_user_name.side_effect = ValueError("closed")
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), UserNameCache(db))
+    assert await screen(interaction) is False  # the command still runs
+
+
+async def test_a_live_view_records_names_too() -> None:
+    db = _name_db()
+    view = BaseView(allowed_user_ids=None)
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), UserNameCache(db))
+    assert await view.interaction_check(interaction) is True
+    db.upsert_user_name.assert_awaited_once_with(10, "Sami")

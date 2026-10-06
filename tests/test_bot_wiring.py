@@ -264,3 +264,19 @@ async def test_on_ready_starts_the_heartbeat_and_close_stops_it() -> None:
     ):
         await bot.close()
     stop_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_bot_owns_a_name_cache_and_the_tree_feeds_it() -> None:
+    from yokai.moderation import UserNameCache
+
+    bot = make_bot()
+    assert isinstance(bot.names, UserNameCache)
+    bot.db.get_moderation_lists = AsyncMock(return_value=(frozenset(), frozenset()))
+    bot.db.upsert_user_name = AsyncMock()
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.user = MagicMock(id=7, display_name="Sami")
+    interaction.type = discord.InteractionType.application_command
+    interaction.client = bot
+    assert await bot.tree.interaction_check(interaction) is True
+    bot.db.upsert_user_name.assert_awaited_once_with(7, "Sami")

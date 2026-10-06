@@ -21,7 +21,7 @@ from yokai.errors import YokaiError
 from yokai.gambling.sessions import ActiveGames
 from yokai.health import HealthReport, check_health
 from yokai.heartbeat import HeartbeatWriter
-from yokai.moderation import ModerationStore, YokaiTree
+from yokai.moderation import ModerationStore, UserNameCache, YokaiTree
 from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
 from yokai.music.recommend import YTMusicRadioRecommender
@@ -48,6 +48,7 @@ class YokaiBot(commands.Bot):
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
         self.moderation = ModerationStore(self.db, config.owner_id)
+        self.names = UserNameCache(self.db)
         self.heartbeat = HeartbeatWriter(self.db, __version__)
         self.presence = PresenceManager(self)
         self.searcher = YtMusicSearcher(max_track_seconds=config.max_track_seconds)
