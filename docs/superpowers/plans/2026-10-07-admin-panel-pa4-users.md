@@ -2470,7 +2470,7 @@ Summarize what changed and list what is unverified (the manual real-bot checks a
 
 **Spec coverage (§7 Users, the cross-process write rule, §10, §11 P-A4):** profile with wallet, streak, last daily, recent transactions, gambling per game, top tracks, command counts: Task 3 and 5. Balance adjustment (delta, required reason, floored at 0, `renown_transactions` row with reason `admin`, audit row, one `BEGIN IMMEDIATE` transaction, relative update, re-read inside): Task 4. Daily reset audited: Task 4. "The P-A4 plan must also review whether the bot's read-then-write paths need the same treatment": Task 1 plus the audit table in this plan. Search by ID, extended to list and name search (owner decision). Names via `user_names`: Task 3.
 
-**Placeholders:** none. Three spots tell the implementer to delete a stray note line when writing a test file (marked in place); each names the exact line to drop.
+**Placeholders:** none.
 
 **Type consistency:** `parse_user_id`, `clean_reason`, `InputRefused` (core/inputs); `AccessRefused is InputRefused`; `Person`, `Profile`, `WalletView`, `Txn`, `GameStat`, `TrackStat`, `CommandStat`, `list_people`, `load_profile`, `reason_label`, `DAILY_COOLDOWN_S`, `PAGE_SIZE` (service); `parse_amount`, `ADJUST_CAP`, `AdjustPreview`, `AdjustResult`, `DailyResetResult`, `preview_adjustment`, `adjust_balance`, `reset_daily` (actions); routes and template keys (`profile`, `problem`, `flash`, `user_id`, `preview`, `reason`, `form`) are spelled the same in router and templates.
 
