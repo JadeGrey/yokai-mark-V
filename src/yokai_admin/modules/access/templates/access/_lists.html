@@ -18,7 +18,7 @@
         <tr>
           <td class="who"><strong>{{ e.user.display }}</strong><span class="id">{{ e.user.id }}</span></td>
           <td>{{ e.text }}{% if e.flag %}<span class="flagged">{{ e.flag }}</span>{% endif %}</td>
-          <td>{{ e.added_ts|when }}</td>
+          <td class="when">{{ e.added_ts|when }}</td>
           <td class="actions">{% if can_edit %}<button type="button" class="link-danger" hx-get="/m/access/blacklist/{{ e.user.id }}/confirm" hx-target="closest tr" hx-swap="outerHTML" aria-label="Remove {{ e.user.display }} from the blacklist">Remove</button>{% endif %}</td>
         </tr>
       {% endfor %}
@@ -46,7 +46,7 @@
       {% for e in admins %}
         <tr>
           <td class="who"><strong>{{ e.user.display }}</strong><span class="id">{{ e.user.id }}</span>{% if e.flag %}<span class="flagged">{{ e.flag }}</span>{% endif %}</td>
-          <td>{{ e.added_ts|when }}</td>
+          <td class="when">{{ e.added_ts|when }}</td>
           <td class="actions">{% if can_edit %}<button type="button" class="link-danger" hx-get="/m/access/admins/{{ e.user.id }}/confirm" hx-target="closest tr" hx-swap="outerHTML" aria-label="Remove {{ e.user.display }} from the admin list">Remove</button>{% endif %}</td>
         </tr>
       {% endfor %}

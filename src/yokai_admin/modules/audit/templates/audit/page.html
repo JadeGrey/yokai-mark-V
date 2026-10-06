@@ -23,11 +23,11 @@
     <tbody>
     {% for row in view.rows %}
       <tr>
-        <td>{{ row.entry.ts|when }}</td>
+        <td class="when">{{ row.entry.ts|when }}</td>
         <td>{{ row.label }}</td>
         <td class="who">{% if row.person %}<strong>{{ row.person.display }}</strong><span class="id">{{ row.person.id }}</span>{% else %}{{ row.entry.target or "-" }}{% endif %}</td>
         <td>{{ row.entry.reason or "-" }}</td>
-        <td>{{ row.details }}</td>
+        <td>{{ row.details or "-" }}</td>
       </tr>
     {% endfor %}
     </tbody>

@@ -78,3 +78,14 @@ def test_form_and_table_styles_exist_and_use_palette_tokens_only() -> None:
         assert selector in css
     button_rule = css.split(".btn {")[1].split("}")[0]
     assert "#" not in button_rule  # buttons use palette tokens, never literal colors
+
+
+def test_the_phone_layout_cannot_be_stretched_by_a_wide_table() -> None:
+    """Found in a real browser: with a plain `1fr` track a wide table widened the whole page and
+    clipped text on the right. The phone grid must use minmax(0, 1fr) and tables must scroll
+    inside their own wrapper."""
+    css = _css()
+    phone = css.split("@media (max-width: 48rem) {")[1]
+    assert "grid-template-columns: minmax(0, 1fr);" in phone.split("}")[0]
+    wrapper = css.split(".table-wrap {")[1].split("}")[0]
+    assert "overflow-x: auto;" in wrapper

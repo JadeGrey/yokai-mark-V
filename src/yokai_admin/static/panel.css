@@ -383,7 +383,9 @@ a {
 
 @media (max-width: 48rem) {
   .shell {
-    grid-template-columns: 1fr;
+    /* minmax(0, ...) lets the column shrink below its widest content, so a wide table scrolls
+       inside its wrapper instead of stretching the whole page. */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rail {
@@ -466,6 +468,7 @@ a {
 
 .table {
   width: 100%;
+  min-width: 34rem; /* below this the wrapper scrolls sideways instead of crushing the columns */
   border-collapse: collapse;
 }
 
@@ -480,7 +483,7 @@ a {
 .table td {
   padding: 0.7rem 0.75rem 0.7rem 0;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   border-bottom: 1px solid var(--line);
 }
 
@@ -492,6 +495,16 @@ a {
   display: block;
   font-size: 0.8125rem;
   color: var(--slate);
+  white-space: nowrap; /* a Discord ID is one unit: never break it, so it can be read and copied */
+}
+
+.table td.when {
+  white-space: nowrap;
+}
+
+.table td.who {
+  min-width: 9.5rem;
+  overflow-wrap: normal;
 }
 
 .table .actions {
