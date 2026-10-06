@@ -286,7 +286,7 @@ Privacy: store Discord user IDs, command names, and play events only. No message
 
 ## 11. Dependencies and configuration
 
-**Runtime:** `discord.py[voice]>=2.7.1`, `davey`, `yt-dlp[default]`, `ytmusicapi`, `httpx`, `aiosqlite`, `python-dotenv`, `spotifyscraper` (exact pin); admin panel (`yokai_admin`): `fastapi`, `uvicorn`, `jinja2` (`python-multipart` joins in P-A3). Use stdlib `difflib` for similarity.
+**Runtime:** `discord.py[voice]>=2.7.1`, `davey`, `yt-dlp[default]`, `ytmusicapi`, `httpx`, `aiosqlite`, `python-dotenv`, `spotifyscraper` (exact pin); admin panel (`yokai_admin`): `fastapi`, `uvicorn`, `jinja2`, `python-multipart` (forms). Use stdlib `difflib` for similarity.
 **Dev:** `pytest`, `pytest-asyncio`, `ruff`.
 **External tools on PATH:** `ffmpeg`, `deno`.
 

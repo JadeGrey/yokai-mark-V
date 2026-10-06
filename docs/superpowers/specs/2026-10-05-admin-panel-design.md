@@ -14,7 +14,7 @@ can run admin commands).
 
 **Non-goals (v1):** internet exposure, multi-user panel accounts, Discord OAuth, free-form row
 editing, a read-only SQL console, analytics charts, a config viewer, live bot control (kick from
-voice, etc.), Discord username lookup, `/blacklist` slash commands. These go on a "later" list.
+voice, etc.), `/blacklist` slash commands. These go on a "later" list.
 
 **Assumptions:** single owner, panel never leaves 127.0.0.1, bot and panel share one SQLite file.
 
@@ -73,7 +73,7 @@ one package + one line.
   the module itself still works). The rest of the panel keeps working either way.
 - Duplicate `id`s fail fast at startup.
 
-## 5. Data model (migration v4, in `yokai/storage/db.py`)
+## 5. Data model (migrations v4 and v5, in `yokai/storage/db.py`)
 
 ```sql
 CREATE TABLE IF NOT EXISTS blacklist (
@@ -88,6 +88,8 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_ts ON admin_audit(ts);
 CREATE TABLE IF NOT EXISTS bot_heartbeat (
   id INTEGER PRIMARY KEY CHECK (id = 1), ts INTEGER NOT NULL, pid INTEGER NOT NULL,
   version TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS user_names (
+  user_id INTEGER PRIMARY KEY, display_name TEXT NOT NULL, updated_ts INTEGER NOT NULL);
 ```
 
 `CURRENT_SCHEMA_VERSION` becomes 4. The owner (`OWNER_ID`) is never stored in `admins`; code
@@ -136,7 +138,16 @@ safety backup first, requires typing `RESTORE`, and refuses while the bot appear
 (heartbeat fresh or DB locked), telling the owner to stop the bot. Every action is audited.
 
 **Access.** Blacklist and adminlist add/remove with reason; adding the owner to the blacklist or
-the admins table is rejected; Discord IDs validated as positive integers.
+the admins table is rejected. IDs must be plain ASCII digits (non-ASCII digits that `int()` would
+accept are refused) between 1 and 2^63 - 1. A blacklist add needs a reason of 3 to 200 characters;
+an admin add takes an optional note, kept in the audit log only (the `admins` table has no note
+column). Every removal asks for confirmation. A blacklisted person cannot be made an admin;
+blacklisting an admin keeps the admin row (the blacklist already wins in the bot) and the page
+flags both lists. Without `OWNER_ID` the panel still starts, shows no forms, and refuses edits.
+Every change and its audit entry share one `BEGIN IMMEDIATE` transaction. People are shown by
+display name: the bot remembers each user's latest name in `user_names` (written at most once a
+day per person; control and bidirectional-override characters are stripped), and the panel only
+reads it.
 
 **Logs.** Lists current and rotated files from the log directory (listing only; filenames never
 taken from user input). Paged view with level filter and text search, SSE live-tail of the current
@@ -190,5 +201,5 @@ Each phase gets acceptance criteria in `TASKS.md` when the implementation plan i
 
 ## 12. Later (not in v1)
 
-Command/music analytics charts, read-only config viewer, SQL console, Discord username cache,
+Command/music analytics charts, read-only config viewer, SQL console,
 live control channel, `/blacklist` slash commands.

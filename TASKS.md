@@ -257,7 +257,7 @@ own plan after the previous phase is reviewed.
 - [x] P-A1 Bot-side moderation: migration v4, `ModerationStore`, `YokaiTree` and view gates,
       admin widening, voice-earning skip, heartbeat.
 - [x] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
-- [ ] P-A3 Access (blacklist/adminlist) and Audit modules.
+- [x] P-A3 Access (blacklist/adminlist) and Audit modules, plus a bot-side name cache (schema v5).
 - [ ] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
       cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
 - [ ] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
@@ -304,6 +304,32 @@ own plan after the previous phase is reviewed.
   reads Offline with no ring; enable "reduce motion" and confirm the ring stops; reuse the launch
   link in another browser and confirm it is refused; start a second panel and confirm the port
   message.
+
+**Acceptance criteria (P-A3)**
+- Schema is v5; the bot remembers each person's display name (at most one write a day per person)
+  and a failing name write never affects a command.
+- Access: blacklist and admin list can be added to and removed from. A blacklist add needs a reason
+  (3-200 characters); every removal asks for confirmation; the owner can never be added to either
+  list however the ID is typed; a blacklisted person cannot be made an admin; blacklisting an admin
+  keeps the admin row and flags both lists.
+- Every change and its audit entry commit together or not at all; two simultaneous adds leave one
+  row; a busy database gives a friendly message.
+- Without OWNER_ID the panel still starts, the Access page shows a note and no forms, and the
+  server refuses edits.
+- The bot honours a panel change within a few seconds, without a restart.
+- Audit shows entries newest first with names, reasons and details, filters by module and person,
+  and pages by 25; both modules add a Dashboard readout.
+- Hostile names, reasons and details are escaped; write endpoints need a session and the CSRF token.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(driven in headless Edge while building)* the real add, owner-refusal, confirm-then-remove and
+  audit flows work against a real database in dark, light and 390 px layouts.
+- *(manual, real browser and real bot)* Add a test account to the blacklist from the panel; within
+  about five seconds that account is refused on every command and button; remove it and access
+  returns. Make an account an admin and confirm `/diag` works for it. Try to add your own ID to
+  each list. Confirm the Audit page lists each step with names. Stop the bot, change a list,
+  restart the bot and confirm it is honoured. Run the bot once on your real database to upgrade it
+  to schema v5 before starting the panel. On a phone the Remove link of the Access table sits past
+  the right edge until the table is scrolled sideways.
 
 **STOP — owner review.**
 
