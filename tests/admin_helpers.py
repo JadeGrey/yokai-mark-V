@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional, Sequence
+from typing import Iterator, Mapping, Optional, Sequence
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
@@ -72,9 +72,12 @@ def panel_client(
     db_path: Optional[Path] = None,
     token: str = "t0ken",
     login: bool = True,
+    owner_id: Optional[int] = 111,
 ) -> Iterator[tuple[TestClient, str]]:
     """Run the real app in a TestClient; yields (client, csrf_token) after the token exchange."""
-    settings = PanelSettings(db_path=db_path or tmp_path / "yokai.db", log_dir=tmp_path / "logs")
+    settings = PanelSettings(
+        db_path=db_path or tmp_path / "yokai.db", log_dir=tmp_path / "logs", owner_id=owner_id
+    )
     auth = AuthState(token=token)
     app = create_app(settings, module_paths, auth)
     with TestClient(app, base_url=f"http://127.0.0.1:{settings.port}") as client:
@@ -94,6 +97,9 @@ def seed_database(
     heartbeat_ts: Optional[int] = None,
     wallets: int = 0,
     commands: Sequence[int] = (),
+    admins: Sequence[int] = (),
+    blacklist: Sequence[tuple[int, str]] = (),
+    names: Optional[Mapping[int, str]] = None,
 ) -> None:
     """Create a real current-schema database with the given heartbeat, wallets and commands."""
 
@@ -109,7 +115,20 @@ def seed_database(
                 await db.conn.execute(
                     "INSERT INTO command_log (ts, user_id, command) VALUES (?, 1, 'play');", (ts,)
                 )
+            for user_id in admins:
+                await db.conn.execute(
+                    "INSERT INTO admins (user_id, added_ts, added_by) VALUES (?, 1, 'test');",
+                    (user_id,),
+                )
+            for user_id, reason in blacklist:
+                await db.conn.execute(
+                    "INSERT INTO blacklist (user_id, reason, added_ts, added_by) "
+                    "VALUES (?, ?, 1, 'test');",
+                    (user_id, reason),
+                )
             await db.conn.commit()
+            for user_id, name in (names or {}).items():
+                await db.upsert_user_name(user_id, name, now=1)
         finally:
             await db.close()
 

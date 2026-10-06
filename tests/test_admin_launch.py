@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import socket
 import sqlite3
 import threading
@@ -70,21 +71,21 @@ def test_preflight_names_the_problem_for_a_missing_or_old_database(tmp_path: Pat
 
 
 def test_main_exits_1_with_a_message_when_the_database_is_missing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "missing.db"))
-    monkeypatch.setenv("LOG_DIR", str(tmp_path))
-    with caplog.at_level(logging.ERROR):
-        assert main() == 1
+    # patch.dict restores os.environ afterwards, so whatever main() loads from the owner's real
+    # .env cannot leak into other tests.
+    env = {"DB_PATH": str(tmp_path / "missing.db"), "LOG_DIR": str(tmp_path)}
+    with patch.dict(os.environ, env, clear=True):
+        with caplog.at_level(logging.ERROR):
+            assert main() == 1
     assert "not found" in caplog.text
 
 
-def test_main_exits_1_on_a_bad_port(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    monkeypatch.setenv("ADMIN_PORT", "80")
-    with caplog.at_level(logging.ERROR):
-        assert main() == 1
+def test_main_exits_1_on_a_bad_port(caplog: pytest.LogCaptureFixture) -> None:
+    with patch.dict(os.environ, {"ADMIN_PORT": "80"}, clear=True):
+        with caplog.at_level(logging.ERROR):
+            assert main() == 1
     assert "ADMIN_PORT" in caplog.text
 
 

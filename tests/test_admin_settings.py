@@ -41,3 +41,19 @@ def test_the_host_is_loopback_and_cannot_be_configured() -> None:
     with patch.dict(os.environ, {"ADMIN_HOST": "0.0.0.0"}, clear=True):
         settings = load_settings(env_path=NO_ENV_FILE)
     assert not hasattr(settings, "host")
+
+
+def test_owner_id_is_optional_and_parsed() -> None:
+    with patch.dict(os.environ, {}, clear=True):
+        assert load_settings(env_path=NO_ENV_FILE).owner_id is None
+    with patch.dict(os.environ, {"OWNER_ID": "  1122334455 "}, clear=True):
+        assert load_settings(env_path=NO_ENV_FILE).owner_id == 1122334455
+    with patch.dict(os.environ, {"OWNER_ID": ""}, clear=True):
+        assert load_settings(env_path=NO_ENV_FILE).owner_id is None
+
+
+@pytest.mark.parametrize("value", ["abc", "0", "-5", "12.5"])
+def test_a_bad_owner_id_is_rejected_with_a_clear_message(value: str) -> None:
+    with patch.dict(os.environ, {"OWNER_ID": value}, clear=True):
+        with pytest.raises(PanelConfigError, match="OWNER_ID"):
+            load_settings(env_path=NO_ENV_FILE)
