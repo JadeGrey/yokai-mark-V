@@ -190,3 +190,60 @@ def test_the_dashboard_tile_counts_both_lists(tmp_path: Path) -> None:
     with panel_client(tmp_path, paths, db_path=db) as (client, _):
         page = client.get("/m/dashboard").text
     assert "Access lists" in page and "2 blacklisted, 1 admin" in page
+
+
+def test_absurdly_long_digit_strings_are_refused_not_a_server_error(tmp_path: Path) -> None:
+    """Review finding: int() raises past 4300 digits, which used to escape as an unhandled 500
+    that htmx silently ignores."""
+    db = tmp_path / "yokai.db"
+    seed_database(db, blacklist=[(5, "spam")])
+    huge = "9" * 5000
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, csrf):
+        add = post(client, csrf, "/m/access/blacklist", user_id=huge, reason="spamming")
+        remove = post(client, csrf, f"/m/access/blacklist/{huge}/remove")
+        confirm = client.get(f"/m/access/blacklist/{huge}/confirm", headers={"HX-Request": "true"})
+    for response in (add, remove, confirm):
+        assert response.status_code == 200 and 'data-kind="error"' in response.text
+    assert _count(db, "blacklist") == 1 and _count(db, "admin_audit") == 0
+
+
+def test_confirming_a_person_who_is_gone_retargets_the_whole_section(tmp_path: Path) -> None:
+    """Review finding: the confirm fragment replaces one table row, so the 'not listed' answer,
+    which is a whole section, must be redirected to the section or htmx nests it inside <tbody>."""
+    db = tmp_path / "yokai.db"
+    seed_database(db)
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, _):
+        gone = client.get("/m/access/blacklist/99/confirm", headers={"HX-Request": "true"})
+    assert gone.headers["hx-retarget"] == "#access" and gone.headers["hx-reswap"] == "outerHTML"
+
+
+def test_the_confirm_route_understands_the_same_ids_as_the_remove_route(tmp_path: Path) -> None:
+    """Review finding: '0005' was removable but reported as 'not on the blacklist' by confirm."""
+    db = tmp_path / "yokai.db"
+    seed_database(db, blacklist=[(5, "spam")], names={5: "Mallory"})
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, _):
+        confirm = client.get("/m/access/blacklist/0005/confirm", headers={"HX-Request": "true"})
+    assert '<tr class="confirm">' in confirm.text and "Mallory" in confirm.text
+    assert "hx-retarget" not in confirm.headers  # a real confirm row swaps in place
+
+
+def test_the_confirm_row_takes_keyboard_focus_and_fits_the_table(tmp_path: Path) -> None:
+    """Review finding: after pressing Remove, focus fell to <body>; the row also used one column
+    count for both tables."""
+    db = tmp_path / "yokai.db"
+    seed_database(db, blacklist=[(5, "spam")], admins=[7])
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, _):
+        bl = client.get("/m/access/blacklist/5/confirm", headers={"HX-Request": "true"}).text
+        ad = client.get("/m/access/admins/7/confirm", headers={"HX-Request": "true"}).text
+    assert "autofocus" in bl and 'colspan="4"' in bl  # blacklist table has four columns
+    assert "autofocus" in ad and 'colspan="3"' in ad  # admin table has three
+
+
+def test_remove_buttons_say_who_they_remove_even_for_unnamed_people(tmp_path: Path) -> None:
+    """Review finding: every unnamed row read 'Remove Unknown user ...', indistinguishable."""
+    db = tmp_path / "yokai.db"
+    seed_database(db, blacklist=[(5, "spam"), (6, "spam")])
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, _):
+        page = client.get("/m/access").text
+    assert 'aria-label="Remove Unknown user (5) from the blacklist"' in page
+    assert 'aria-label="Remove Unknown user (6) from the blacklist"' in page

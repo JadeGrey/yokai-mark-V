@@ -71,6 +71,8 @@ def test_valid_ids_parse(raw: str, value: int) -> None:
         str(2**63),
         "١٢٣",  # Arabic-Indic digits
         "１２",  # full-width digits
+        "9" * 20,  # one digit too many
+        "9" * 5000,  # int() itself refuses more than 4300 digits
     ],
 )
 def test_invalid_ids_are_refused(raw: str) -> None:

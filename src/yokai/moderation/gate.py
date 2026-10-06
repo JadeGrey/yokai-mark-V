@@ -60,7 +60,7 @@ async def screen(interaction: discord.Interaction) -> bool:
     names = getattr(interaction.client, "names", None)
     if isinstance(names, UserNameCache):
         user = interaction.user
-        await names.touch(user.id, getattr(user, "display_name", None) or getattr(user, "name", ""))
+        names.touch(user.id, getattr(user, "display_name", None) or getattr(user, "name", ""))
     return False
 
 

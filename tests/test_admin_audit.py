@@ -57,7 +57,7 @@ def test_paging_shows_older_and_newer_links(tmp_path: Path) -> None:
     assert "Newer" in second and "Older" not in second
 
 
-@pytest.mark.parametrize("raw", ["", "abc", "0", "-3", "1.5", "99999999999999999999"])
+@pytest.mark.parametrize("raw", ["", "abc", "0", "-3", "1.5", "99999999999999999999", "9" * 5000])
 def test_a_bad_page_number_falls_back_to_the_first_page(tmp_path: Path, raw: str) -> None:
     db = tmp_path / "yokai.db"
     _history(db)

@@ -46,8 +46,9 @@ def parse_user_id(raw: str) -> int:
         raise AccessRefused(
             "Enter the Discord user ID as digits only, for example 123456789012345678."
         )
-    value = int(text)
-    if not 0 < value < 2**63:
+    # A Discord ID has at most 19 digits. Checking the length first also keeps int() from raising
+    # on absurdly long input (it refuses more than 4300 digits).
+    if len(text) > 19 or not 0 < (value := int(text)) < 2**63:
         raise AccessRefused("That is not a valid Discord user ID.")
     return value
 

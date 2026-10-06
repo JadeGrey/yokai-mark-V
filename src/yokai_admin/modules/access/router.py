@@ -22,6 +22,7 @@ from yokai_admin.modules.access.service import (
     add_blacklist,
     list_admins,
     list_blacklist,
+    parse_user_id,
     remove_admin,
     remove_blacklist,
 )
@@ -65,8 +66,18 @@ def _context(request: Request, flash: Optional[Flash]) -> dict[str, Any]:
     }
 
 
-def _section(request: Request, flash: Optional[Flash] = None) -> Response:
-    return render_fragment(request, "access/_lists.html", **_context(request, flash))
+def _section(
+    request: Request, flash: Optional[Flash] = None, context: Optional[dict[str, Any]] = None
+) -> Response:
+    data = {**(context if context is not None else _context(request, None)), "flash": flash}
+    return render_fragment(request, "access/_lists.html", **data)
+
+
+def _whole_section(response: Response) -> Response:
+    """Make htmx replace the whole #access section even though the request targeted one row."""
+    response.headers["HX-Retarget"] = "#access"
+    response.headers["HX-Reswap"] = "outerHTML"
+    return response
 
 
 def _mutate(
@@ -92,17 +103,29 @@ def _mutate(
 
 
 def _confirm(request: Request, kind: str, raw_id: str) -> Response:
+    """The inline 'Remove X?' row. Anything that is not a real row answers with the refreshed
+    section instead, redirected to #access so htmx does not nest it inside the table."""
     context = _context(request, None)
-    entries: list[Entry] = context["blacklist"] if kind == "blacklist" else context["admins"]
-    match = next((e for e in entries if str(e.user.id) == raw_id.strip()), None)
     if not context["can_edit"]:
-        return _section(request, Flash("error", EDITING_OFF))
-    list_name = "blacklist" if kind == "blacklist" else "admin list"
+        return _whole_section(_section(request, Flash("error", EDITING_OFF), context))
+    try:
+        user_id = parse_user_id(raw_id)
+    except AccessRefused as exc:
+        return _whole_section(_section(request, Flash("error", str(exc)), context))
+    entries: list[Entry] = context["blacklist"] if kind == "blacklist" else context["admins"]
+    match = next((e for e in entries if e.user.id == user_id), None)
     if match is None:
         verb = "on the blacklist" if kind == "blacklist" else "an admin"
-        return _section(request, Flash("error", f"That person is not {verb}."))
+        return _whole_section(
+            _section(request, Flash("error", f"That person is not {verb}."), context)
+        )
     return render_fragment(
-        request, "access/_confirm.html", entry=match, kind=kind, list_name=list_name
+        request,
+        "access/_confirm.html",
+        entry=match,
+        kind=kind,
+        list_name="blacklist" if kind == "blacklist" else "admin list",
+        columns=4 if kind == "blacklist" else 3,  # the table the row is swapped into
     )
 
 

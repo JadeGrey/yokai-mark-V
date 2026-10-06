@@ -38,6 +38,8 @@ def parse_page(raw: str) -> int:
     text = raw.strip()
     if not (text.isascii() and text.isdigit()):
         return 1
+    if len(text) > 6:  # also keeps int() away from absurdly long input
+        return 1
     value = int(text)
     return value if 0 < value <= 100_000 else 1
 
@@ -68,7 +70,7 @@ def _person_id(entry: AuditEntry) -> Optional[int]:
     """The user ID an access entry is about, when its target is one."""
     target = entry.target
     if entry.module == "access" and target and target.isascii() and target.isdigit():
-        return int(target)
+        return int(target) if len(target) <= 19 else None
     return None
 
 

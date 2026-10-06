@@ -119,16 +119,20 @@ def _name_db() -> MagicMock:
 
 async def test_screen_records_the_name_of_an_allowed_user() -> None:
     db = _name_db()
-    interaction = _named_interaction(10, "Sami", _store(frozenset({5})), UserNameCache(db))
+    names = UserNameCache(db)
+    interaction = _named_interaction(10, "Sami", _store(frozenset({5})), names)
     assert await screen(interaction) is False
+    await names.wait_idle()
     db.upsert_user_name.assert_awaited_once_with(10, "Sami")
 
 
 async def test_screen_does_not_record_or_allow_a_blacklisted_user() -> None:
     db = _name_db()
-    interaction = _named_interaction(5, "Mallory", _store(frozenset({5})), UserNameCache(db))
+    names = UserNameCache(db)
+    interaction = _named_interaction(5, "Mallory", _store(frozenset({5})), names)
     with patch("yokai.moderation.gate.send", new=AsyncMock()):
         assert await screen(interaction) is True
+    await names.wait_idle()
     db.upsert_user_name.assert_not_awaited()
 
 
@@ -140,13 +144,35 @@ async def test_screen_works_when_the_client_has_no_name_cache() -> None:
 async def test_screen_survives_a_database_error_while_recording() -> None:
     db = _name_db()
     db.upsert_user_name.side_effect = ValueError("closed")
-    interaction = _named_interaction(10, "Sami", _store(frozenset()), UserNameCache(db))
+    names = UserNameCache(db)
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), names)
     assert await screen(interaction) is False  # the command still runs
+    await names.wait_idle()
+
+
+async def test_screen_is_not_held_up_by_a_stuck_name_write() -> None:
+    """Review finding: a locked database must not delay the command past Discord's deadline."""
+    import asyncio
+
+    db = _name_db()
+    release = asyncio.Event()
+
+    async def stuck(*args: object) -> None:
+        await release.wait()
+
+    db.upsert_user_name.side_effect = stuck
+    names = UserNameCache(db)
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), names)
+    assert await asyncio.wait_for(screen(interaction), timeout=1.0) is False
+    release.set()
+    await names.wait_idle()
 
 
 async def test_a_live_view_records_names_too() -> None:
     db = _name_db()
+    names = UserNameCache(db)
     view = BaseView(allowed_user_ids=None)
-    interaction = _named_interaction(10, "Sami", _store(frozenset()), UserNameCache(db))
+    interaction = _named_interaction(10, "Sami", _store(frozenset()), names)
     assert await view.interaction_check(interaction) is True
+    await names.wait_idle()
     db.upsert_user_name.assert_awaited_once_with(10, "Sami")

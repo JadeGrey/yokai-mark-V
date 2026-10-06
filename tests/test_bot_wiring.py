@@ -279,4 +279,5 @@ async def test_the_bot_owns_a_name_cache_and_the_tree_feeds_it() -> None:
     interaction.type = discord.InteractionType.application_command
     interaction.client = bot
     assert await bot.tree.interaction_check(interaction) is True
+    await bot.names.wait_idle()
     bot.db.upsert_user_name.assert_awaited_once_with(7, "Sami")

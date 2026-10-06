@@ -275,6 +275,7 @@ class YokaiBot(commands.Bot):
                 logger.debug("Error stopping player during shutdown: %s", exc)
         await self.voice_earn_tracker.stop()
         await self.heartbeat.stop()
+        await self.names.close()
         try:
             await self.spotify.close()
         except Exception as exc:
