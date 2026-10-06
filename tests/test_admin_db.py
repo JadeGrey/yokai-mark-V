@@ -62,7 +62,7 @@ def test_an_old_schema_is_refused_with_a_hint(tmp_path: Path) -> None:
     raw.commit()
     raw.close()
     with readonly(path) as conn:
-        with pytest.raises(PanelDbError, match=r"v3.*v4"):
+        with pytest.raises(PanelDbError, match=r"v3.*v5"):
             require_schema(conn)
 
 

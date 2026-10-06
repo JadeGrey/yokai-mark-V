@@ -95,7 +95,7 @@ def seed_database(
     wallets: int = 0,
     commands: Sequence[int] = (),
 ) -> None:
-    """Create a real v4 database with the given heartbeat, wallets and command timestamps."""
+    """Create a real current-schema database with the given heartbeat, wallets and commands."""
 
     async def run() -> None:
         db = Database(path)

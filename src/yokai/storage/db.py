@@ -17,7 +17,7 @@ from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFund
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -129,6 +129,14 @@ CREATE TABLE IF NOT EXISTS bot_heartbeat (
 );
 """
 
+MIGRATION_V5 = """
+CREATE TABLE IF NOT EXISTS user_names (
+  user_id INTEGER PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  updated_ts INTEGER NOT NULL
+);
+"""
+
 
 class Database:
     """Async SQLite database manager."""
@@ -204,6 +212,13 @@ class Database:
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 4.")
 
+        if version < 5:
+            logger.info("Applying SQLite migration v5...")
+            await self.conn.executescript(MIGRATION_V5)
+            await self.conn.execute("PRAGMA user_version = 5;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 5.")
+
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
         start = time.perf_counter()
@@ -228,6 +243,20 @@ class Database:
                 "ON CONFLICT(id) DO UPDATE SET ts = excluded.ts, pid = excluded.pid, "
                 "version = excluded.version;",
                 (ts, pid, version),
+            )
+            await self.conn.commit()
+
+    async def upsert_user_name(
+        self, user_id: int, display_name: str, now: Optional[int] = None
+    ) -> None:
+        """Remember a user's latest display name so the admin panel can show people by name."""
+        ts = int(time.time()) if now is None else now
+        async with self._write_lock:
+            await self.conn.execute(
+                "INSERT INTO user_names (user_id, display_name, updated_ts) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, "
+                "updated_ts = excluded.updated_ts;",
+                (user_id, display_name, ts),
             )
             await self.conn.commit()
 

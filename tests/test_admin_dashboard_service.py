@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.admin_helpers import seed_database
+from yokai.storage.db import CURRENT_SCHEMA_VERSION
 from yokai_admin.core.db import readonly
 from yokai_admin.modules.dashboard.service import (
     ONLINE_WINDOW_S,
@@ -60,7 +61,7 @@ def test_overview_counts_wallets_and_recent_commands(tmp_path: Path) -> None:
     )
     with readonly(tmp_path / "b.db") as conn:
         data = overview(conn, tmp_path / "b.db", NOW)
-    assert (data.wallets, data.commands_24h, data.schema_version) == (3, 2, 4)
+    assert (data.wallets, data.commands_24h, data.schema_version) == (3, 2, CURRENT_SCHEMA_VERSION)
     assert data.db_size_bytes > 0
 
 

@@ -30,7 +30,7 @@ async def test_migration_v4_creates_the_moderation_tables(db: Database) -> None:
     async with db.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table';") as cursor:
         names = {row[0] for row in await cursor.fetchall()}
     assert {"blacklist", "admins", "admin_audit", "bot_heartbeat"} <= names
-    assert CURRENT_SCHEMA_VERSION == 4
+    assert CURRENT_SCHEMA_VERSION >= 4
 
 
 async def test_reopening_a_v4_database_is_a_no_op(db: Database, tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ async def test_reopening_a_v4_database_is_a_no_op(db: Database, tmp_path: Path) 
     try:
         async with reopened.conn.execute("PRAGMA user_version;") as cursor:
             row = await cursor.fetchone()
-        assert row is not None and row[0] == 4
+        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
     finally:
         await reopened.close()
 
@@ -68,7 +68,7 @@ async def test_a_v3_database_with_data_upgrades_without_losing_rows(
     try:
         async with upgraded.conn.execute("PRAGMA user_version;") as cursor:
             row = await cursor.fetchone()
-        assert row is not None and row[0] == 4
+        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
         async with upgraded.conn.execute("SELECT COUNT(*) FROM command_log;") as cursor:
             assert (await cursor.fetchone())[0] == 1  # type: ignore[index]
         wallet = await upgraded.get_wallet(101)

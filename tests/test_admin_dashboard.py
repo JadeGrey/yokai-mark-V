@@ -56,7 +56,7 @@ def test_an_old_schema_renders_with_the_upgrade_hint(tmp_path: Path) -> None:
     raw.close()
     with panel_client(tmp_path, [DASH], db_path=old) as (client, _):
         response = client.get("/m/dashboard")
-    assert response.status_code == 200 and "needs v4" in response.text
+    assert response.status_code == 200 and "needs v5" in response.text
 
 
 def test_a_database_that_is_not_sqlite_renders_without_a_server_error(tmp_path: Path) -> None:
