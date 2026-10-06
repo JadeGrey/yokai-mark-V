@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from yokai_admin.core.db import schema_version
+from yokai_admin.core.formatting import describe_age
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +90,6 @@ def recent_errors(log_dir: Path, limit: int = 8) -> list[str]:
         lines = lines[1:]  # the first line of a tail read is usually cut in half
     errors = [line for line in lines if _ERROR_LINE.match(line)]
     return [line[:MAX_LINE_CHARS] for line in errors[-limit:]]
-
-
-def describe_age(seconds: int) -> str:
-    """Plain-language age such as '1 second', '5 minutes' or '3 days'."""
-    if seconds < 60:
-        count, unit = seconds, "second"
-    elif seconds < 3600:
-        count, unit = seconds // 60, "minute"
-    elif seconds < 86_400:
-        count, unit = seconds // 3600, "hour"
-    else:
-        count, unit = seconds // 86_400, "day"
-    return f"{count} {unit}{'' if count == 1 else 's'}"
 
 
 def format_bytes(size: int) -> str:

@@ -10,6 +10,7 @@ from fastapi import Request
 from fastapi.responses import Response
 from starlette.templating import Jinja2Templates
 
+from yokai_admin.core.formatting import format_when
 from yokai_admin.core.module import ModuleSlot
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -34,7 +35,9 @@ def build_templates(slots: Sequence[ModuleSlot]) -> Jinja2Templates:
     for slot in slots:
         if slot.module is not None and slot.module.templates_dir is not None:
             directories.append(slot.module.templates_dir)
-    return Jinja2Templates(directory=directories)
+    templates = Jinja2Templates(directory=directories)
+    templates.env.filters["when"] = format_when
+    return templates
 
 
 def _nav(slots: Sequence[ModuleSlot], active: str) -> list[NavItem]:
