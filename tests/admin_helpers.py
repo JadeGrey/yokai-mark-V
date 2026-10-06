@@ -9,6 +9,7 @@ from typing import Iterator, Mapping, Optional, Sequence
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
+from httpx import Response as HttpxResponse
 from starlette.testclient import TestClient
 
 from yokai.storage.db import Database
@@ -133,3 +134,8 @@ def seed_database(
             await db.close()
 
     asyncio.run(run())
+
+
+def post(client: TestClient, csrf: str, path: str, **form: str) -> HttpxResponse:
+    """POST form data the way HTMX does: CSRF header plus HX-Request."""
+    return client.post(path, data=form, headers={"X-CSRF-Token": csrf, "HX-Request": "true"})

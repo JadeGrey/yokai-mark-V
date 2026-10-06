@@ -1,0 +1,9 @@
+<tr class="confirm">
+  <td colspan="4">
+    <div class="confirm-row">
+      <span>Remove <strong>{{ entry.user.display }}</strong> ({{ entry.user.id }}) from the {{ list_name }}?</span>
+      <button type="button" class="btn danger" hx-post="/m/access/{{ kind }}/{{ entry.user.id }}/remove" hx-target="#access" hx-swap="outerHTML">Remove</button>
+      <button type="button" class="btn plain" hx-get="/m/access/lists" hx-target="#access" hx-swap="outerHTML">Cancel</button>
+    </div>
+  </td>
+</tr>

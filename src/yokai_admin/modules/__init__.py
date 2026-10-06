@@ -7,4 +7,7 @@ never stops the panel.
 
 from __future__ import annotations
 
-MODULE_PATHS: tuple[str, ...] = ("yokai_admin.modules.dashboard:MODULE",)
+MODULE_PATHS: tuple[str, ...] = (
+    "yokai_admin.modules.dashboard:MODULE",
+    "yokai_admin.modules.access:MODULE",
+)

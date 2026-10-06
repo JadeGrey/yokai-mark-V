@@ -62,3 +62,19 @@ def test_the_panel_script_marks_the_status_block_stale_when_polling_fails() -> N
         assert event in script
     assert "data-stale" in script and "eval(" not in script
     assert '[data-stale="true"]' in _css()
+
+
+def test_form_and_table_styles_exist_and_use_palette_tokens_only() -> None:
+    css = _css()
+    for selector in (
+        ".btn",
+        ".btn.danger",
+        ".table",
+        ".flash",
+        ".add",
+        ".link-danger",
+        ".page-title",
+    ):
+        assert selector in css
+    button_rule = css.split(".btn {")[1].split("}")[0]
+    assert "#" not in button_rule  # buttons use palette tokens, never literal colors
