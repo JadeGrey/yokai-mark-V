@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
+import aiosqlite
 import discord
 
 from yokai.errors import (
@@ -59,6 +60,16 @@ class StakeModal(discord.ui.Modal):
             await self._on_stake(interaction, parse_stake(self.stake.value))
         except YokaiError as err:
             await reply_error(self.bot, interaction, err)
+        except (discord.HTTPException, aiosqlite.Error) as exc:
+            logger.error("The stake form failed: %s", exc, exc_info=exc)
+            await reply_error(
+                self.bot,
+                interaction,
+                YokaiError(
+                    "Something went wrong on my end, and any stake was returned.",
+                    user_hint="Try again in a moment.",
+                ),
+            )
 
 
 async def handle_play(bot: YokaiBot, interaction: discord.Interaction) -> None:
@@ -96,7 +107,14 @@ async def handle_play(bot: YokaiBot, interaction: discord.Interaction) -> None:
             holder["view"] = view
             return message.id
 
-        await bot.tables.open_table(channel_id, row.game, user_id, amount, announce)
+        try:
+            await bot.tables.open_table(channel_id, row.game, user_id, amount, announce)
+        except BaseException:
+            # The stake is refunded by open_table; take down a lobby message that was already up.
+            posted = holder.get("view")
+            if posted is not None and posted.message is not None and inter.channel is not None:
+                await delete_message_quietly(inter.channel, posted.message.id)
+            raise
         holder["view"].start()
         await dismiss(inter)
 
@@ -154,8 +172,24 @@ class LobbyView(discord.ui.View):
     # ---- window and start ----------------------------------------------------------------
 
     async def _run_window(self) -> None:
-        await asyncio.sleep(max(0.0, self.lobby.closes_at - self.bot.tables.clock()))
-        await self._begin()
+        try:
+            await asyncio.sleep(max(0.0, self.lobby.closes_at - self.bot.tables.clock()))
+            await self._begin()
+        except Exception:
+            # Nothing awaits this task, so log here and make sure nobody's stake is left behind.
+            logger.exception("The join window of table %s failed", self.lobby.id)
+            await self._cancel_after_failure()
+
+    async def _cancel_after_failure(self) -> None:
+        await self.bot.tables.abort(self.lobby)
+        self.stop()
+        await self._show(
+            EmbedFactory.table_notice(
+                "Table cancelled",
+                "Something went wrong. Every stake was refunded.",
+                bot_avatar_url=avatar_url(self.bot),
+            )
+        )
 
     def _stop_window(self) -> None:
         task, self._window = self._window, None

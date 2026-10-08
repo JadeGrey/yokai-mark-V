@@ -153,3 +153,83 @@ async def test_run_duel_refunds_everyone_if_something_breaks(tmp_path: Path) -> 
         assert lobby.state is LobbyState.CANCELLED
         assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
         assert not active.is_active(1) and not active.is_active(2)
+
+
+# ---- ordering and failure reporting ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_pick_is_answered_before_the_public_table_message_is_refreshed(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        duel = DuelRound([1, 2], 5)
+        view = DuelView(make_bot(db, manager), lobby, duel, deadline_ts=1)
+        view.message = make_message()
+        order: list[str] = []
+
+        async def refreshed(**kwargs):  # type: ignore[no-untyped-def]
+            order.append("refreshed")
+
+        view.message.edit = AsyncMock(side_effect=refreshed)
+        interaction = make_interaction(1)
+
+        async def answered(**kwargs):  # type: ignore[no-untyped-def]
+            order.append("answered")
+
+        interaction.response.edit_message = AsyncMock(side_effect=answered)
+        select = PickSelect(view)
+        select._values = ["7"]  # type: ignore[attr-defined]
+        await select.callback(interaction)
+        assert order == ["answered", "refreshed"]
+
+
+@pytest.mark.asyncio
+async def test_the_last_pick_does_not_edit_the_table_message_and_wakes_the_runner(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        duel = DuelRound([1, 2], 5)
+        duel.submit(1, 3)
+        view = DuelView(make_bot(db, manager), lobby, duel, deadline_ts=1)
+        view.message = make_message()
+        select = PickSelect(view)
+        select._values = ["8"]  # type: ignore[attr-defined]
+        interaction = make_interaction(2)
+        await select.callback(interaction)
+        interaction.response.edit_message.assert_awaited_once()
+        view.message.edit.assert_not_awaited()  # the result will replace the message
+        assert view.all_picked.is_set()
+
+
+@pytest.mark.asyncio
+async def test_a_broken_duel_tells_the_players_it_was_cancelled_and_refunded(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        lobby = await _running(manager)
+        message = make_message()
+        message.edit = AsyncMock(side_effect=[RuntimeError("boom"), None])
+        with pytest.raises(RuntimeError):
+            await run_duel(make_bot(db, manager), lobby, message)
+        assert lobby.state is LobbyState.CANCELLED
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
+        notice = message.edit.await_args.kwargs
+        assert "cancelled" in notice["embed"].title.lower() and notice["view"] is None
+        assert not active.is_active(1)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_settlement_also_tells_the_players(tmp_path: Path) -> None:
+    async with world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        message = make_message()
+        manager.pick_seconds = 0.01  # type: ignore[assignment]
+        failing = AsyncMock(side_effect=RuntimeError("disk"))
+        with patch.object(manager, "resolve_duel", new=failing):
+            with pytest.raises(RuntimeError):
+                await run_duel(make_bot(db, manager), lobby, message)
+        assert lobby.state is LobbyState.CANCELLED
+        assert "cancelled" in message.edit.await_args.kwargs["embed"].title.lower()

@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# A refund that fails (a busy database file) is tried a few times before giving up; a stake that
+# still cannot be returned stays escrowed and the startup sweep returns it.
+REFUND_ATTEMPTS = 3
+REFUND_RETRY_DELAY_S = 0.2
+
 # Posts the table's message in its channel and returns the new message's id.
 Announce = Callable[[Lobby], Awaitable[int]]
 
@@ -179,12 +184,16 @@ class TableManager:
 
     async def leave(self, lobby: Lobby, user_id: int) -> None:
         async with lobby.lock:
-            seat = lobby.remove_seat(user_id)  # raises for strangers, the host, closed tables
-            try:
-                with contextlib.suppress(BetNotOpenError):
-                    await self.db.refund_bet(seat.bet_id)
-            finally:
-                self.active_games.release(user_id)
+            lobby.check_can_leave(user_id)  # raises for strangers, the host, closed tables
+            closed, _ = await self._refund_seat(lobby.seats[user_id])
+            if not closed:
+                # The stake is still escrowed: keep the seat and the claim, let them try again.
+                raise LobbyClosedError(
+                    "I couldn't return your stake just now.",
+                    user_hint="Try Leave again in a moment.",
+                )
+            lobby.remove_seat(user_id)
+            self.active_games.release(user_id)
 
     # ---- lifecycle -----------------------------------------------------------------------
 
@@ -276,16 +285,49 @@ class TableManager:
         for user_id in lobby.seats:
             self.active_games.release(user_id)
 
+    async def _refund_seat(self, seat: Seat) -> tuple[bool, Optional[int]]:
+        """Return one stake. Gives (closed, balance): `closed` is False when the bet is still open.
+
+        A bet that is already closed counts as closed (with no balance). A failing refund is
+        retried; if it never succeeds the stake stays escrowed for the next startup sweep.
+        """
+        for attempt in range(1, REFUND_ATTEMPTS + 1):
+            try:
+                return True, await self.db.refund_bet(seat.bet_id)
+            except BetNotOpenError:
+                return True, None
+            except Exception as exc:
+                logger.error(
+                    "Refund of bet %d failed (attempt %d of %d): %s",
+                    seat.bet_id,
+                    attempt,
+                    REFUND_ATTEMPTS,
+                    exc,
+                )
+                if attempt < REFUND_ATTEMPTS:
+                    await asyncio.sleep(REFUND_RETRY_DELAY_S * attempt)
+        return False, None
+
     async def _refund_all_locked(self, lobby: Lobby, state: LobbyState) -> dict[int, int]:
-        """Refund every open stake and close the lobby. The caller holds `lobby.lock`."""
+        """Refund every open stake and close the lobby. The caller holds `lobby.lock`.
+
+        A member's one-game claim is released only once their stake is confirmed returned, so a
+        refund that keeps failing never frees someone whose Renown is still escrowed.
+        """
         balances: dict[int, int] = {}
+        confirmed: set[int] = set()
         try:
             for user_id, seat in list(lobby.seats.items()):
-                with contextlib.suppress(BetNotOpenError):
-                    balances[user_id] = await self.db.refund_bet(seat.bet_id)
+                closed, balance = await self._refund_seat(seat)
+                if balance is not None:
+                    balances[user_id] = balance
+                if closed:
+                    confirmed.add(user_id)
         finally:
             if lobby.is_active:
-                self._finish(lobby, state)
+                lobby.close(state)
+            for user_id in confirmed:
+                self.active_games.release(user_id)
             await self._mark_channel_idle(lobby)
         return balances
 

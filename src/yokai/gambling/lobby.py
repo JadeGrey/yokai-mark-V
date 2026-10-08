@@ -142,7 +142,8 @@ class Lobby:
             raise LobbyClosedError("This table is full.", user_hint=None)
         self.seats[seat.user_id] = seat
 
-    def remove_seat(self, user_id: int) -> Seat:
+    def check_can_leave(self, user_id: int) -> None:
+        """Raise unless `user_id` is a guest at a table that is still open."""
         if self.state is not LobbyState.OPEN:
             raise LobbyClosedError()
         if user_id not in self.seats:
@@ -152,6 +153,9 @@ class Lobby:
                 "The host cannot leave their own table.",
                 user_hint="Cancel the table instead.",
             )
+
+    def remove_seat(self, user_id: int) -> Seat:
+        self.check_can_leave(user_id)
         return self.seats.pop(user_id)
 
     def mark_running(self) -> None:

@@ -279,3 +279,84 @@ async def test_a_variable_stake_table_shows_a_start_button_and_the_host_can_use_
             await view.start_button.callback(make_interaction(1))
         assert lobby.state is LobbyState.RUNNING
         runner.assert_awaited_once()
+
+
+# ---- failures are reported ---------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_failing_window_cancels_the_table_logs_it_and_tells_the_players(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.join(lobby, 2, None)
+        lobby.closes_at = 0.0  # the window is already over
+        view = make_view(make_bot(db, manager), lobby)
+        runner = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch.dict(GAME_RUNNERS, {"duel": runner}), caplog.at_level("ERROR"):
+            await view._run_window()  # must not raise
+        assert lobby.state is LobbyState.CANCELLED
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
+        assert not active.is_active(1)
+        assert any("boom" in (r.exc_text or r.getMessage()) for r in caplog.records)
+        assert "cancelled" in view.message.edit.await_args.kwargs["embed"].title.lower()
+
+
+def _forbidden() -> discord.Forbidden:
+    return discord.Forbidden(MagicMock(status=403, reason="Forbidden"), "Missing Permissions")
+
+
+async def _stake_modal(bot, interaction):  # type: ignore[no-untyped-def]
+    await handle_play(bot, interaction)
+    modal = interaction.response.send_modal.await_args.args[0]
+    modal.stake._value = "150"  # type: ignore[attr-defined]
+    return modal
+
+
+@pytest.mark.asyncio
+async def test_a_discord_failure_while_opening_a_table_is_answered_and_refunded(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        bot = make_bot(db, manager)
+        modal = await _stake_modal(bot, make_interaction(1))
+        submit = make_interaction(1)
+        submit.channel = MagicMock()
+        submit.channel.send = AsyncMock(side_effect=_forbidden())
+        with patch("yokai.ui.table_common.send", new=AsyncMock()) as sent:
+            await modal.on_submit(submit)
+        assert sent.await_args.kwargs["ephemeral"] is True
+        assert "returned" in error_embed_of(sent).description
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
+        assert not manager.is_busy(CHANNEL)
+
+
+@pytest.mark.asyncio
+async def test_a_database_failure_after_the_lobby_is_posted_removes_the_lobby_message(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    async with world(tmp_path) as (db, manager, active):
+        bot = make_bot(db, manager)
+        modal = await _stake_modal(bot, make_interaction(1))
+        submit = make_interaction(1)
+        channel = MagicMock()
+        posted = MagicMock(spec=discord.Message)
+        posted.id = 9001
+        channel.send = AsyncMock(return_value=posted)
+        partial = MagicMock()
+        partial.delete = AsyncMock()
+        channel.get_partial_message = MagicMock(return_value=partial)
+        submit.channel = channel
+        broken = AsyncMock(side_effect=sqlite3.OperationalError("disk I/O error"))
+        with (
+            patch.object(db, "set_table_message", new=broken),
+            patch("yokai.ui.table_common.send", new=AsyncMock()) as sent,
+        ):
+            await modal.on_submit(submit)
+        channel.get_partial_message.assert_called_with(9001)
+        partial.delete.assert_awaited()
+        assert sent.await_args.kwargs["ephemeral"] is True
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)

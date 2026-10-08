@@ -422,3 +422,83 @@ async def test_a_zero_rake_pays_the_whole_pot(tmp_path: Path) -> None:
         result = await manager.resolve_duel(lobby, duel)
         assert (result.prize, result.rake) == (200, 0)
         assert await db.get_pot() == 0 and await balance_of(db, 1) == 1100
+
+
+# ---- refunds that fail ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_refund_that_keeps_failing_keeps_that_stake_claimed_and_refunds_the_rest(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path, specs={"duel": TRIO}) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.join(lobby, 2, 100)
+        stuck_bet = lobby.seats[1].bet_id
+        real = db.refund_bet
+
+        async def flaky(bet_id: int) -> int:
+            if bet_id == stuck_bet:
+                raise RuntimeError("database is locked")
+            return await real(bet_id)
+
+        with (
+            patch.object(db, "refund_bet", new=flaky),
+            patch("yokai.gambling.tables.REFUND_RETRY_DELAY_S", 0),
+        ):
+            await manager.cancel(lobby, 1, is_admin=False)
+
+        assert lobby.state is LobbyState.CANCELLED
+        assert await balance_of(db, 2) == 1000 and not active.is_active(2)
+        assert await balance_of(db, 1) == 900 and active.is_active(1)  # still escrowed
+        assert await db.refund_open_bets() == 1  # the startup sweep returns it
+        assert await balance_of(db, 1) == 1000
+
+
+@pytest.mark.asyncio
+async def test_a_refund_that_fails_once_is_retried(tmp_path: Path) -> None:
+    async with world(tmp_path, specs={"duel": TRIO}) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.join(lobby, 2, 100)
+        real = db.refund_bet
+        calls = {"n": 0}
+
+        async def once(bet_id: int) -> int:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("database is locked")
+            return await real(bet_id)
+
+        with (
+            patch.object(db, "refund_bet", new=once),
+            patch("yokai.gambling.tables.REFUND_RETRY_DELAY_S", 0),
+        ):
+            await manager.cancel(lobby, 1, is_admin=False)
+
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
+        assert not active.is_active(1) and not active.is_active(2)
+        assert await db.refund_open_bets() == 0
+
+
+@pytest.mark.asyncio
+async def test_leaving_keeps_the_seat_and_the_claim_when_the_refund_fails(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path, specs={"duel": TRIO}) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.join(lobby, 2, 100)
+
+        async def failing(bet_id: int) -> int:
+            raise RuntimeError("database is locked")
+
+        with (
+            patch.object(db, "refund_bet", new=failing),
+            patch("yokai.gambling.tables.REFUND_RETRY_DELAY_S", 0),
+        ):
+            with pytest.raises(LobbyClosedError, match="stake"):
+                await manager.leave(lobby, 2)
+        assert 2 in lobby.seats and active.is_active(2) and await balance_of(db, 2) == 900
+
+        await manager.leave(lobby, 2)  # the database is back: leaving now works
+        assert 2 not in lobby.seats and not active.is_active(2)
+        assert await balance_of(db, 2) == 1000

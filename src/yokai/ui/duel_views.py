@@ -48,10 +48,11 @@ class DuelView(discord.ui.View):
             bot_avatar_url=avatar_url(self.bot),
         )
 
-    async def record_pick(self, user_id: int, number: int) -> None:
-        self.duel.submit(user_id, number)
+    async def after_pick(self) -> None:
+        """Run once a pick is locked in and answered: wake the runner, or show who is ready."""
         if self.duel.ready:
-            self.all_picked.set()
+            self.all_picked.set()  # the result replaces the message, so it needs no refresh
+            return
         if self.message is not None:
             try:
                 await self.message.edit(embed=self.build_embed(), view=self)
@@ -105,7 +106,7 @@ class PickSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         number = int(self.values[0])
         try:
-            await self.duel_view.record_pick(interaction.user.id, number)
+            self.duel_view.duel.submit(interaction.user.id, number)
         except YokaiError as err:
             await reply_error(self.duel_view.bot, interaction, err)
             return
@@ -116,6 +117,20 @@ class PickSelect(discord.ui.Select):
             bot_avatar_url=avatar_url(self.duel_view.bot),
         )
         await interaction.response.edit_message(embed=locked, view=None)
+        await self.duel_view.after_pick()
+
+
+async def _tell_cancelled(bot: YokaiBot, message: discord.Message) -> None:
+    """Best effort: replace the table message so nobody waits on a dead 'Pick your number'."""
+    notice = EmbedFactory.table_notice(
+        "Table cancelled",
+        "Something went wrong. Every stake was refunded.",
+        bot_avatar_url=avatar_url(bot),
+    )
+    try:
+        await message.edit(embed=notice, view=None)
+    except discord.HTTPException as exc:
+        logger.warning("Could not tell the players the duel was cancelled: %s", exc)
 
 
 async def run_duel(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> None:
@@ -130,9 +145,11 @@ async def run_duel(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> Non
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(view.all_picked.wait(), timeout=tables.pick_seconds)
         result = await tables.resolve_duel(lobby, duel)
-    except BaseException:
+    except BaseException as exc:
         await tables.abort(lobby)
         view.stop()
+        if isinstance(exc, Exception):
+            await _tell_cancelled(bot, message)
         raise
     view.stop()
     final = EmbedFactory.duel_result(
