@@ -323,3 +323,15 @@ class TablePermissionError(YokaiError):
         )
         self.missing = list(missing)
         self.channel_name = channel_name
+
+
+class NotYourTurnError(YokaiError):
+    """Raised when a player acts at a turn-based table out of turn."""
+
+    title = "Not your turn"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "It isn't your turn yet.",
+            user_hint="Wait until the table is waiting on you.",
+        )

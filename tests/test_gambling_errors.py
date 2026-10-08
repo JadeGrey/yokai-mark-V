@@ -12,6 +12,7 @@ from yokai.errors import (
     LobbyClosedError,
     NotAtTableError,
     NotHostError,
+    NotYourTurnError,
     TableBusyError,
     TablePermissionError,
     YokaiError,
@@ -67,3 +68,9 @@ def test_table_permission_error_names_what_is_missing() -> None:
     err = TablePermissionError(["Send Messages", "Embed Links"], "tables")
     assert "Send Messages" in err.message and "Embed Links" in err.message
     assert "#tables" in err.message
+
+
+def test_not_your_turn_is_a_plain_domain_error() -> None:
+    err = NotYourTurnError()
+    assert isinstance(err, YokaiError) and err.title == "Not your turn"
+    assert "turn" in err.message.lower() and err.user_hint

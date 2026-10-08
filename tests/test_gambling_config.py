@@ -69,3 +69,24 @@ def test_rake_is_clamped_between_zero_and_fifty() -> None:
 def test_timers_have_a_five_second_floor() -> None:
     cfg = _load({"GAMBLING_LOBBY_JOIN_SECONDS": "0", "GAMBLING_TURN_SECONDS": "1"})
     assert (cfg.gambling_lobby_join_seconds, cfg.gambling_turn_seconds) == (5, 5)
+
+
+def test_jackpot_and_crash_defaults() -> None:
+    cfg = _load()
+    assert cfg.gambling_jackpot_rake_percent == 2
+    assert cfg.gambling_crash_max_multiplier == 100
+
+
+def test_jackpot_and_crash_overrides() -> None:
+    cfg = _load({"GAMBLING_JACKPOT_RAKE_PERCENT": "4", "GAMBLING_CRASH_MAX_MULTIPLIER": "50"})
+    assert (cfg.gambling_jackpot_rake_percent, cfg.gambling_crash_max_multiplier) == (4, 50)
+
+
+def test_jackpot_rake_is_clamped_between_zero_and_fifty() -> None:
+    assert _load({"GAMBLING_JACKPOT_RAKE_PERCENT": "-1"}).gambling_jackpot_rake_percent == 0
+    assert _load({"GAMBLING_JACKPOT_RAKE_PERCENT": "80"}).gambling_jackpot_rake_percent == 50
+
+
+def test_crash_cap_has_a_floor_of_two() -> None:
+    assert _load({"GAMBLING_CRASH_MAX_MULTIPLIER": "1"}).gambling_crash_max_multiplier == 2
+    assert _load({"GAMBLING_CRASH_MAX_MULTIPLIER": "0"}).gambling_crash_max_multiplier == 2

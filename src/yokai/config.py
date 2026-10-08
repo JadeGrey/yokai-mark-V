@@ -66,6 +66,8 @@ class Config:
     gambling_duel_rake_percent: int = 2
     gambling_lobby_join_seconds: int = 60
     gambling_turn_seconds: int = 45
+    gambling_jackpot_rake_percent: int = 2
+    gambling_crash_max_multiplier: int = 100
 
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
@@ -194,6 +196,21 @@ def load_config(env_path: Path | str | None = None) -> Config:
     gambling_turn_seconds = max(
         5, _parse_int("GAMBLING_TURN_SECONDS", os.getenv("GAMBLING_TURN_SECONDS"), 45)
     )
+    gambling_jackpot_rake_percent = min(
+        50,
+        max(
+            0,
+            _parse_int(
+                "GAMBLING_JACKPOT_RAKE_PERCENT", os.getenv("GAMBLING_JACKPOT_RAKE_PERCENT"), 2
+            ),
+        ),
+    )
+    gambling_crash_max_multiplier = max(
+        2,
+        _parse_int(
+            "GAMBLING_CRASH_MAX_MULTIPLIER", os.getenv("GAMBLING_CRASH_MAX_MULTIPLIER"), 100
+        ),
+    )
 
     return Config(
         discord_token=token,
@@ -227,4 +244,6 @@ def load_config(env_path: Path | str | None = None) -> Config:
         gambling_duel_rake_percent=gambling_duel_rake_percent,
         gambling_lobby_join_seconds=gambling_lobby_join_seconds,
         gambling_turn_seconds=gambling_turn_seconds,
+        gambling_jackpot_rake_percent=gambling_jackpot_rake_percent,
+        gambling_crash_max_multiplier=gambling_crash_max_multiplier,
     )
