@@ -65,7 +65,7 @@ class BotCheckError(YokaiError):
     def __init__(
         self,
         message: str = "YouTube blocked the audio extraction request (bot detection/403).",
-        user_hint: Optional[str] = "The bot owner can check /diag or update yt-dlp.",
+        user_hint: Optional[str] = "The bot owner can check /admin diag or update yt-dlp.",
     ) -> None:
         super().__init__(message, user_hint=user_hint)
 

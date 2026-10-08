@@ -139,6 +139,8 @@ class YokaiBot(commands.Bot):
         await self.load_extension("yokai.cogs.music")
         await self.load_extension("yokai.cogs.economy")
         await self.load_extension("yokai.cogs.gambling")
+        await self.load_extension("yokai.cogs.admin")
+        await self.load_extension("yokai.cogs.owner")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)
@@ -223,7 +225,7 @@ class YokaiBot(commands.Bot):
             embed = EmbedFactory.error(
                 message="An unexpected system error occurred while processing this command.",
                 title="Something broke",
-                user_hint="Check /diag or contact the bot owner if the issue persists.",
+                user_hint="Check /admin diag or contact the bot owner if the issue persists.",
                 bot_avatar_url=avatar_url,
             )
 

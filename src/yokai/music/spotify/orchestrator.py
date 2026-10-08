@@ -70,7 +70,7 @@ class SpotifyOrchestrator:
         }
 
     def get_provider_status(self) -> dict[str, Any]:
-        """Summary of provider availability and circuit breaker states for /diag."""
+        """Summary of provider availability and circuit breaker states for /admin diag."""
         return {
             "official_configured": self.official is not None and self.official.is_healthy,
             "official_circuit_available": self.breakers["official"].is_available,

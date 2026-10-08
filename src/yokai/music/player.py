@@ -556,7 +556,7 @@ class GuildPlayer:
             )
             description = f"Skipping **{escape_md(track.title[:120])}**. {reason}"
         if getattr(self.resolver, "is_degraded", False) is True:
-            description += "\nYouTube is giving me trouble. The owner can check `/diag`."
+            description += "\nYouTube is giving me trouble. The owner can check `/admin diag`."
         embed = EmbedFactory.warning(
             title="Track skipped", description=description, context="Playback"
         )

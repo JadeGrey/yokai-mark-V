@@ -128,7 +128,10 @@ def check_health(
             report.ytdlp_age_days = age_days
             if age_days > 30:
                 report.ytdlp_outdated = True
-                msg = f"yt-dlp is {age_days} days old ({ver}). Consider updating via /diag or pip."
+                msg = (
+                    f"yt-dlp is {age_days} days old ({ver}). "
+                    "Consider updating via /admin diag or pip."
+                )
                 report.warnings.append(msg)
                 logger.warning(msg)
             else:

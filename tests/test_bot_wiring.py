@@ -281,3 +281,19 @@ async def test_the_bot_owns_a_name_cache_and_the_tree_feeds_it() -> None:
     assert await bot.tree.interaction_check(interaction) is True
     await bot.names.wait_idle()
     bot.db.upsert_user_name.assert_awaited_once_with(7, "Sami")
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_loads_the_admin_and_owner_extensions() -> None:
+    bot = make_bot()
+    bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=0)
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    with patch.object(bot.voice_earn_tracker, "start"):
+        await bot.setup_hook()
+    loaded = [call.args[0] for call in bot.load_extension.await_args_list]
+    assert "yokai.cogs.admin" in loaded
+    assert "yokai.cogs.owner" in loaded
