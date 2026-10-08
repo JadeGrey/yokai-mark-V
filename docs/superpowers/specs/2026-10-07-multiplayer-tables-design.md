@@ -25,7 +25,8 @@ Give members multiplayer casino games played in dedicated channels, plus a weekl
 - A table auto-starts when its join window ends, or at once when it is full; the host may press Start early once the minimum is met. A table that ends its window below the minimum cancels and refunds.
 - Existing admin commands move into `/admin` (breaking rename). `/owner` is created empty for now.
 - Lottery: pick-a-number, one weekly draw, the pot rolls over, ties split the pot. Range 1 to 20.
-- Out of scope: poker, threads, a duel dice variant, tiered lottery prizes, admin-panel support for the lottery, any real-money feature.
+- Duel is a pick-a-number game (1 to 10, closer to a hidden target wins, a tie refunds both).
+- Out of scope: poker, threads, other duel variants, tiered lottery prizes, admin-panel support for the lottery, any real-money feature.
 
 ## 3. Phasing
 
@@ -100,7 +101,13 @@ One `PlayView(timeout=None)` with a fixed `custom_id` (`yokai:table:play`) is re
 
 ### Duel (M2)
 
-Two seats. The host's Play sets the stake; one **Join** click (no modal) fills the second seat at the same stake and starts the duel at once. Coinflip, 2% rake (`GAMBLING_DUEL_RAKE_PERCENT`, rounded down).
+Two seats, a pick-a-number game. The host's Play sets the stake; one **Join** click (no modal) fills the second seat at the same stake and moves the table to `RUNNING` at once.
+
+- The server draws a hidden target from 1 to 10 (`SystemRandom`) when the seats fill.
+- Each player picks a number from 1 to 10 through an ephemeral prompt (a **Pick your number** button on the table message opens it), so the opponent never sees the pick. A player who has not picked within `GAMBLING_TURN_SECONDS` (45) gets a random number.
+- When both picks are in, the table reveals the target and both picks together. The pick closer to the target wins and takes the pot minus `GAMBLING_DUEL_RAKE_PERCENT` (2%, rounded down), settled with `settle_lobby`.
+- **Tie** (equal distance, including both players picking the same number): both stakes are refunded in full, no rake and no pot credit.
+- The engine is pure: `resolve(pick_a, pick_b, target)` returns the winner or a tie. Central picks are favoured against a uniform target, so the game has a small skill element; it is symmetric, so neither seat has an edge.
 
 ## 6. Lottery pot accounting (M2)
 
@@ -190,7 +197,7 @@ No network anywhere; nothing needs the `live` marker.
 
 - **Settlement:** `settle_lobby` is all-or-nothing (a failure partway leaves every bet open and every wallet unchanged); no sequence of settle, refund and sweep pays one pot twice; concurrent settles cannot double-pay.
 - **Pot accounting:** house-banked take, pooled-game rake only, refunds credit nothing, pot credit and settlement commit together, entries sum to the running pot.
-- **Engines (seeded):** duel rake rounding; jackpot weighted-draw probabilities and single-entrant refund; crash distribution, cap, server-authoritative cash-out, post-crash press loses (fake clock); blackjack table turn order, timeout auto-stand, per-player payout.
+- **Engines (seeded):** duel winner by distance, every tie case (same pick, equidistant picks) refunds both with no rake, rake rounding, hidden picks never shown before the reveal, timeout assigns a random pick, a non-participant cannot pick; jackpot weighted-draw probabilities and single-entrant refund; crash distribution, cap, server-authoritative cash-out, post-crash press loses (fake clock); blackjack table turn order, timeout auto-stand, per-player payout.
 - **Lobby:** join, leave, start and cancel races under the lock; auto-cancel refunds; one-active-game rule; host/admin-only cancel; no cancel once `RUNNING`.
 - **Play flow:** busy-table refusal, two simultaneous presses, previous-table clearing, startup reconcile of Play embed and stale tables, persistent view `custom_id` registered.
 - **Commands:** `/admin` group structure and `is_admin` gating; `set_multiplayer` permission check, move and re-point; old commands gone.
