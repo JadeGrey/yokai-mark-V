@@ -9,7 +9,7 @@ from typing import AsyncIterator
 import pytest
 
 from yokai.moderation.store import ModerationStore
-from yokai.storage.db import Database
+from yokai.storage.db import CURRENT_SCHEMA_VERSION, Database
 from yokai_admin.core import db as panel_db
 from yokai_admin.core.db import MIN_SCHEMA_VERSION, readonly, require_schema, write_transaction
 from yokai_admin.errors import PanelDbError
@@ -53,7 +53,7 @@ async def test_the_connection_cannot_write(db: Database, tmp_path: Path) -> None
 
 async def test_require_schema_accepts_the_current_version(db: Database, tmp_path: Path) -> None:
     with readonly(tmp_path / "t.db") as conn:
-        assert require_schema(conn) == MIN_SCHEMA_VERSION
+        assert require_schema(conn) == CURRENT_SCHEMA_VERSION >= MIN_SCHEMA_VERSION
 
 
 def test_an_old_schema_is_refused_with_a_hint(tmp_path: Path) -> None:

@@ -27,8 +27,8 @@ async def _names(db: Database) -> list[tuple[int, str, int]]:
         return [tuple(row) for row in await c.fetchall()]  # type: ignore[misc]
 
 
-async def test_schema_is_at_v5_with_the_user_names_table(db: Database) -> None:
-    assert CURRENT_SCHEMA_VERSION == 5
+async def test_schema_has_the_user_names_table(db: Database) -> None:
+    assert CURRENT_SCHEMA_VERSION >= 5
     async with db.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table';") as c:
         assert "user_names" in {row[0] for row in await c.fetchall()}
 
@@ -60,7 +60,7 @@ async def test_a_v4_database_upgrades_to_v5_keeping_its_rows(db: Database, tmp_p
     try:
         async with upgraded.conn.execute("PRAGMA user_version;") as c:
             row = await c.fetchone()
-        assert row is not None and row[0] == 5
+        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
         assert await upgraded.get_moderation_lists() == (frozenset({9}), frozenset())
         await upgraded.upsert_user_name(1, "ok", now=1)  # the table exists again
     finally:

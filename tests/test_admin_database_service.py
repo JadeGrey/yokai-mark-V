@@ -130,9 +130,9 @@ def test_integrity_check_reports_problems_up_to_the_limit(tmp_path: Path) -> Non
     )
     broken = tmp_path / "broken.db"
     shutil.copy(path, broken)
-    # Damage the index pages in the copy so the b-tree no longer matches its table.
+    # Damage the last pages (the junk table and its index) so the b-tree no longer matches.
     data = bytearray(broken.read_bytes())
-    for offset in range(len(data) // 2, len(data) // 2 + 4096 * 3, 97):
+    for offset in range(len(data) - 4096 * 3, len(data), 97):
         data[offset] ^= 0xFF
     broken.write_bytes(bytes(data))
     with readonly(broken) as conn:
