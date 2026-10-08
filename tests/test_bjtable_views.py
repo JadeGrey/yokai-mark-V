@@ -240,3 +240,37 @@ async def test_a_failure_while_playing_refunds_everyone_and_tells_the_players(
         assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
         assert not active.is_active(1)
         assert "cancelled" in message.edit.await_args.kwargs["embed"].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_a_hit_that_races_the_timeout_is_not_followed_by_a_forced_stand(
+    tmp_path: Path,
+) -> None:
+    """A press that lands while the runner is deciding the turn timed out keeps their turn."""
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        lobby = await _running(manager)
+        message = make_message()
+        shoe = cards("10h 9d 7h 2c 9s 10d 3c")  # player 1: 12, hits a three for 15
+        calls = {"n": 0}
+
+        async def wait(view: BlackjackTableView, seconds: float) -> bool:
+            calls["n"] += 1
+            who = view.table.current
+            assert who is not None
+            if calls["n"] == 1:
+                # player 1 hits (not ending the hand) just before the runner sees a timeout
+                await view.hit_button.callback(make_interaction(who))
+                return False
+            await view.stand_button.callback(make_interaction(who))
+            return True
+
+        with (
+            patch("yokai.ui.bjtable_views.build_shoe", return_value=shoe),
+            patch("yokai.ui.bjtable_views._await_action", new=wait),
+        ):
+            await run_bjtable(make_bot(db, manager), lobby, message)
+
+        # wait 1: player 1's racing hit; wait 2: player 1 stands on 15; wait 3: player 2 stands
+        assert calls["n"] == 3
+        assert await balance_of(db, 1) == 900  # 15 loses to the dealer's 17
+        assert await balance_of(db, 2) == 1100  # 18 beats 17

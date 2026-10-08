@@ -137,6 +137,8 @@ async def run_bjtable(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> 
             if await _await_action(view, tables.pick_seconds):
                 continue  # someone acted; the button handler already updated the message
             async with view.lock:
+                if view.acted.is_set():
+                    continue  # a press landed while we waited for the lock: their turn goes on
                 if table.current == who:  # still their turn: they ran out of time
                     table.stand(who)
                     view.reset_deadline()

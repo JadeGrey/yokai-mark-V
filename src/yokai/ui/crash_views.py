@@ -103,7 +103,7 @@ async def run_crash(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> No
         async def refresh() -> None:
             nonlocal interval
             began = time.monotonic()
-            elapsed = tables.clock() - started_at
+            elapsed = tables.clock() - view.started_at
             try:
                 await message.edit(
                     embed=EmbedFactory.crash_flying(
@@ -121,8 +121,11 @@ async def run_crash(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> No
             embed=EmbedFactory.crash_flying(view.rows(), 100, bot_avatar_url=avatar_url(bot)),
             view=view,
         )
+        # The round starts once the Cash out button is on screen, not while its message is
+        # still being sent, so Discord latency never eats into anyone's time.
+        view.started_at = tables.clock()
         while True:
-            elapsed = tables.clock() - started_at
+            elapsed = tables.clock() - view.started_at
             if crash.is_over(elapsed):
                 break
             if pending is None or pending.done():

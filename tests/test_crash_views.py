@@ -272,3 +272,34 @@ async def test_a_slow_edit_never_delays_the_crash(tmp_path: Path) -> None:
         ):
             await asyncio.wait_for(run_crash(make_bot(db, manager), lobby, message), timeout=5)
         assert lobby.state is LobbyState.SETTLED
+
+
+@pytest.mark.asyncio
+async def test_the_clock_starts_once_the_cash_out_button_is_on_screen(tmp_path: Path) -> None:
+    """Edit latency before the button exists must not eat into the round."""
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        clock = FakeClock()
+        manager.clock = clock
+        lobby = await _running(manager, (100,))
+        message = make_message()
+
+        async def slow_first_edit(**kwargs):  # type: ignore[no-untyped-def]
+            if message.edit.await_count == 1:
+                clock.now += 5.0  # the first message takes five seconds to appear
+
+        message.edit = AsyncMock(side_effect=slow_first_edit)
+        pressed: dict[str, CrashView] = {}
+
+        async def script(view: CrashView, elapsed: float) -> None:
+            if "view" not in pressed:
+                pressed["view"] = view
+                await _press(view, 1)  # the very first moment the button could be pressed
+
+        with (
+            patch("yokai.ui.crash_views.draw_crash_point", return_value=1000),
+            patch("yokai.ui.crash_views._pause", new=fake_pause(clock, script)),
+        ):
+            await run_crash(make_bot(db, manager), lobby, message)
+
+        locked = pressed["view"].crash.cashed_out[1]
+        assert locked < 110  # about 1.0x; counting the five seconds of latency would give 1.41x
