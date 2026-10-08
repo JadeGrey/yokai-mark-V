@@ -90,3 +90,46 @@ def test_jackpot_rake_is_clamped_between_zero_and_fifty() -> None:
 def test_crash_cap_has_a_floor_of_two() -> None:
     assert _load({"GAMBLING_CRASH_MAX_MULTIPLIER": "1"}).gambling_crash_max_multiplier == 2
     assert _load({"GAMBLING_CRASH_MAX_MULTIPLIER": "0"}).gambling_crash_max_multiplier == 2
+
+
+def test_lottery_defaults() -> None:
+    cfg = _load()
+    assert cfg.lottery_ticket_price == 100
+    assert cfg.lottery_number_range == 20
+    assert cfg.lottery_max_tickets_per_user == 10
+    assert cfg.lottery_draw_interval_hours == 168
+
+
+def test_lottery_overrides() -> None:
+    cfg = _load(
+        {
+            "LOTTERY_TICKET_PRICE": "250",
+            "LOTTERY_NUMBER_RANGE": "30",
+            "LOTTERY_MAX_TICKETS_PER_USER": "5",
+            "LOTTERY_DRAW_INTERVAL_HOURS": "24",
+        }
+    )
+    assert (
+        cfg.lottery_ticket_price,
+        cfg.lottery_number_range,
+        cfg.lottery_max_tickets_per_user,
+        cfg.lottery_draw_interval_hours,
+    ) == (250, 30, 5, 24)
+
+
+def test_lottery_values_are_clamped_to_sensible_bounds() -> None:
+    cfg = _load(
+        {
+            "LOTTERY_TICKET_PRICE": "0",
+            "LOTTERY_NUMBER_RANGE": "1",
+            "LOTTERY_MAX_TICKETS_PER_USER": "0",
+            "LOTTERY_DRAW_INTERVAL_HOURS": "0",
+        }
+    )
+    assert (
+        cfg.lottery_ticket_price,
+        cfg.lottery_number_range,
+        cfg.lottery_max_tickets_per_user,
+        cfg.lottery_draw_interval_hours,
+    ) == (1, 2, 1, 1)
+    assert _load({"LOTTERY_NUMBER_RANGE": "5000"}).lottery_number_range == 100

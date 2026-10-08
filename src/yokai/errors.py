@@ -335,3 +335,31 @@ class NotYourTurnError(YokaiError):
             "It isn't your turn yet.",
             user_hint="Wait until the table is waiting on you.",
         )
+
+
+class LotteryClosedError(YokaiError):
+    """Raised when tickets are bought while sales are closed."""
+
+    title = "Tickets closed"
+
+    def __init__(
+        self,
+        message: str = "The draw is happening right now, so ticket sales are closed.",
+        user_hint: Optional[str] = "Tickets for the next draw go on sale in a moment.",
+    ) -> None:
+        super().__init__(message, user_hint=user_hint)
+
+
+class TicketLimitError(YokaiError):
+    """Raised when a purchase would take a member past the per-draw ticket cap."""
+
+    title = "Ticket limit"
+
+    def __init__(self, held: int, maximum: int) -> None:
+        super().__init__(
+            f"You can hold at most **{maximum}** tickets per draw, and you already have "
+            f"**{held}**.",
+            user_hint="Wait for the next draw to buy more.",
+        )
+        self.held = held
+        self.maximum = maximum

@@ -10,11 +10,13 @@ from yokai.errors import (
     InsufficientFundsError,
     InvalidGameChoiceError,
     LobbyClosedError,
+    LotteryClosedError,
     NotAtTableError,
     NotHostError,
     NotYourTurnError,
     TableBusyError,
     TablePermissionError,
+    TicketLimitError,
     YokaiError,
 )
 
@@ -74,3 +76,15 @@ def test_not_your_turn_is_a_plain_domain_error() -> None:
     err = NotYourTurnError()
     assert isinstance(err, YokaiError) and err.title == "Not your turn"
     assert "turn" in err.message.lower() and err.user_hint
+
+
+def test_lottery_closed_error_has_a_default_and_accepts_a_custom_message() -> None:
+    default = LotteryClosedError()
+    assert isinstance(default, YokaiError) and "closed" in default.message.lower()
+    custom = LotteryClosedError("Tickets are not on sale yet.", user_hint=None)
+    assert custom.message == "Tickets are not on sale yet." and custom.user_hint is None
+
+
+def test_ticket_limit_error_names_the_cap_and_what_the_member_holds() -> None:
+    err = TicketLimitError(held=8, maximum=10)
+    assert isinstance(err, YokaiError) and "10" in err.message and "8" in err.message

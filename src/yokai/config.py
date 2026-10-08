@@ -69,6 +69,12 @@ class Config:
     gambling_jackpot_rake_percent: int = 2
     gambling_crash_max_multiplier: int = 100
 
+    # Lottery
+    lottery_ticket_price: int = 100
+    lottery_number_range: int = 20
+    lottery_max_tickets_per_user: int = 10
+    lottery_draw_interval_hours: int = 168
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -211,6 +217,20 @@ def load_config(env_path: Path | str | None = None) -> Config:
             "GAMBLING_CRASH_MAX_MULTIPLIER", os.getenv("GAMBLING_CRASH_MAX_MULTIPLIER"), 100
         ),
     )
+    lottery_ticket_price = max(
+        1, _parse_int("LOTTERY_TICKET_PRICE", os.getenv("LOTTERY_TICKET_PRICE"), 100)
+    )
+    lottery_number_range = min(
+        100, max(2, _parse_int("LOTTERY_NUMBER_RANGE", os.getenv("LOTTERY_NUMBER_RANGE"), 20))
+    )
+    lottery_max_tickets_per_user = max(
+        1,
+        _parse_int("LOTTERY_MAX_TICKETS_PER_USER", os.getenv("LOTTERY_MAX_TICKETS_PER_USER"), 10),
+    )
+    lottery_draw_interval_hours = max(
+        1,
+        _parse_int("LOTTERY_DRAW_INTERVAL_HOURS", os.getenv("LOTTERY_DRAW_INTERVAL_HOURS"), 168),
+    )
 
     return Config(
         discord_token=token,
@@ -246,4 +266,8 @@ def load_config(env_path: Path | str | None = None) -> Config:
         gambling_turn_seconds=gambling_turn_seconds,
         gambling_jackpot_rake_percent=gambling_jackpot_rake_percent,
         gambling_crash_max_multiplier=gambling_crash_max_multiplier,
+        lottery_ticket_price=lottery_ticket_price,
+        lottery_number_range=lottery_number_range,
+        lottery_max_tickets_per_user=lottery_max_tickets_per_user,
+        lottery_draw_interval_hours=lottery_draw_interval_hours,
     )
