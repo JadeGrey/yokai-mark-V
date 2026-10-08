@@ -984,6 +984,135 @@ Press **Play** to open a table.",
             fields=_grid(fields),
         )
 
+    @classmethod
+    def jackpot_drawing(
+        cls,
+        entries: Sequence[tuple[int, int]],  # (user_id, stake)
+        pot: int,
+        rake_percent: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The jackpot while the winner is being drawn: everyone's stake and chance."""
+        lines = [
+            f"<@{user_id}> — **{stake:,}** ({stake * 100 / pot:.0f}%)" for user_id, stake in entries
+        ]
+        rake_note = f" The house keeps {rake_percent}%." if rake_percent else ""
+        fields: list[FieldSpec] = [
+            ("Pot", f"**{pot:,}**", True),
+            ("Players", f"**{len(entries)}**", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.SLOTS} Jackpot",
+            description="\n".join(lines) + f"\n\nDrawing a winner, weighted by stake.{rake_note}",
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def jackpot_result(
+        cls,
+        entries: Sequence[tuple[int, int]],
+        winner_id: int,
+        prize: int,
+        rake: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A drawn jackpot: the winner, the prize, and every entrant's chance."""
+        pot = sum(stake for _, stake in entries)
+        lines = [
+            f"<@{user_id}> — **{stake:,}** ({stake * 100 / pot:.0f}%)" for user_id, stake in entries
+        ]
+        fields: list[FieldSpec] = [("Prize", f"**{prize:,}**", True)]
+        if rake:
+            fields.append(("Rake", f"**{rake:,}**", True))
+        return cls._create_base(
+            title=f"{Emoji.SLOTS} Jackpot",
+            description=f"**<@{winner_id}> wins {prize:,} Renown.**\n\n" + "\n".join(lines),
+            color=COLOR_SUCCESS,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("game_win"),
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def crash_flying(
+        cls,
+        rows: Sequence[tuple[int, int, Optional[int]]],  # (user_id, stake, cashed out at)
+        multiplier: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A crash round in flight. Multipliers are whole hundredths (231 is 2.31x)."""
+        lines = [
+            f"<@{user_id}> — **{stake:,}** — "
+            + ("still in" if cashed is None else f"out at **{cashed / 100:.2f}x**")
+            for user_id, stake, cashed in rows
+        ]
+        return cls._create_base(
+            title=f"{Emoji.DRONE} Crash",
+            description=f"`{multiplier / 100:.2f}x`\n\n" + "\n".join(lines),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def crash_result(
+        cls,
+        rows: Sequence[tuple[int, int, Optional[int]]],
+        crash_point: int,
+        payouts: Mapping[int, int],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A finished crash round: where it crashed and each player's net."""
+        lines = []
+        for user_id, stake, cashed in rows:
+            net = _signed(payouts.get(user_id, 0) - stake)
+            if cashed is None:
+                lines.append(f"<@{user_id}> — crashed — **{net}**")
+            else:
+                lines.append(f"<@{user_id}> — out at **{cashed / 100:.2f}x** — **{net}**")
+        anyone_won = any(cashed is not None for _, _, cashed in rows)
+        return cls._create_base(
+            title=f"{Emoji.DRONE} Crash",
+            description=f"It crashed at **{crash_point / 100:.2f}x**.\n\n" + "\n".join(lines),
+            color=COLOR_SUCCESS if anyone_won else COLOR_WARNING,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("game_win" if anyone_won else "game_loss"),
+        )
+
+    @classmethod
+    def bjtable_hand(
+        cls,
+        seats: Sequence[tuple[int, int, Sequence[str], int, str]],
+        dealer_cards: Sequence[str],
+        dealer_total: Optional[int],
+        deadline_ts: Optional[int],
+        finished: bool,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The shared-dealer table: every hand with a status, and the dealer's cards."""
+        lines = [
+            f"<@{user_id}> (**{stake:,}**) `{' '.join(hand)}` ({total}) — {status}"
+            for user_id, stake, hand, total, status in seats
+        ]
+        dealer_suffix = f" ({dealer_total})" if dealer_total is not None else ""
+        lines.append(f"**Dealer** `{' '.join(dealer_cards)}`{dealer_suffix}")
+        fields: list[FieldSpec] = []
+        if deadline_ts is not None and not finished:
+            fields.append(("Turn ends", f"<t:{deadline_ts}:R>", True))
+        return cls._create_base(
+            title=f"{Emoji.DICE} Blackjack table",
+            description="\n".join(lines),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
 
 def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH) -> str:
     """A bar of `length` glyphs with one head marker; never an emoji."""

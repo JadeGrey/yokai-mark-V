@@ -580,6 +580,58 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             "Duel (tie)",
             EmbedFactory.duel_result({42: 3, 43: 7}, 5, None, 0, 0, bot_avatar_url=av),
         ),
+        (
+            "Jackpot (drawing)",
+            EmbedFactory.jackpot_drawing(
+                [(42, 100), (43, 300), (44, 200)], 600, 2, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Jackpot (result)",
+            EmbedFactory.jackpot_result(
+                [(42, 100), (43, 300), (44, 200)], 43, 588, 12, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Crash (in flight)",
+            EmbedFactory.crash_flying(
+                [(42, 100, None), (43, 50, 231), (44, 200, None)], 187, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Crash (result)",
+            EmbedFactory.crash_result(
+                [(42, 100, None), (43, 50, 231)], 412, {42: 0, 43: 115}, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Blackjack table (in play)",
+            EmbedFactory.bjtable_hand(
+                [
+                    (42, 100, ["10h", "6c"], 16, "to act"),
+                    (43, 50, ["As", "Kd"], 21, "blackjack"),
+                ],
+                ["9h", "??"],
+                None,
+                1_900_000_045,
+                False,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Blackjack table (final)",
+            EmbedFactory.bjtable_hand(
+                [
+                    (42, 100, ["10h", "6c", "10d"], 26, "bust: -100"),
+                    (43, 50, ["As", "Kd"], 21, "blackjack: +75"),
+                ],
+                ["9h", "10c"],
+                19,
+                None,
+                True,
+                bot_avatar_url=av,
+            ),
+        ),
     ]
     return samples
 
