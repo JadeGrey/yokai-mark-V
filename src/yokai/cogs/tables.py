@@ -43,6 +43,11 @@ class TablesCog(commands.Cog, name="Tables"):
         )
 
     async def _post_play_message(self, channel: Any, game: str) -> discord.Message:
+        if game == "lottery":
+            lottery = self.bot.get_cog("Lottery")
+            if lottery is None:
+                raise InvalidGameChoiceError("The lottery is not loaded.")
+            return await lottery.post_panel(channel)  # type: ignore[attr-defined]
         return await channel.send(
             embed=self._play_embed(game), view=PlayView(self.bot), allowed_mentions=NO_MENTIONS
         )
@@ -81,7 +86,7 @@ class TablesCog(commands.Cog, name="Tables"):
         spec = self.bot.tables.spec(game)  # unknown games fail here
         if not spec.available:
             err = InvalidGameChoiceError(f"{spec.label} tables are not open yet.")
-            err.user_hint = "Duel is available now; the other games arrive in later updates."
+            err.user_hint = "That game is not available yet."
             raise err
         permissions = channel.permissions_for(channel.guild.me)
         missing = [

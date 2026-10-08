@@ -83,13 +83,34 @@ async def test_a_missing_permission_is_reported_before_anything_is_posted(tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_a_game_that_is_not_built_yet_cannot_be_dedicated(tmp_path: Path) -> None:
+async def test_the_lottery_channel_gets_the_lottery_panel_not_a_play_embed(tmp_path: Path) -> None:
     async with world(tmp_path, users=()) as (db, manager, _):
         bot = make_bot(db, manager)
         channel = make_channel(20)
-        for game in ("lottery",):
-            with pytest.raises(InvalidGameChoiceError, match="not open yet"):
-                await TablesCog(bot).set_channel(channel, game)
+        panel_message = MagicMock(spec=discord.Message)
+        panel_message.id = 7777
+        lottery = MagicMock()
+        lottery.post_panel = AsyncMock(return_value=panel_message)
+        bot.get_cog = MagicMock(return_value=lottery)
+        row = await TablesCog(bot).set_channel(channel, "lottery")
+        lottery.post_panel.assert_awaited_once_with(channel)
+        channel.send.assert_not_awaited()  # no Play embed
+        assert row.game == "lottery" and row.play_message_id == 7777
+        assert (await db.get_multiplayer_channel(20)) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_game_marked_unavailable_cannot_be_dedicated(tmp_path: Path) -> None:
+    import dataclasses
+
+    from yokai.gambling.lobby import GAME_SPECS
+
+    specs = {"jackpot": dataclasses.replace(GAME_SPECS["jackpot"], available=False)}
+    async with world(tmp_path, users=(), specs=specs) as (db, manager, _):
+        bot = make_bot(db, manager)
+        channel = make_channel(20)
+        with pytest.raises(InvalidGameChoiceError, match="not open yet"):
+            await TablesCog(bot).set_channel(channel, "jackpot")
         channel.send.assert_not_awaited()
         assert await db.get_multiplayer_channel(20) is None
 

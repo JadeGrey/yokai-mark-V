@@ -362,13 +362,16 @@ async def test_a_database_failure_after_the_lobby_is_posted_removes_the_lobby_me
         assert await balance_of(db, 1) == 1000 and not active.is_active(1)
 
 
-def test_every_playable_game_has_a_runner() -> None:
+def test_every_playable_table_game_has_a_runner() -> None:
     from yokai.gambling.lobby import GAME_SPECS
 
     missing = [
-        name for name, spec in GAME_SPECS.items() if spec.available and name not in GAME_RUNNERS
+        name
+        for name, spec in GAME_SPECS.items()
+        if spec.available and spec.is_table and name not in GAME_RUNNERS
     ]
     assert missing == []
+    assert "lottery" not in GAME_RUNNERS  # it has a panel and a scheduler, not a table
 
 
 @pytest.mark.asyncio

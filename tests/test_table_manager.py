@@ -137,15 +137,27 @@ def test_an_unknown_game_is_an_invalid_choice() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_game_that_is_not_built_yet_cannot_open_a_table_and_costs_nothing(
-    tmp_path: Path,
-) -> None:
+async def test_the_lottery_cannot_be_opened_as_a_table_and_costs_nothing(tmp_path: Path) -> None:
     async with world(tmp_path) as (db, manager, active):
-        for game in ("lottery",):
-            with pytest.raises(InvalidGameChoiceError, match="not open yet"):
-                await manager.open_table(CHANNEL, game, 1, 100, announce_ok)
+        with pytest.raises(InvalidGameChoiceError, match="isn't a table game"):
+            await manager.open_table(CHANNEL, "lottery", 1, 100, announce_ok)
         assert await balance_of(db, 1) == 1000 and not active.is_active(1)
         assert not manager.is_busy(CHANNEL)
+
+
+@pytest.mark.asyncio
+async def test_a_game_marked_unavailable_cannot_open_a_table_and_costs_nothing(
+    tmp_path: Path,
+) -> None:
+    import dataclasses
+
+    from yokai.gambling.lobby import GAME_SPECS
+
+    specs = {"jackpot": dataclasses.replace(GAME_SPECS["jackpot"], available=False)}
+    async with world(tmp_path, specs=specs) as (db, manager, active):
+        with pytest.raises(InvalidGameChoiceError, match="not open yet"):
+            await manager.open_table(CHANNEL, "jackpot", 1, 100, announce_ok)
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
 
 
 @pytest.mark.asyncio

@@ -29,6 +29,7 @@ class GameSpec:
     window_factor: float = 1.0  # share of GAMBLING_LOBBY_JOIN_SECONDS this game waits
     rules: str = ""
     available: bool = True  # False until the game's phase ships: listed, but not playable
+    is_table: bool = True  # False for games with no table, like the lottery
 
 
 GAME_SPECS: dict[str, GameSpec] = {
@@ -72,7 +73,7 @@ GAME_SPECS: dict[str, GameSpec] = {
         window_factor=0.5,
         rules="Blackjack against one shared dealer. Every player plays their own hand.",
     ),
-    # Listed already; playable once the lottery (phase M4) ships.
+    # Not a table: it has its own channel panel and a weekly draw.
     "lottery": GameSpec(
         name="lottery",
         label="Lottery",
@@ -82,7 +83,7 @@ GAME_SPECS: dict[str, GameSpec] = {
             "Buy numbered tickets. A weekly draw picks one number; holders split the pot, "
             "and it rolls over when nobody wins."
         ),
-        available=False,
+        is_table=False,
     ),
 }
 

@@ -137,6 +137,8 @@ class TableManager:
     ) -> Lobby:
         """Escrow the host's stake and open a table; `announce` posts its message."""
         spec = self.spec(game)
+        if not spec.is_table:
+            raise InvalidGameChoiceError(f"{spec.label} isn't a table game.")
         if not spec.available:
             raise InvalidGameChoiceError(f"{spec.label} tables are not open yet.")
         validate_bet(stake, self.min_bet, self.max_bet)

@@ -343,3 +343,18 @@ async def test_the_table_manager_gets_the_jackpot_and_crash_settings() -> None:
     bot = make_bot()
     assert bot.tables.jackpot_rake_percent == bot.config.gambling_jackpot_rake_percent
     assert bot.tables.crash_max_multiplier == bot.config.gambling_crash_max_multiplier
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_loads_the_lottery_extension() -> None:
+    bot = make_bot()
+    bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=0)
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    with patch.object(bot.voice_earn_tracker, "start"):
+        await bot.setup_hook()
+    loaded = [call.args[0] for call in bot.load_extension.await_args_list]
+    assert "yokai.cogs.lottery" in loaded
