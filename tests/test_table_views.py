@@ -399,3 +399,42 @@ async def test_the_new_games_start_through_the_registry(tmp_path: Path, game: st
             await view.start_button.callback(make_interaction(1))
         runner.assert_awaited_once()
         assert lobby.state is LobbyState.RUNNING
+
+
+class _SentToDiscord(Exception):
+    """Raised by the capturing adapter once discord.py has decided what to send."""
+
+
+@pytest.mark.asyncio
+async def test_the_stake_form_asks_discord_for_a_private_thinking_reply() -> None:
+    """Regression: a plain defer on a form submitted from a button is a silent update of the
+    button's own message, and dismiss() then deleted that message (the Play embed when opening
+    a table, the lobby message when joining one). Only `thinking=True` makes the reply private
+    and separate, so the placeholder that dismiss() removes is never a table message."""
+    from discord.webhook.async_ import async_context
+
+    sent: dict[str, object] = {}
+
+    class CapturingAdapter:
+        async def create_interaction_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            payload = kwargs["params"].payload
+            sent["type"] = payload["type"]
+            sent["data"] = payload.get("data")
+            raise _SentToDiscord
+
+    parent = MagicMock()
+    parent.type = discord.InteractionType.modal_submit
+    interaction = MagicMock()
+    interaction.response = discord.InteractionResponse(parent)
+
+    modal = StakeModal(MagicMock(), "Open a table", AsyncMock())
+    modal.stake._value = "100"  # type: ignore[attr-defined]
+    token = async_context.set(CapturingAdapter())
+    try:
+        with pytest.raises(_SentToDiscord):
+            await modal.on_submit(interaction)
+    finally:
+        async_context.reset(token)
+
+    assert sent["type"] == discord.InteractionResponseType.deferred_channel_message.value
+    assert sent["data"] == {"flags": 64}  # ephemeral

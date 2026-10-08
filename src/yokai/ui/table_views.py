@@ -64,7 +64,10 @@ class StakeModal(discord.ui.Modal):
         self._on_stake = on_stake
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+        # thinking=True is what makes this a private reply of its own. Without it discord.py
+        # sends a silent update of the message the button sits on (and ignores `ephemeral`),
+        # and dismiss() would then delete that message: the Play embed or the lobby.
+        await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             await self._on_stake(interaction, parse_stake(self.stake.value))
         except YokaiError as err:
