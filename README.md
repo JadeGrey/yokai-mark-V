@@ -20,9 +20,9 @@ Yokai is a private, single-server Discord bot (~10 users) hosted locally on the 
   - `/about`: Detailed runtime stack versions, system uptime, and credits.
   - `/admin diag`: Admin-only ephemeral diagnostic dashboard with in-place **Update yt-dlp** button.
   - `/admin economy`: Admin-only Renown grant or deduction (was `/economy-admin`).
-  - `/admin set_multiplayer game:<name>`: Admin-only. Makes the current channel the table channel for a multiplayer game and posts its persistent **Play** embed. Every planned game is listed; only Duel is playable so far.
+  - `/admin set_multiplayer game:<name>`: Admin-only. Makes the current channel the table channel for a multiplayer game and posts its persistent **Play** embed. Every planned game is listed; Duel, Jackpot, Crash and the Blackjack table are playable, the Lottery is coming.
   - `/admin unset_multiplayer`: Admin-only. Stops using the current channel as a table channel.
-- **Multiplayer tables:** dedicated channels with an always-on Play button. A finished game stays on screen until the next table is requested. First game: Duel (pick a number 1 to 10; the pick closest to a hidden number wins the pot, a tie refunds both). Everything the house keeps feeds a lottery pot.
+- **Multiplayer tables:** dedicated channels with an always-on Play button. A finished game stays on screen until the next table is requested. Games: Jackpot (a stake-weighted draw takes the pot), Crash (cash out before the multiplier crashes), Blackjack table (shared dealer, up to five players) and Duel (pick a number 1 to 10; the pick closest to a hidden number wins the pot, a tie refunds both). Everything the house keeps feeds a lottery pot.
 - **Operational Hardening:** Auto-disconnects when idle or left alone in voice channels, graceful process supervision (`run.ps1`), and zero privileged intents.
 
 ---

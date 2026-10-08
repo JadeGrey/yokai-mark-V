@@ -17,8 +17,11 @@ from yokai.errors import (
 from yokai.gambling.lobby import Lobby
 from yokai.gambling.tables import BeginOutcome
 from yokai.moderation.gate import screen
+from yokai.ui.bjtable_views import run_bjtable
+from yokai.ui.crash_views import run_crash
 from yokai.ui.duel_views import run_duel
 from yokai.ui.embeds import EmbedFactory
+from yokai.ui.jackpot_views import run_jackpot
 from yokai.ui.table_common import (
     NO_MENTIONS,
     avatar_url,
@@ -26,6 +29,7 @@ from yokai.ui.table_common import (
     dismiss,
     parse_stake,
     reply_error,
+    tell_cancelled,
 )
 
 if TYPE_CHECKING:
@@ -39,7 +43,12 @@ StakeCallback = Callable[[discord.Interaction, int], Awaitable[None]]
 GameRunner = Callable[["YokaiBot", Lobby, discord.Message], Awaitable[None]]
 
 # One entry per table game: what runs once the table has started.
-GAME_RUNNERS: dict[str, GameRunner] = {"duel": run_duel}
+GAME_RUNNERS: dict[str, GameRunner] = {
+    "duel": run_duel,
+    "jackpot": run_jackpot,
+    "crash": run_crash,
+    "bjtable": run_bjtable,
+}
 
 
 class StakeModal(discord.ui.Modal):
@@ -214,7 +223,14 @@ class LobbyView(discord.ui.View):
             )
             return
         assert self.message is not None
-        await GAME_RUNNERS[self.lobby.spec.name](self.bot, self.lobby, self.message)
+        runner = GAME_RUNNERS.get(self.lobby.spec.name)
+        if runner is None:
+            # A playable game without a runner is a bug; never leave the stakes escrowed.
+            logger.error("No runner is registered for %s", self.lobby.spec.name)
+            await self.bot.tables.abort(self.lobby)
+            await tell_cancelled(self.bot, self.message)
+            return
+        await runner(self.bot, self.lobby, self.message)
 
     async def _show(self, embed: discord.Embed) -> None:
         """Replace the table message with `embed` and no buttons."""

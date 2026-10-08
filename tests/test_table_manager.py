@@ -141,7 +141,7 @@ async def test_a_game_that_is_not_built_yet_cannot_open_a_table_and_costs_nothin
     tmp_path: Path,
 ) -> None:
     async with world(tmp_path) as (db, manager, active):
-        for game in ("jackpot", "crash", "bjtable", "lottery"):
+        for game in ("lottery",):
             with pytest.raises(InvalidGameChoiceError, match="not open yet"):
                 await manager.open_table(CHANNEL, game, 1, 100, announce_ok)
         assert await balance_of(db, 1) == 1000 and not active.is_active(1)

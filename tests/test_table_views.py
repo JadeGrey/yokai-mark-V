@@ -9,7 +9,7 @@ import discord
 import pytest
 
 from tests.moderation_helpers import fake_moderation
-from tests.table_helpers import CHANNEL, announce_ok, balance_of, world
+from tests.table_helpers import ALL_PLAYABLE, CHANNEL, announce_ok, balance_of, world
 from yokai.errors import InvalidGameChoiceError
 from yokai.gambling.lobby import LobbyState
 from yokai.ui.table_common import parse_stake
@@ -360,3 +360,42 @@ async def test_a_database_failure_after_the_lobby_is_posted_removes_the_lobby_me
         partial.delete.assert_awaited()
         assert sent.await_args.kwargs["ephemeral"] is True
         assert await balance_of(db, 1) == 1000 and not active.is_active(1)
+
+
+def test_every_playable_game_has_a_runner() -> None:
+    from yokai.gambling.lobby import GAME_SPECS
+
+    missing = [
+        name for name, spec in GAME_SPECS.items() if spec.available and name not in GAME_RUNNERS
+    ]
+    assert missing == []
+
+
+@pytest.mark.asyncio
+async def test_a_missing_runner_cancels_the_table_and_refunds_instead_of_stranding_stakes(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.join(lobby, 2, None)
+        view = make_view(make_bot(db, manager), lobby)
+        with patch.dict(GAME_RUNNERS, {}, clear=True):
+            await view._after_begin(await manager.begin(lobby))
+        assert lobby.state is LobbyState.CANCELLED
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (1000, 1000)
+        assert not active.is_active(1)
+        assert "cancelled" in view.message.edit.await_args.kwargs["embed"].title.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("game", ["jackpot", "crash", "bjtable"])
+async def test_the_new_games_start_through_the_registry(tmp_path: Path, game: str) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        lobby = await manager.open_table(CHANNEL, game, 1, 100, announce_ok)
+        await manager.join(lobby, 2, 100)
+        view = make_view(make_bot(db, manager), lobby)
+        runner = AsyncMock()
+        with patch.dict(GAME_RUNNERS, {game: runner}):
+            await view.start_button.callback(make_interaction(1))
+        runner.assert_awaited_once()
+        assert lobby.state is LobbyState.RUNNING

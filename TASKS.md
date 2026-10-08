@@ -441,8 +441,8 @@ Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m2-tables-and-duel.md`.
 
 **Acceptance criteria (M2)**
 - `/admin set_multiplayer` offers every planned game (Duel, Jackpot, Crash, Blackjack table,
-  Lottery); only Duel can be dedicated yet, the others are refused with a plain "not open yet"
-  message. `/admin set_multiplayer game:Duel` in a text channel posts a Play embed that keeps
+  Lottery); the Lottery is still refused with a plain "not open yet"
+  message (the other games arrived in M3). `/admin set_multiplayer game:Duel` in a text channel posts a Play embed that keeps
   working after the bot restarts; `/admin unset_multiplayer` removes it.
 - Pressing Play asks for a stake, opens a table, and deletes the previous table's message; the
   finished table's result stays on screen until the next table is requested.
@@ -463,4 +463,38 @@ Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m2-tables-and-duel.md`.
 
 **STOP — owner review.**
 
-(M3 jackpot, crash and blackjack table, M4 lottery: planned after M2 is reviewed.)
+### M3 — Jackpot, crash and blackjack table
+
+Plan: `docs/superpowers/plans/2026-10-08-multiplayer-m3-jackpot-crash-blackjack-table.md`.
+
+- [x] M3.1 Jackpot and crash settings, `NotYourTurnError`.
+- [x] M3.2 Jackpot engine and `resolve_jackpot`.
+- [x] M3.3 Crash engine.
+- [x] M3.4 Blackjack table engine.
+- [x] M3.5 Jackpot, crash and blackjack table embeds.
+- [x] M3.6 Shared failure guard and the jackpot runner.
+- [x] M3.7 Crash runner.
+- [x] M3.8 Blackjack table runner.
+- [x] M3.9 Games switched on; missing-runner guard.
+
+**Acceptance criteria (M3)**
+- `/admin set_multiplayer` accepts Jackpot, Crash and Blackjack table; the Lottery is still refused.
+- Jackpot: 2 to 10 players each pick their own stake; the winner is drawn by stake and takes the
+  pot minus the 2% rake; one entrant is refunded.
+- Crash: 1 to 10 players; one message ticks about once a second; **Cash out** locks in the
+  server's multiplier at the moment of the press; a press after the crash loses; cashed-out
+  players are paid stake times multiplier (rounded down); a lost stake feeds the lottery pot.
+- Blackjack table: 2 to 5 players act in join order; only the player up can Hit or Stand; a
+  decision times out after 45 s into a stand; the dealer plays once; naturals pay 3:2; each hand
+  settles on its own in one transaction.
+- Any failure in any game refunds every stake and tells the players the table was cancelled.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Play each game with two or three accounts: a jackpot with different
+  stakes, a crash round where one account cashes out and one does not (and one where a press
+  lands just after the crash), a blackjack table with a hit, a stand and a timeout, and a table
+  with a dealer natural; confirm balances and `/gamble-stats`, watch the crash message for edit
+  errors in `logs`, and kill the bot mid-round to confirm the stakes come back.
+
+**STOP — owner review.**
+
+(M4 lottery: planned after M3 is reviewed.)

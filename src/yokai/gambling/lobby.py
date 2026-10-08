@@ -43,7 +43,6 @@ GAME_SPECS: dict[str, GameSpec] = {
             "the pick closest to the hidden number takes the pot. A tie refunds both stakes."
         ),
     ),
-    # Listed in /admin set_multiplayer already, but refused until their phase (M3, M4) ships.
     "jackpot": GameSpec(
         name="jackpot",
         label="Jackpot",
@@ -53,7 +52,6 @@ GAME_SPECS: dict[str, GameSpec] = {
             "Everyone puts a stake into one pot. One player is drawn at random, weighted by "
             "stake, and takes the pot minus the house rake."
         ),
-        available=False,
     ),
     "crash": GameSpec(
         name="crash",
@@ -65,7 +63,6 @@ GAME_SPECS: dict[str, GameSpec] = {
             "A multiplier climbs until it crashes. Cash out before it does to win your stake "
             "times the multiplier."
         ),
-        available=False,
     ),
     "bjtable": GameSpec(
         name="bjtable",
@@ -74,8 +71,8 @@ GAME_SPECS: dict[str, GameSpec] = {
         max_players=5,
         window_factor=0.5,
         rules="Blackjack against one shared dealer. Every player plays their own hand.",
-        available=False,
     ),
+    # Listed already; playable once the lottery (phase M4) ships.
     "lottery": GameSpec(
         name="lottery",
         label="Lottery",

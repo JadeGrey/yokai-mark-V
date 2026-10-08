@@ -87,7 +87,7 @@ async def test_a_game_that_is_not_built_yet_cannot_be_dedicated(tmp_path: Path) 
     async with world(tmp_path, users=()) as (db, manager, _):
         bot = make_bot(db, manager)
         channel = make_channel(20)
-        for game in ("jackpot", "crash", "bjtable", "lottery"):
+        for game in ("lottery",):
             with pytest.raises(InvalidGameChoiceError, match="not open yet"):
                 await TablesCog(bot).set_channel(channel, game)
         channel.send.assert_not_awaited()
