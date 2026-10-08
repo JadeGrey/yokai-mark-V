@@ -1209,6 +1209,13 @@ def test_the_duel_spec_is_a_two_seat_equal_stake_game() -> None:
     assert spec.label == "Duel" and spec.rules
 
 
+def test_every_planned_game_is_listed_but_only_the_duel_is_playable_yet() -> None:
+    assert list(GAME_SPECS) == ["duel", "jackpot", "crash", "bjtable", "lottery"]
+    assert [name for name, spec in GAME_SPECS.items() if spec.available] == ["duel"]
+    assert all(spec.label and spec.rules for spec in GAME_SPECS.values())
+    assert GAME_SPECS["crash"].window_factor == 0.5 and GAME_SPECS["bjtable"].window_factor == 0.5
+
+
 def test_a_new_lobby_is_open_with_the_host_seated() -> None:
     lobby = _lobby()
     assert lobby.state is LobbyState.OPEN and lobby.is_active
@@ -1322,6 +1329,7 @@ class GameSpec:
     equal_stakes: bool = False
     window_factor: float = 1.0  # share of GAMBLING_LOBBY_JOIN_SECONDS this game waits
     rules: str = ""
+    available: bool = True  # False until the game's phase ships: listed, but not playable
 
 
 GAME_SPECS: dict[str, GameSpec] = {
@@ -1335,6 +1343,50 @@ GAME_SPECS: dict[str, GameSpec] = {
             "Two players, one hidden number from 1 to 10. Each picks a number in secret; "
             "the pick closest to the hidden number takes the pot. A tie refunds both stakes."
         ),
+    ),
+    # Listed in /admin set_multiplayer already, but refused until their phase (M3, M4) ships.
+    "jackpot": GameSpec(
+        name="jackpot",
+        label="Jackpot",
+        min_players=2,
+        max_players=10,
+        rules=(
+            "Everyone puts a stake into one pot. One player is drawn at random, weighted by "
+            "stake, and takes the pot minus the house rake."
+        ),
+        available=False,
+    ),
+    "crash": GameSpec(
+        name="crash",
+        label="Crash",
+        min_players=1,
+        max_players=10,
+        window_factor=0.5,
+        rules=(
+            "A multiplier climbs until it crashes. Cash out before it does to win your stake "
+            "times the multiplier."
+        ),
+        available=False,
+    ),
+    "bjtable": GameSpec(
+        name="bjtable",
+        label="Blackjack table",
+        min_players=2,
+        max_players=5,
+        window_factor=0.5,
+        rules="Blackjack against one shared dealer. Every player plays their own hand.",
+        available=False,
+    ),
+    "lottery": GameSpec(
+        name="lottery",
+        label="Lottery",
+        min_players=1,
+        max_players=1,
+        rules=(
+            "Buy numbered tickets. A weekly draw picks one number; holders split the pot, "
+            "and it rolls over when nobody wins."
+        ),
+        available=False,
     ),
 }
 
@@ -1876,6 +1928,18 @@ def test_an_unknown_game_is_an_invalid_choice() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_game_that_is_not_built_yet_cannot_open_a_table_and_costs_nothing(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        for game in ("jackpot", "crash", "bjtable", "lottery"):
+            with pytest.raises(InvalidGameChoiceError, match="not open yet"):
+                await manager.open_table(CHANNEL, game, 1, 100, announce_ok)
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
+        assert not manager.is_busy(CHANNEL)
+
+
+@pytest.mark.asyncio
 async def test_check_can_open_reports_busy_tables_and_busy_members(tmp_path: Path) -> None:
     async with world(tmp_path) as (_, manager, active):
         manager.check_can_open(CHANNEL, 1)  # fine
@@ -2287,6 +2351,8 @@ class TableManager:
     ) -> Lobby:
         """Escrow the host's stake and open a table; `announce` posts its message."""
         spec = self.spec(game)
+        if not spec.available:
+            raise InvalidGameChoiceError(f"{spec.label} tables are not open yet.")
         validate_bet(stake, self.min_bet, self.max_bet)
         async with self._channel_lock(channel_id):
             if self.is_busy(channel_id):
@@ -3875,6 +3941,18 @@ async def test_a_missing_permission_is_reported_before_anything_is_posted(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_a_game_that_is_not_built_yet_cannot_be_dedicated(tmp_path: Path) -> None:
+    async with world(tmp_path, users=()) as (db, manager, _):
+        bot = make_bot(db, manager)
+        channel = make_channel(20)
+        for game in ("jackpot", "crash", "bjtable", "lottery"):
+            with pytest.raises(InvalidGameChoiceError, match="not open yet"):
+                await TablesCog(bot).set_channel(channel, game)
+        channel.send.assert_not_awaited()
+        assert await db.get_multiplayer_channel(20) is None
+
+
+@pytest.mark.asyncio
 async def test_an_unknown_game_is_refused(tmp_path: Path) -> None:
     async with world(tmp_path, users=()) as (db, manager, _):
         bot = make_bot(db, manager)
@@ -3974,6 +4052,19 @@ async def test_reconcile_survives_a_channel_it_cannot_find(tmp_path: Path) -> No
 ```
 Append to `tests/test_admin_cog.py` (add `from yokai.errors import TableBusyError` and `from discord import app_commands` to its imports):
 ```python
+def test_the_game_dropdown_lists_every_planned_game() -> None:
+    from yokai.cogs.admin import GAME_CHOICES
+
+    assert [choice.value for choice in GAME_CHOICES] == [
+        "duel",
+        "jackpot",
+        "crash",
+        "bjtable",
+        "lottery",
+    ]
+    assert [choice.name for choice in GAME_CHOICES][:2] == ["Duel", "Jackpot"]
+
+
 def make_text_channel(channel_id: int = 10) -> MagicMock:
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = channel_id
@@ -4134,7 +4225,7 @@ from typing import TYPE_CHECKING, Any
 import discord
 from discord.ext import commands
 
-from yokai.errors import TableBusyError, TablePermissionError
+from yokai.errors import InvalidGameChoiceError, TableBusyError, TablePermissionError
 from yokai.gambling.models import MultiplayerChannel
 from yokai.ui.embeds import EmbedFactory
 from yokai.ui.table_common import NO_MENTIONS, avatar_url, delete_message_quietly
@@ -4183,7 +4274,11 @@ class TablesCog(commands.Cog, name="Tables"):
 
     async def set_channel(self, channel: discord.TextChannel, game: str) -> MultiplayerChannel:
         """Dedicate `channel` to `game` and post its Play embed."""
-        self.bot.tables.spec(game)  # unknown games fail here
+        spec = self.bot.tables.spec(game)  # unknown games fail here
+        if not spec.available:
+            err = InvalidGameChoiceError(f"{spec.label} tables are not open yet.")
+            err.user_hint = "Duel is available now; the other games arrive in later updates."
+            raise err
         permissions = channel.permissions_for(channel.guild.me)
         missing = [
             name
@@ -4433,8 +4528,10 @@ Under Phase 10, after the M1 block, add:
 - [ ] M2.9 `TablesCog`, `/admin set_multiplayer`, `/admin unset_multiplayer`, bot wiring.
 
 **Acceptance criteria (M2)**
-- `/admin set_multiplayer game:Duel` in a text channel posts a Play embed that keeps working
-  after the bot restarts; `/admin unset_multiplayer` removes it.
+- `/admin set_multiplayer` offers every planned game (Duel, Jackpot, Crash, Blackjack table,
+  Lottery); only Duel can be dedicated yet, the others are refused with a plain "not open yet"
+  message. `/admin set_multiplayer game:Duel` in a text channel posts a Play embed that keeps
+  working after the bot restarts; `/admin unset_multiplayer` removes it.
 - Pressing Play asks for a stake, opens a table, and deletes the previous table's message; the
   finished table's result stays on screen until the next table is requested.
 - A table in play refuses another Play press; the host or an admin can cancel an unstarted
