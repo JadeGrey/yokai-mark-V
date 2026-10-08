@@ -136,3 +136,15 @@ def test_the_audit_log_labels_and_names_people_for_balance_changes(tmp_path: Pat
     assert "reset exploit" in page
     assert "applied: -500" in page and "requested: -900" in page
     assert action_label("daily.reset") == "Reset the daily cooldown"
+
+
+def test_details_read_in_a_natural_order_and_timestamps_are_readable() -> None:
+    """Found in a real browser: details came out alphabetical with a raw timestamp."""
+    from yokai_admin.core.formatting import format_when
+
+    adjust = {"after": 0, "applied": -1500, "before": 1500, "requested": -5000, "name": "Alex"}
+    assert detail_text(adjust) == "before: 1500, requested: -5000, applied: -1500, after: 0"
+    ts = 1_790_000_000
+    assert detail_text({"previous_last_daily_ts": ts, "streak": 4}) == (
+        f"previous last daily: {format_when(ts)}, streak: 4"
+    )

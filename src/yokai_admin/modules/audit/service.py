@@ -7,10 +7,13 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from yokai_admin.core.audit import AuditEntry, list_entries, modules_seen
+from yokai_admin.core.formatting import format_when
 from yokai_admin.core.inputs import parse_page  # noqa: F401  (re-exported for the router)
 from yokai_admin.core.people import UserRef, user_refs
 
 PAGE_SIZE = 25
+# Details a person reads in this order; anything else follows alphabetically.
+_DETAIL_ORDER = ("before", "requested", "applied", "after")
 _LABELS = {
     "blacklist.add": "Added to the blacklist",
     "blacklist.remove": "Removed from the blacklist",
@@ -26,12 +29,20 @@ def action_label(action: str) -> str:
     return _LABELS.get(action, action)
 
 
+def _detail_value(key: str, value: Any) -> str:
+    if key.endswith("_ts") and isinstance(value, int) and not isinstance(value, bool):
+        return format_when(value)
+    return str(value)
+
+
 def detail_text(detail: dict[str, Any]) -> str:
     """Compact text for the interesting details (the name is already in the Target column)."""
+    keys = [k for k in _DETAIL_ORDER if k in detail]
+    keys += sorted(k for k in detail if k not in _DETAIL_ORDER)
     parts = [
-        f"{key.replace('_', ' ')}: {value}"
-        for key, value in detail.items()
-        if key != "name" and value is not None
+        f"{key.removesuffix('_ts').replace('_', ' ')}: {_detail_value(key, detail[key])}"
+        for key in keys
+        if key != "name" and detail[key] is not None
     ]
     return ", ".join(parts)
 

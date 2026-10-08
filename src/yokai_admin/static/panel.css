@@ -630,8 +630,15 @@ a {
   margin-bottom: 1.5rem;
 }
 
-.num {
+.num,
+.table th.num,
+.table td.num {
   text-align: right;
+}
+
+#adjust,
+#daily {
+  margin-top: 1.25rem;
 }
 
 .pos {

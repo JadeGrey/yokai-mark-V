@@ -101,3 +101,10 @@ def test_people_page_styles_exist() -> None:
     css = _css()
     for selector in (".num", ".pos", ".neg", ".person-head", ".confirm-box", ".search"):
         assert selector in css
+
+
+def test_numeric_table_headers_align_with_their_numbers() -> None:
+    """Found in a real browser: '.table th' outweighed '.num', so a right-aligned column kept a
+    left-aligned header."""
+    css = _css()
+    assert ".table th.num" in css and ".table td.num" in css

@@ -2,7 +2,7 @@
 <div id="adjust">
   <form class="add" hx-post="/m/users/{{ user_id }}/adjust/preview" hx-target="#adjust" hx-swap="outerHTML">
     {% if form_flash %}<p class="flash" data-kind="{{ form_flash.kind }}" role="alert"><span class="sr-only">Problem: </span>{{ form_flash.text }}</p>{% endif %}
-    <label>Change in Renown (for example +500 or -250)<input name="amount" inputmode="numeric" autocomplete="off" value="{{ typed.get('amount', '') }}" required></label>
+    <label>Change in Renown<input name="amount" inputmode="numeric" autocomplete="off" placeholder="+500 or -250" value="{{ typed.get('amount', '') }}" required></label>
     <label>Reason (kept in the audit log)<input name="reason" maxlength="200" autocomplete="off" value="{{ typed.get('reason', '') }}" required></label>
     <button type="submit" class="btn">Preview change</button>
   </form>
