@@ -24,3 +24,13 @@ def format_when(ts: Optional[int]) -> str:
     if ts is None:
         return "–"
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+
+def format_number(value: Optional[int]) -> str:
+    """A whole number with thousands separators, or an en dash when there is none."""
+    return "\u2013" if value is None else f"{value:,}"
+
+
+def format_signed(value: int) -> str:
+    """A change shown with its sign: +500, -250, or 0."""
+    return f"{value:+,}" if value else "0"

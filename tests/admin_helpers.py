@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Mapping, Optional, Sequence
@@ -101,6 +102,7 @@ def seed_database(
     admins: Sequence[int] = (),
     blacklist: Sequence[tuple[int, str]] = (),
     names: Optional[Mapping[int, str]] = None,
+    credits: Optional[Mapping[int, int]] = None,
 ) -> None:
     """Create a real current-schema database with the given heartbeat, wallets and commands."""
 
@@ -112,6 +114,8 @@ def seed_database(
                 await db.write_heartbeat(pid=4242, version="0.1.0", now=heartbeat_ts)
             for user_id in range(1, wallets + 1):
                 await db.credit_wallet(user_id, 10, reason="daily", welcome_bonus=200)
+            for user_id, amount in (credits or {}).items():
+                await db.credit_wallet(user_id, amount, reason="daily", welcome_bonus=200)
             for ts in commands:
                 await db.conn.execute(
                     "INSERT INTO command_log (ts, user_id, command) VALUES (?, 1, 'play');", (ts,)
@@ -139,3 +143,51 @@ def seed_database(
 def post(client: TestClient, csrf: str, path: str, **form: str) -> HttpxResponse:
     """POST form data the way HTMX does: CSRF header plus HX-Request."""
     return client.post(path, data=form, headers={"X-CSRF-Token": csrf, "HX-Request": "true"})
+
+
+def seed_activity(
+    path: Path,
+    *,
+    plays: Sequence[tuple[int, str, str, Optional[str], int]] = (),
+    bets: Sequence[tuple[int, str, int, int, str, Optional[str]]] = (),
+    user_commands: Sequence[tuple[int, str, int]] = (),
+    transactions: Sequence[tuple[int, int, str, Optional[int], int, int]] = (),
+    daily: Optional[Mapping[int, tuple[Optional[int], int]]] = None,
+) -> None:
+    """Insert raw activity rows: plays (user, video_id, title, artist, ts), bets (user, game,
+    stake, payout, status, group_id), commands (user, command, ts), ledger rows (user, delta,
+    reason, counterparty, balance_after, ts) and daily state ({user: (last_daily_ts, streak)})."""
+    conn = sqlite3.connect(path)
+    try:
+        for user_id, video_id, title, artist, ts in plays:
+            conn.execute(
+                "INSERT INTO play_events (ts, user_id, video_id, title, artist, duration_s, "
+                "origin, outcome, listened_s) "
+                "VALUES (?, ?, ?, ?, ?, 180, 'search', 'completed', 180);",
+                (ts, user_id, video_id, title, artist),
+            )
+        for user_id, game, stake, payout, status, group_id in bets:
+            conn.execute(
+                "INSERT INTO gambling_bets (ts, user_id, game, stake, status, payout, group_id) "
+                "VALUES (1, ?, ?, ?, ?, ?, ?);",
+                (user_id, game, stake, status, payout, group_id),
+            )
+        for user_id, command, ts in user_commands:
+            conn.execute(
+                "INSERT INTO command_log (ts, user_id, command) VALUES (?, ?, ?);",
+                (ts, user_id, command),
+            )
+        for user_id, delta, reason, counterparty, after, ts in transactions:
+            conn.execute(
+                "INSERT INTO renown_transactions (ts, user_id, delta, reason, counterparty_id, "
+                "balance_after) VALUES (?, ?, ?, ?, ?, ?);",
+                (ts, user_id, delta, reason, counterparty, after),
+            )
+        for user_id, (last_daily_ts, streak) in (daily or {}).items():
+            conn.execute(
+                "UPDATE wallets SET last_daily_ts = ?, daily_streak = ? WHERE user_id = ?;",
+                (last_daily_ts, streak, user_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()

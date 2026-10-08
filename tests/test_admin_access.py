@@ -247,3 +247,27 @@ def test_remove_buttons_say_who_they_remove_even_for_unnamed_people(tmp_path: Pa
         page = client.get("/m/access").text
     assert 'aria-label="Remove Unknown user (5) from the blacklist"' in page
     assert 'aria-label="Remove Unknown user (6) from the blacklist"' in page
+
+
+def test_a_refused_form_keeps_what_was_typed_and_only_in_that_form(tmp_path: Path) -> None:
+    """P-A3 deferred minor: a too-short reason used to wipe the whole form."""
+    db = tmp_path / "yokai.db"
+    seed_database(db)
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, csrf):
+        refused = post(client, csrf, "/m/access/blacklist", user_id="42", reason="x")
+        ok = post(client, csrf, "/m/access/blacklist", user_id="42", reason="spamming the queue")
+    assert 'autocomplete="off" value="42"' in refused.text
+    assert 'value="x"' in refused.text
+    admin_form = refused.text.split('hx-post="/m/access/admins"')[1]
+    assert 'value="42"' not in admin_form  # the other form is untouched
+    assert 'value="42"' not in ok.text and "is blacklisted" in ok.text  # cleared after success
+
+
+def test_a_kept_value_is_escaped(tmp_path: Path) -> None:
+    db = tmp_path / "yokai.db"
+    seed_database(db)
+    with panel_client(tmp_path, [ACCESS], db_path=db) as (client, csrf):
+        refused = post(
+            client, csrf, "/m/access/blacklist", user_id='"><script>x</script>', reason="y"
+        )
+    assert "<script>x</script>" not in refused.text and "&lt;script&gt;" in refused.text

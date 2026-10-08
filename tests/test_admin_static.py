@@ -89,3 +89,9 @@ def test_the_phone_layout_cannot_be_stretched_by_a_wide_table() -> None:
     assert "grid-template-columns: minmax(0, 1fr);" in phone.split("}")[0]
     wrapper = css.split(".table-wrap {")[1].split("}")[0]
     assert "overflow-x: auto;" in wrapper
+
+
+def test_the_panel_script_shows_a_notice_for_failed_requests_outside_the_status_block() -> None:
+    script = (STATIC / "panel.js").read_text(encoding="utf-8")
+    assert "request-error" in script and "hidden" in script
+    assert "contains" in script  # the status block is excluded

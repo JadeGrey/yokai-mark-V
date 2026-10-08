@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -11,20 +10,16 @@ from typing import Optional
 
 from yokai_admin.core.audit import record
 from yokai_admin.core.db import write_transaction
+from yokai_admin.core.inputs import InputRefused, clean_reason, parse_user_id
 from yokai_admin.core.people import UserRef, user_refs
-from yokai_admin.errors import PanelError
 
-MIN_REASON = 3
-MAX_REASON = 200
-# Same set the bot strips from display names: control, zero-width and bidi override characters.
-_UNSAFE = re.compile(r"[\x00-\x1f\x7f-\x9f​-‏ -‮⁦-⁩]")
 _OWNER_MESSAGE = (
     "That ID belongs to the bot owner, who can never be blacklisted or added to the admin list."
 )
 
 
-class AccessRefused(PanelError):
-    """A request the panel refuses on purpose; the message is shown to the owner."""
+# Kept as a name of its own so `except AccessRefused` and existing imports keep working.
+AccessRefused = InputRefused
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,31 +31,6 @@ class Entry:
     added_ts: int
     added_by: str
     flag: Optional[str]
-
-
-def parse_user_id(raw: str) -> int:
-    """Turn typed text into a Discord user ID, or refuse with a message that says what to type."""
-    text = raw.strip()
-    # int() would also accept digits from other scripts, so check for plain ASCII digits first.
-    if not (text.isascii() and text.isdigit()):
-        raise AccessRefused(
-            "Enter the Discord user ID as digits only, for example 123456789012345678."
-        )
-    # A Discord ID has at most 19 digits. Checking the length first also keeps int() from raising
-    # on absurdly long input (it refuses more than 4300 digits).
-    if len(text) > 19 or not 0 < (value := int(text)) < 2**63:
-        raise AccessRefused("That is not a valid Discord user ID.")
-    return value
-
-
-def clean_reason(raw: str, *, required: bool) -> str:
-    """Normalise a reason or note; refuse when it is too short (if required) or too long."""
-    text = " ".join(_UNSAFE.sub(" ", raw).split())
-    if required and len(text) < MIN_REASON:
-        raise AccessRefused(f"Give a short reason, at least {MIN_REASON} characters.")
-    if len(text) > MAX_REASON:
-        raise AccessRefused(f"Keep the reason under {MAX_REASON} characters.")
-    return text
 
 
 def list_blacklist(conn: sqlite3.Connection) -> list[Entry]:

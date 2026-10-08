@@ -1,3 +1,5 @@
+{% set bf = form if form and form.kind == 'blacklist' else {} %}
+{% set af = form if form and form.kind == 'admins' else {} %}
 <section id="access">
   {% if flash %}
   <p class="flash" data-kind="{{ flash.kind }}" role="{{ 'alert' if flash.kind == 'error' else 'status' }}"><span class="sr-only">{{ 'Problem' if flash.kind == 'error' else 'Done' }}: </span>{{ flash.text }}</p>
@@ -29,8 +31,8 @@
     {% endif %}
     {% if can_edit %}
     <form class="add" hx-post="/m/access/blacklist" hx-target="#access" hx-swap="outerHTML">
-      <label>Discord user ID<input name="user_id" inputmode="numeric" autocomplete="off" required></label>
-      <label>Reason<input name="reason" maxlength="200" autocomplete="off" required></label>
+      <label>Discord user ID<input name="user_id" inputmode="numeric" autocomplete="off" value="{{ bf.get('user_id', '') }}" required></label>
+      <label>Reason<input name="reason" maxlength="200" autocomplete="off" value="{{ bf.get('reason', '') }}" required></label>
       <button type="submit" class="btn">Add to blacklist</button>
     </form>
     {% endif %}
@@ -57,8 +59,8 @@
     {% endif %}
     {% if can_edit %}
     <form class="add" hx-post="/m/access/admins" hx-target="#access" hx-swap="outerHTML">
-      <label>Discord user ID<input name="user_id" inputmode="numeric" autocomplete="off" required></label>
-      <label>Note (optional, kept in the audit log)<input name="note" maxlength="200" autocomplete="off"></label>
+      <label>Discord user ID<input name="user_id" inputmode="numeric" autocomplete="off" value="{{ af.get('user_id', '') }}" required></label>
+      <label>Note (optional, kept in the audit log)<input name="note" maxlength="200" autocomplete="off" value="{{ af.get('note', '') }}"></label>
       <button type="submit" class="btn">Add admin</button>
     </form>
     {% endif %}

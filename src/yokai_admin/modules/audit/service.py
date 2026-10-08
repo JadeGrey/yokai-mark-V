@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from yokai_admin.core.audit import AuditEntry, list_entries, modules_seen
+from yokai_admin.core.inputs import parse_page  # noqa: F401  (re-exported for the router)
 from yokai_admin.core.people import UserRef, user_refs
 
 PAGE_SIZE = 25
@@ -31,17 +32,6 @@ def detail_text(detail: dict[str, Any]) -> str:
         if key != "name" and value is not None
     ]
     return ", ".join(parts)
-
-
-def parse_page(raw: str) -> int:
-    """A positive page number, or 1 for anything else (empty, text, zero, negative, absurd)."""
-    text = raw.strip()
-    if not (text.isascii() and text.isdigit()):
-        return 1
-    if len(text) > 6:  # also keeps int() away from absurdly long input
-        return 1
-    value = int(text)
-    return value if 0 < value <= 100_000 else 1
 
 
 @dataclass(frozen=True, slots=True)

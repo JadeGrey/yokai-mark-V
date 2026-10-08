@@ -10,7 +10,7 @@ from fastapi import Request
 from fastapi.responses import Response
 from starlette.templating import Jinja2Templates
 
-from yokai_admin.core.formatting import format_when
+from yokai_admin.core.formatting import describe_age, format_number, format_signed, format_when
 from yokai_admin.core.module import ModuleSlot
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -37,6 +37,9 @@ def build_templates(slots: Sequence[ModuleSlot]) -> Jinja2Templates:
             directories.append(slot.module.templates_dir)
     templates = Jinja2Templates(directory=directories)
     templates.env.filters["when"] = format_when
+    templates.env.filters["number"] = format_number
+    templates.env.filters["signed"] = format_signed
+    templates.env.filters["age"] = describe_age
     return templates
 
 

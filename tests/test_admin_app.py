@@ -81,3 +81,17 @@ def test_static_assets_are_served(tmp_path: Path) -> None:
     with panel_client(tmp_path, [f"{H}:ALPHA"], login=False) as (client, _):
         css = client.get("/static/panel.css")
         assert css.status_code == 200 and "text/css" in css.headers["content-type"]
+
+
+def test_the_shell_has_a_hidden_request_failed_notice(tmp_path: Path) -> None:
+    with panel_client(tmp_path, [f"{H}:DEMO"]) as (client, _):
+        page = client.get("/m/demo").text
+    tag = page.split('id="request-error"')[1].split(">")[0]
+    assert "hidden" in tag and "That request failed" in page
+
+
+def test_number_filters_are_available_to_every_template(tmp_path: Path) -> None:
+    with panel_client(tmp_path, [f"{H}:DEMO"]) as (client, _):
+        env = client.app.state.templates.env  # type: ignore[attr-defined]
+    assert env.filters["number"](1500) == "1,500" and env.filters["signed"](-3) == "-3"
+    assert env.filters["age"](300) == "5 minutes"

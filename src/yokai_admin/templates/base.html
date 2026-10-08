@@ -27,7 +27,10 @@
       </ul>
     </nav>
   </aside>
-  <main class="main">{% block content %}{% endblock %}</main>
+  <main class="main">
+    <p id="request-error" class="flash" data-kind="error" role="alert" hidden><span class="sr-only">Problem: </span>That request failed. Reload the page and check the current state before trying again.</p>
+    {% block content %}{% endblock %}
+  </main>
 </div>
 </body>
 </html>

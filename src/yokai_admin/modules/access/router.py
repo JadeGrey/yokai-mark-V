@@ -67,9 +67,13 @@ def _context(request: Request, flash: Optional[Flash]) -> dict[str, Any]:
 
 
 def _section(
-    request: Request, flash: Optional[Flash] = None, context: Optional[dict[str, Any]] = None
+    request: Request,
+    flash: Optional[Flash] = None,
+    context: Optional[dict[str, Any]] = None,
+    form: Optional[dict[str, str]] = None,
 ) -> Response:
-    data = {**(context if context is not None else _context(request, None)), "flash": flash}
+    base = context if context is not None else _context(request, None)
+    data = {**base, "flash": flash, "form": form or {}}
     return render_fragment(request, "access/_lists.html", **data)
 
 
@@ -84,6 +88,7 @@ def _mutate(
     request: Request,
     action: Callable[[PanelSettings, int], UserRef],
     success: str,
+    form: Optional[dict[str, str]] = None,
 ) -> Response:
     """Run one write and answer with the refreshed section.
 
@@ -95,10 +100,10 @@ def _mutate(
     try:
         ref = action(settings, settings.owner_id)
     except (AccessRefused, PanelDbError) as exc:
-        return _section(request, Flash("error", str(exc)))
+        return _section(request, Flash("error", str(exc)), form=form)
     except sqlite3.Error as exc:
         logger.warning("Access write failed: %s", exc)
-        return _section(request, Flash("error", _SAVE_FAILED))
+        return _section(request, Flash("error", _SAVE_FAILED), form=form)
     return _section(request, Flash("ok", success.replace("{who}", ref.label)))
 
 
@@ -147,6 +152,7 @@ def blacklist_add(request: Request, user_id: str = Form(""), reason: str = Form(
             s.db_path, owner_id=owner, raw_id=user_id, raw_reason=reason
         ),
         "{who} is blacklisted. The bot picks this up within a few seconds.",
+        {"kind": "blacklist", "user_id": user_id, "reason": reason},
     )
 
 
@@ -170,6 +176,7 @@ def admin_add(request: Request, user_id: str = Form(""), note: str = Form("")) -
         request,
         lambda s, owner: add_admin(s.db_path, owner_id=owner, raw_id=user_id, raw_note=note),
         "{who} is now an admin. The bot picks this up within a few seconds.",
+        {"kind": "admins", "user_id": user_id, "note": note},
     )
 
 
