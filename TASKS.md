@@ -425,4 +425,39 @@ Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m1-command-groups.md`.
 
 **STOP — owner review.**
 
-(M2 tables and duel, M3 jackpot, crash and blackjack table, M4 lottery: planned after M1 is reviewed.)
+### M2 — Tables, pot accounting and duel
+
+Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m2-tables-and-duel.md`.
+
+- [x] M2.1 Table configuration and errors.
+- [x] M2.2 Migration v6, pot accounting on solo settlement.
+- [x] M2.3 Atomic `settle_lobby`.
+- [x] M2.4 Table channel storage.
+- [x] M2.5 Lobby state machine and duel engine.
+- [x] M2.6 `TableManager`.
+- [x] M2.7 Table and duel embeds.
+- [x] M2.8 Play, stake form, lobby and duel views.
+- [x] M2.9 `TablesCog`, `/admin set_multiplayer`, `/admin unset_multiplayer`, bot wiring.
+
+**Acceptance criteria (M2)**
+- `/admin set_multiplayer` offers every planned game (Duel, Jackpot, Crash, Blackjack table,
+  Lottery); only Duel can be dedicated yet, the others are refused with a plain "not open yet"
+  message. `/admin set_multiplayer game:Duel` in a text channel posts a Play embed that keeps
+  working after the bot restarts; `/admin unset_multiplayer` removes it.
+- Pressing Play asks for a stake, opens a table, and deletes the previous table's message; the
+  finished table's result stays on screen until the next table is requested.
+- A table in play refuses another Play press; the host or an admin can cancel an unstarted
+  table (everyone is refunded); a started table cannot be cancelled.
+- A duel starts when the second player joins at the host's stake; picks are private; the
+  closest pick to the hidden number wins the pot minus the 2% rake; a tie refunds both.
+- Every settlement is one transaction; the lottery pot receives only the rake from a duel and
+  the lost stakes from solo games; restarting mid-table refunds every stake.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Set a channel, press Play, join from a second account, pick numbers
+  from both, check the reveal and balances; let a lobby expire alone; cancel a lobby; kill the
+  bot mid-duel and confirm stakes are back and the table message says it was closed; delete the
+  Play embed and confirm it returns after a restart; confirm a blacklisted account is refused.
+
+**STOP — owner review.**
+
+(M3 jackpot, crash and blackjack table, M4 lottery: planned after M2 is reviewed.)
