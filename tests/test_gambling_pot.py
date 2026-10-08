@@ -70,7 +70,7 @@ async def _tables(db: Database) -> set[str]:
 async def test_migration_v6_creates_the_tables_and_seeds_an_empty_pot(tmp_path: Path) -> None:
     db = await _db(tmp_path)
     try:
-        assert CURRENT_SCHEMA_VERSION == 6
+        assert CURRENT_SCHEMA_VERSION >= 6
         names = await _tables(db)
         assert {"multiplayer_channels", "lottery_state", "lottery_pot_entries"} <= names
         assert await db.get_pot() == 0

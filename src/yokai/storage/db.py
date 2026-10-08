@@ -15,12 +15,12 @@ import aiosqlite
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
 from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
-from yokai.gambling.models import MultiplayerChannel
+from yokai.gambling.models import LotteryState, MultiplayerChannel
 from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -186,6 +186,32 @@ def _channel_from_row(
     )
 
 
+MIGRATION_V7 = """
+CREATE TABLE IF NOT EXISTS lottery_tickets (
+  draw_no INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  number INTEGER NOT NULL,
+  ts INTEGER NOT NULL,
+  PRIMARY KEY (draw_no, user_id, number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lottery_tickets_number ON lottery_tickets(draw_no, number);
+
+CREATE TABLE IF NOT EXISTS lottery_draws (
+  draw_no INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  winning_number INTEGER NOT NULL,
+  pot INTEGER NOT NULL,
+  winners TEXT NOT NULL,
+  prize_each INTEGER NOT NULL,
+  announced INTEGER NOT NULL DEFAULT 0
+);
+
+ALTER TABLE lottery_state ADD COLUMN draw_no INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE lottery_state ADD COLUMN next_draw_ts INTEGER;
+"""
+
+
 class Database:
     """Async SQLite database manager."""
 
@@ -273,6 +299,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 6;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 6.")
+
+        if version < 7:
+            logger.info("Applying SQLite migration v7...")
+            await self.conn.executescript(MIGRATION_V7)
+            await self.conn.execute("PRAGMA user_version = 7;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 7.")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
@@ -713,6 +746,46 @@ class Database:
                 raise
         assert bet_id is not None
         return bet_id
+
+    async def get_lottery_state(self) -> LotteryState:
+        async with self.conn.execute(
+            "SELECT pot, draw_no, next_draw_ts FROM lottery_state WHERE id = 1;"
+        ) as cursor:
+            row = await cursor.fetchone()
+        assert row is not None
+        return LotteryState(pot=row[0], draw_no=row[1], next_draw_ts=row[2])
+
+    async def ensure_lottery_schedule(self, now: int, interval_s: int) -> int:
+        """Start the draw clock if it is not running yet; returns the next draw time."""
+        async with self._write_lock:
+            state = await self.get_lottery_state()
+            if state.next_draw_ts is not None:
+                return state.next_draw_ts
+            next_ts = now + interval_s
+            await self.conn.execute(
+                "UPDATE lottery_state SET next_draw_ts = ? WHERE id = 1 AND next_draw_ts IS NULL;",
+                (next_ts,),
+            )
+            await self.conn.commit()
+            return next_ts
+
+    async def lottery_tickets_sold(self) -> int:
+        """Tickets sold for the draw currently on sale."""
+        async with self.conn.execute(
+            "SELECT COUNT(*) FROM lottery_tickets "
+            "WHERE draw_no = (SELECT draw_no FROM lottery_state WHERE id = 1);"
+        ) as cursor:
+            row = await cursor.fetchone()
+        return row[0] if row else 0
+
+    async def user_lottery_numbers(self, user_id: int) -> list[int]:
+        """The numbers a member holds for the draw currently on sale, sorted."""
+        async with self.conn.execute(
+            "SELECT number FROM lottery_tickets WHERE user_id = ? "
+            "AND draw_no = (SELECT draw_no FROM lottery_state WHERE id = 1) ORDER BY number;",
+            (user_id,),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
 
     async def _credit_pot(self, source: str, amount: int, now: int) -> None:
         """Add the house's take to the lottery pot inside the caller's open transaction.
