@@ -702,6 +702,51 @@ a {
   }
 }
 
+/* Logs */
+
+.log-entry {
+  margin: 0;
+  padding: 0.5rem 0 0.5rem 0.75rem;
+  border-left: 3px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.log-entry[data-level="ERROR"],
+.log-entry[data-level="CRITICAL"] {
+  border-left-color: var(--flare);
+}
+
+.log-entry[data-level="WARNING"] {
+  border-left-color: var(--amber);
+}
+
+.log-entry pre {
+  margin: 0;
+  font: 0.8125rem/1.5 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tail {
+  max-height: 60vh;
+  margin-top: 1rem;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}
+
+.log-line {
+  margin: 0;
+  padding: 0.2rem 0;
+  font: 0.8125rem/1.5 var(--mono);
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--line);
+}
+
+.log-line.marker {
+  color: var(--slate);
+  font-style: italic;
+}
+
 /* A table that becomes a stack of cards on a phone, so row actions never fall off the edge */
 @media (max-width: 48rem) {
   .table.stack {

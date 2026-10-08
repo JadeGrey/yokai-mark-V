@@ -11,6 +11,7 @@ MODULE_PATHS: tuple[str, ...] = (
     "yokai_admin.modules.dashboard:MODULE",
     "yokai_admin.modules.users:MODULE",
     "yokai_admin.modules.database:MODULE",
+    "yokai_admin.modules.logs:MODULE",
     "yokai_admin.modules.access:MODULE",
     "yokai_admin.modules.audit:MODULE",
 )

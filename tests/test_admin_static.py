@@ -131,3 +131,9 @@ def test_long_paths_wrap_and_stacked_numbers_align_left() -> None:
     mono = css[css.index(".mono {") : css.index("}", css.index(".mono {"))]
     assert "overflow-wrap: anywhere" in mono
     assert ".table.stack .num" in css
+
+
+def test_logs_page_styles_exist() -> None:
+    css = _css()
+    for selector in (".log-entry", ".log-line", ".tail", '.log-entry[data-level="ERROR"]'):
+        assert selector in css
