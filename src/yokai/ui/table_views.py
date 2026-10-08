@@ -225,7 +225,7 @@ class LobbyView(discord.ui.View):
         except discord.HTTPException as exc:
             logger.warning("Could not update table message: %s", exc)
 
-    async def _refresh(self) -> None:
+    async def _update_message(self) -> None:
         if self.message is None:
             return
         try:
@@ -245,7 +245,7 @@ class LobbyView(discord.ui.View):
             return
         if from_modal:
             await dismiss(interaction)
-        await self._refresh()
+        await self._update_message()
         if self.lobby.is_full:
             await self._after_begin(await self.bot.tables.begin(self.lobby))
 
@@ -276,7 +276,7 @@ class LobbyView(discord.ui.View):
         except YokaiError as err:
             await reply_error(self.bot, interaction, err)
             return
-        await self._refresh()
+        await self._update_message()
 
     @discord.ui.button(label="Start", style=discord.ButtonStyle.primary)
     async def start_button(
