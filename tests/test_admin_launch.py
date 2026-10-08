@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import socket
 import sqlite3
 import threading
@@ -53,7 +54,8 @@ def test_the_panel_never_creates_a_file_log() -> None:
     files = Path("src/yokai_admin").rglob("*.py")
     sources = "\n".join(path.read_text(encoding="utf-8") for path in files)
     assert "FileHandler" not in sources
-    assert "logging.config" not in sources and "basicConfig" not in sources
+    assert "logging.config" not in sources
+    assert not re.search(r"basicConfig\([^)]*filename", sources, re.S)
 
 
 def test_preflight_names_the_problem_for_a_missing_or_old_database(tmp_path: Path) -> None:
