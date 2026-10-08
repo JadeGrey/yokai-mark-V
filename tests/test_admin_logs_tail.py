@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -170,3 +171,22 @@ def test_lines_are_cleaned_and_shortened(tmp_path: Path) -> None:
     chunk = initial_tail(path)
     assert chunk.lines[0] == "ok" and chunk.lines[1] == "red  evil"
     assert len(chunk.lines[2]) <= 4000
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows blocks renaming open files")
+def test_tail_reads_do_not_block_rotation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "yokai.log"
+    path.write_bytes(b"a\nb\n")
+    real = tail_mod.open_shared
+    renamed: list[int] = []
+
+    def opened_then_rotated(target: Path):  # type: ignore[no-untyped-def]
+        handle = real(target)
+        os.replace(target, tmp_path / f"yokai.log.{len(renamed) + 1}")
+        renamed.append(1)
+        path.write_bytes(b"a\nb\n")
+        return handle
+
+    monkeypatch.setattr(tail_mod, "open_shared", opened_then_rotated)
+    assert initial_tail(path).lines == ["a", "b"]
+    assert read_new(path, 0, 0).lines == ["a", "b"] and len(renamed) == 2

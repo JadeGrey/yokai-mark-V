@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -181,3 +183,19 @@ def test_an_empty_or_missing_file(tmp_path: Path) -> None:
     assert page.total == 0 and page.entries == []
     with pytest.raises(PanelDbError, match="log file could not be read"):
         read_page(tmp_path / "gone.log", level="", query="", page=1)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows blocks renaming open files")
+def test_reading_a_page_does_not_block_rotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(tmp_path, BOT)
+    real = entries_mod.open_shared
+
+    def opened_then_rotated(target: Path):  # type: ignore[no-untyped-def]
+        handle = real(target)
+        os.replace(target, tmp_path / "yokai.log.1")  # the bot rotates mid-read
+        return handle
+
+    monkeypatch.setattr(entries_mod, "open_shared", opened_then_rotated)
+    assert read_page(path, level="", query="", page=1).total == 5

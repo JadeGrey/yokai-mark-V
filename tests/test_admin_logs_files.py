@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from yokai_admin.core.inputs import InputRefused
 from yokai_admin.errors import PanelDbError
-from yokai_admin.modules.logs.files import MAX_FILES, find_log_file, list_log_files
+from yokai_admin.modules.logs.files import (
+    MAX_FILES,
+    find_log_file,
+    list_log_files,
+    open_shared,
+)
 
 
 def _make(folder: Path, *names: str) -> None:
@@ -124,3 +130,24 @@ def test_names_that_are_not_in_the_listing_are_refused(tmp_path: Path, name: str
     (tmp_path.parent / "yokai.log").write_text("outside the log folder")
     with pytest.raises(InputRefused):
         find_log_file(tmp_path, name)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows blocks renaming open files")
+def test_a_file_the_panel_is_reading_can_still_be_rotated(tmp_path: Path) -> None:
+    """Review: Python's open() on Windows blocks the bot's RotatingFileHandler rename."""
+    path = tmp_path / "yokai.log"
+    path.write_bytes(b"line one\nline two\n")
+    with open_shared(path) as handle:
+        os.replace(path, tmp_path / "yokai.log.1")
+        assert handle.read() == b"line one\nline two\n"
+        assert os.fstat(handle.fileno()).st_size == 18
+    assert (tmp_path / "yokai.log.1").exists()
+
+
+def test_open_shared_reads_and_reports_missing_files(tmp_path: Path) -> None:
+    path = tmp_path / "a.log"
+    path.write_bytes(b"abc")
+    with open_shared(path) as handle:
+        assert handle.read() == b"abc"
+    with pytest.raises(FileNotFoundError):
+        open_shared(tmp_path / "gone.log")

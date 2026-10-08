@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -256,3 +257,50 @@ def test_the_dashboard_tile_counts_log_files(s: Setup) -> None:
     with panel_client(s.tmp, paths) as (client, _):
         page = client.get("/m/dashboard").text
     assert "Logs" in page and "2 files" in page
+
+
+def test_download_is_bounded_and_survives_a_vanishing_file(
+    s: Setup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review: FileResponse could 500 on a vanished file and break when the file grew."""
+    router = sys.modules["yokai_admin.modules.logs.router"]
+    with s.client() as (client, _):
+        monkeypatch.setattr(router, "MAX_DOWNLOAD_BYTES", 10)
+        big = client.get("/m/logs/download", params={"file": "yokai.log"})
+        monkeypatch.setattr(router, "MAX_DOWNLOAD_BYTES", 10**9)
+        real = router.find_log_file
+
+        def vanishing(log_dir: Path, name: str):  # type: ignore[no-untyped-def]
+            found = real(log_dir, name)
+            found.path.unlink()
+            return found
+
+        monkeypatch.setattr(router, "find_log_file", vanishing)
+        gone = client.get("/m/logs/download", params={"file": "yokai.log"})
+    for response in (big, gone):
+        assert response.status_code == 200 and "attachment" not in str(response.headers)
+    assert "too large" in big.text and "could not be read" in gone.text
+
+
+def test_a_very_long_file_id_is_not_mistaken_for_tampering(s: Setup) -> None:
+    """Review: ReFS file IDs can have more than 20 digits."""
+    router = sys.modules["yokai_admin.modules.logs.router"]
+    assert router._digits("9" * 39, limit=40) == int("9" * 39)
+    assert router._digits("9" * 41, limit=40) is None
+    with s.client() as (client, _):
+        pos, _ino = s.pos()
+        response = client.get("/m/logs/live/poll", params={"pos": pos, "ino": "9" * 30}, headers=HX)
+    assert response.status_code == 200 and "rotated" in response.text.lower()
+
+
+def test_no_file_yet_then_a_file_is_not_called_a_rotation(s: Setup) -> None:
+    """Review: the poller carries ino=0 while no log exists; the first read is no rotation."""
+    with s.client() as (client, _):
+        response = client.get("/m/logs/live/poll", params={"pos": "0", "ino": "0"}, headers=HX)
+    assert "Ready" in response.text and "rotated" not in response.text.lower()
+
+
+def test_pause_cancels_an_in_flight_poll(s: Setup) -> None:
+    with s.client() as (client, _):
+        page = client.get("/m/logs/live").text
+    assert 'hx-sync="#tail-poller:replace"' in page
