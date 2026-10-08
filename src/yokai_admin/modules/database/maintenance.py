@@ -224,11 +224,12 @@ def _swap(db_path: Path, staging: Path, safety: Optional[BackupFile]) -> None:
             raise _in_use_error(str(exc), safety) from exc
         if busy:
             raise _in_use_error("another connection is still reading it", safety)
-        for suffix in ("-wal", "-shm"):
-            try:
-                db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
-            except OSError as exc:
-                raise _in_use_error(str(exc), safety) from exc
+    # Even with no live file, leftovers from a hand-moved database must not be replayed.
+    for suffix in ("-wal", "-shm", "-journal"):
+        try:
+            db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
+        except OSError as exc:
+            raise _in_use_error(str(exc), safety) from exc
     try:
         os.replace(staging, db_path)
     except OSError as exc:
@@ -271,7 +272,13 @@ def restore_backup(settings: PanelSettings, name: str, typed: str, *, now: int) 
             safety = make_backup(db_path, folder, now=now, safety=True)
         staging = db_path.with_name(db_path.name + ".restoring")
         try:
-            _stage(found.path, staging)
+            try:
+                _stage(found.path, staging)
+            except (sqlite3.Error, OSError) as exc:
+                saved = f" A safety backup was saved as {safety.name}." if safety else ""
+                raise PanelDbError(
+                    f"The copy to restore could not be made ({exc}). Nothing was replaced.{saved}"
+                ) from exc
             _swap(db_path, staging, safety)
         finally:
             staging.unlink(missing_ok=True)

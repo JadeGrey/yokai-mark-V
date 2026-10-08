@@ -410,3 +410,41 @@ def test_a_leftover_wal_after_the_checkpoint_is_removed_before_the_swap(
     world.restore()
     assert seen == [False] and not stale.exists()
     assert _count(world.live) == BASE_ROWS
+
+
+def test_sidecar_files_left_beside_a_missing_live_file_are_removed(tmp_path: Path) -> None:
+    """Review: a hand-moved damaged database leaves its -wal/-shm behind, and SQLite replays
+    them onto the restored file (the restore then reports success over the wrong data)."""
+    w = World(tmp_path)
+    holder = sqlite3.connect(w.live, isolation_level=None)
+    holder.execute("PRAGMA journal_mode = WAL;")
+    holder.execute("PRAGMA wal_autocheckpoint = 0;")
+    holder.execute("INSERT INTO command_log (ts, user_id, command) VALUES (1, 1, 'walrow');")
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    for suffix in ("-wal", "-shm"):
+        shutil.copy(Path(str(w.live) + suffix), moved / ("yokai.db" + suffix))
+    holder.close()
+    live = moved / "yokai.db"  # the damaged file was moved away; its sidecars were not
+    settings = PanelSettings(db_path=live, log_dir=tmp_path / "logs", backup_dir=w.folder)
+    restore_backup(settings, w.backup.name, "RESTORE", now=NOW)
+    assert _count(live) == BASE_ROWS  # the stale wal row did not come back
+    assert _count(live, "wallets") == 2
+    raw = sqlite3.connect(live)
+    try:
+        assert raw.execute("PRAGMA integrity_check;").fetchone()[0] == "ok"
+    finally:
+        raw.close()
+
+
+def test_a_failure_while_copying_names_the_safety_backup(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*args: object, **kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(maintenance, "_stage", boom)
+    with pytest.raises(PanelDbError, match="Nothing was replaced") as caught:
+        world.restore()
+    assert "-pre-restore.db" in str(caught.value)
+    assert world.untouched()
