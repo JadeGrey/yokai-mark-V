@@ -497,4 +497,36 @@ Plan: `docs/superpowers/plans/2026-10-08-multiplayer-m3-jackpot-crash-blackjack-
 
 **STOP — owner review.**
 
-(M4 lottery: planned after M3 is reviewed.)
+### M4 — The lottery
+
+Plan: `docs/superpowers/plans/2026-10-08-multiplayer-m4-lottery.md`.
+
+- [x] M4.1 Lottery settings and errors.
+- [x] M4.2 Lottery engine.
+- [x] M4.3 Migration v7, models, schedule.
+- [x] M4.4 Buying tickets (one transaction).
+- [x] M4.5 The weekly draw (one transaction).
+- [x] M4.6 Lottery embeds.
+- [x] M4.7 Buy tickets button and form.
+- [x] M4.8 Lottery cog, scheduler, channel dedication.
+
+**Acceptance criteria (M4)**
+- `/admin set_multiplayer game:Lottery` posts a persistent panel (pot, tickets sold, next draw)
+  with a **Buy tickets** button that keeps working after a restart; the draw clock starts then.
+- The form takes hand-picked numbers and/or a quick-pick count; numbers run 1 to 20, a member
+  holds at most 10 per draw and never the same number twice; a purchase debits, stores the
+  tickets and feeds the pot in one transaction; sales close at the draw time.
+- Once a week a number is drawn: holders split the pot (remainder stays), nobody holding it
+  rolls the pot over; the result is announced in the channel and never deleted; the panel
+  updates.
+- A bot that was offline at draw time draws once on the next check; an unannounced draw is
+  announced later and nobody is paid twice.
+- The lottery cannot be opened as a table.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Dedicate a channel; buy tickets with numbers, with quick picks, and
+  with both; try the cap, a repeat number, junk input and too little Renown; lower
+  `LOTTERY_DRAW_INTERVAL_HOURS` or edit `next_draw_ts` in the database to force a draw; check the
+  announcement, the payout in `/balance`, the rollover when nobody holds the number, and that
+  restarting the bot keeps the Buy button working.
+
+**STOP — owner review.** This completes Phase 10.
