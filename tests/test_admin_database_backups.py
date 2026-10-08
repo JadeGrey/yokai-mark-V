@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.admin_helpers import seed_database
+from yokai.storage.db import CURRENT_SCHEMA_VERSION
 from yokai_admin.core import audit as audit_core
 from yokai_admin.core.inputs import InputRefused
 from yokai_admin.errors import PanelDbError
@@ -57,7 +58,7 @@ def test_a_backup_is_a_verified_copy_with_a_timestamp_name(tmp_path: Path) -> No
     raw = sqlite3.connect(f"{made.path.as_uri()}?mode=ro", uri=True)
     try:
         assert raw.execute("PRAGMA integrity_check;").fetchone()[0] == "ok"
-        assert raw.execute("PRAGMA user_version;").fetchone()[0] == 5
+        assert raw.execute("PRAGMA user_version;").fetchone()[0] == CURRENT_SCHEMA_VERSION
         assert raw.execute("PRAGMA journal_mode;").fetchone()[0] == "delete"
     finally:
         raw.close()

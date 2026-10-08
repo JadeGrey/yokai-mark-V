@@ -15,10 +15,11 @@ import aiosqlite
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
 from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
+from yokai.gambling.pot import bet_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -138,6 +139,33 @@ CREATE TABLE IF NOT EXISTS user_names (
 );
 """
 
+MIGRATION_V6 = """
+CREATE TABLE IF NOT EXISTS multiplayer_channels (
+  channel_id INTEGER PRIMARY KEY,
+  game TEXT NOT NULL UNIQUE,
+  play_message_id INTEGER,
+  table_message_id INTEGER,
+  table_active INTEGER NOT NULL DEFAULT 0,
+  updated_ts INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lottery_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  pot INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT OR IGNORE INTO lottery_state (id, pot) VALUES (1, 0);
+
+CREATE TABLE IF NOT EXISTS lottery_pot_entries (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  amount INTEGER NOT NULL CHECK (amount > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lottery_pot_entries_ts ON lottery_pot_entries(ts);
+"""
+
 
 class Database:
     """Async SQLite database manager."""
@@ -219,6 +247,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 5;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 5.")
+
+        if version < 6:
+            logger.info("Applying SQLite migration v6...")
+            await self.conn.executescript(MIGRATION_V6)
+            await self.conn.execute("PRAGMA user_version = 6;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 6.")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
@@ -660,6 +695,25 @@ class Database:
         assert bet_id is not None
         return bet_id
 
+    async def _credit_pot(self, source: str, amount: int, now: int) -> None:
+        """Add the house's take to the lottery pot inside the caller's open transaction.
+
+        Does not commit: it must land in the same transaction as the settlement that earned it.
+        """
+        if amount <= 0:
+            return
+        await self.conn.execute("UPDATE lottery_state SET pot = pot + ? WHERE id = 1;", (amount,))
+        await self.conn.execute(
+            "INSERT INTO lottery_pot_entries (ts, source, amount) VALUES (?, ?, ?);",
+            (now, source, amount),
+        )
+
+    async def get_pot(self) -> int:
+        """Current lottery pot."""
+        async with self.conn.execute("SELECT pot FROM lottery_state WHERE id = 1;") as cursor:
+            row = await cursor.fetchone()
+        return row[0] if row else 0
+
     async def _finish_bet(self, bet_id: int, payout: int, refund: bool) -> int:
         """Close an open bet exactly once, crediting `payout` (the stake when refunding)."""
         now = int(time.time())
@@ -686,6 +740,8 @@ class Database:
                 if cursor.rowcount == 0:
                     await self.conn.rollback()
                     raise BetNotOpenError(bet_id)
+                if not refund:
+                    await self._credit_pot(game, bet_house_take(game, stake, credit), now)
                 if credit > 0:
                     await self.conn.execute(
                         "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
