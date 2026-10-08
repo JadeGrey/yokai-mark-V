@@ -159,9 +159,16 @@ display name: the bot remembers each user's latest name in `user_names` (written
 day per person; control and bidirectional-override characters are stripped), and the panel only
 reads it.
 
-**Logs.** Lists current and rotated files from the log directory (listing only; filenames never
-taken from user input). Paged view with level filter and text search, SSE live-tail of the current
-file, download. Log lines are HTML-escaped when rendered.
+**Logs.** Lists every `*.log` and `*.log.N` file in the log directory (the bot's `yokai.log`, its
+rotated copies, and the supervisor's `supervisor.log`); a request names a file only through that
+listing, never as a path. Viewer: newest first, 100 entries per page, minimum-level filter and
+case-insensitive literal text search, tracebacks kept with their entry, reads bounded (last 8 MB of
+a file, 4,000 characters per entry). Live tail of the current `yokai.log`: HTMX polling every 2 s
+(chosen over SSE: no held server thread, clean Ctrl+C shutdown, testable, survives rotation) that
+reads only the bytes added since the last poll, holds back a half-written line, restarts with a
+marker after rotation or truncation, and can be paused. Download returns the listed file as an
+attachment. All routes are GET and read-only. Log text is HTML-escaped when rendered; control and
+bidirectional characters are removed.
 
 **Audit.** Read-only, paged `admin_audit` view filterable by module and target.
 

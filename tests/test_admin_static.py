@@ -137,3 +137,13 @@ def test_logs_page_styles_exist() -> None:
     css = _css()
     for selector in (".log-entry", ".log-line", ".tail", '.log-entry[data-level="ERROR"]'):
         assert selector in css
+
+
+def test_logs_page_polish_found_in_a_real_browser() -> None:
+    """Row links touched each other, a link-button was underlined, and log text was bold."""
+    css = _css()
+    assert ".row-actions a" in css
+    assert "a.btn" in css and "text-decoration: none" in css
+    for selector in (".log-entry pre {", ".log-line {"):
+        block = css[css.index(selector) : css.index("}", css.index(selector))]
+        assert "font-weight: 400" in block

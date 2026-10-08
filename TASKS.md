@@ -261,7 +261,7 @@ own plan after the previous phase is reviewed.
 - [x] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
       cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
 - [x] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
-- [ ] P-A6 Logs module (current and rotated, live tail).
+- [x] P-A6 Logs module (current and rotated, live tail).
 
 **Acceptance criteria (P-A1)**
 - Schema version is 4; a v3 database upgrades with its rows intact.
@@ -279,6 +279,25 @@ own plan after the previous phase is reviewed.
   seconds, then run `/ping` and press a button as that account: both are refused. Delete the
   row and confirm access returns. Add an account to `admins` and confirm `/diag` works for it.
   Watch `bot_heartbeat.ts` advance every 30 s, and vanish after stopping the bot with Ctrl+C.
+
+**Acceptance criteria (P-A6)**
+- The Logs page lists every `*.log` and `*.log.N` file in `LOG_DIR` with size and modified time;
+  names are only ever taken from that listing (no path, drive, stream or symlink can be opened).
+- The viewer reads a file newest first in pages of 100 entries, filters by minimum level and by
+  case-insensitive literal text, keeps tracebacks with their entry, understands both the bot's and
+  the supervisor's line formats, and is bounded (8 MB read, 4,000 characters per entry).
+- Log text is escaped; control, ANSI and bidirectional characters are removed; invalid UTF-8 and
+  BOMs are handled.
+- The live tail polls every 2 s (decision: polling, not SSE), shows only complete new lines newest
+  first, survives rotation and truncation with a marker, can be paused and resumed, and answers
+  with a message when the file or folder is missing or a poll parameter is tampered with.
+- Download returns exactly the listed file as an attachment.
+- Every route is read-only (GET), needs a session, and answers with a message, not a 500, on bad
+  input.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(checked in headless Edge while building)* list, viewer, level filter, search, a traceback,
+  supervisor log, live tail receiving appended lines, pause and resume, rotation marker and the
+  failed-request notice, in dark 1280, light 1280 and dark 390.
 
 **Acceptance criteria (P-A5)**
 - Overview shows file size, schema, bot state and every table with its row count; the browser pages

@@ -696,6 +696,15 @@ a {
   margin-left: 0.75rem;
 }
 
+.row-actions a {
+  margin-left: 0.75rem;
+}
+
+a.btn {
+  display: inline-block;
+  text-decoration: none;
+}
+
 @media (max-width: 48rem) {
   .add {
     grid-template-columns: 1fr;
@@ -722,6 +731,7 @@ a {
 
 .log-entry pre {
   margin: 0;
+  font-weight: 400;
   font: 0.8125rem/1.5 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -736,6 +746,7 @@ a {
 
 .log-line {
   margin: 0;
+  font-weight: 400;
   padding: 0.2rem 0;
   font: 0.8125rem/1.5 var(--mono);
   overflow-wrap: anywhere;
@@ -781,7 +792,8 @@ a {
     text-align: left;
   }
 
-  .table.stack .row-actions .link-danger {
+  .table.stack .row-actions .link-danger,
+  .table.stack .row-actions a {
     margin: 0 0.75rem 0 0;
   }
 }

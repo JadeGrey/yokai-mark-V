@@ -153,7 +153,7 @@ python -m yokai
 
 ## Admin panel
 
-A local web panel for the owner (bot status, people and their wallets with ledger-safe balance edits, the blacklist and admin list, an audit log, a database browser with backups, restore and VACUUM today; logs arrive in a later phase). It runs as its own process, listens on `127.0.0.1` only, and works even while the bot is off.
+A local web panel for the owner (bot status, people and their wallets with ledger-safe balance edits, the blacklist and admin list, an audit log, a database browser with backups, restore and VACUUM today; and a log viewer with a live tail). It runs as its own process, listens on `127.0.0.1` only, and works even while the bot is off.
 
 ```powershell
 python -m yokai_admin
