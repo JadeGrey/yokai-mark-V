@@ -1,0 +1,7 @@
+<div id="vacuum-confirm" class="confirm-box">
+  <p>Compact the database now? This rewrites the whole file and can take a moment; the bot's writes wait until it finishes. It is audited.</p>
+  <div class="confirm-row">
+    <button type="button" class="btn danger" hx-post="/m/database/vacuum" hx-target="#db-body" hx-swap="outerHTML">Compact now</button>
+    <button type="button" class="btn plain" hx-get="/m/database/body" hx-target="#db-body" hx-swap="outerHTML" autofocus>Cancel</button>
+  </div>
+</div>

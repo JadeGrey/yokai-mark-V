@@ -667,6 +667,31 @@ a {
   margin-bottom: 0;
 }
 
+/* Database */
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.table-scroll {
+  max-width: 100%;
+}
+
+.table-scroll .table td {
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.row-actions .link-danger {
+  margin-left: 0.75rem;
+}
+
 @media (max-width: 48rem) {
   .add {
     grid-template-columns: 1fr;

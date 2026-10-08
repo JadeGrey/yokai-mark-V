@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ view.name if view else "Table" }} - Yokai admin{% endblock %}
+{% block content %}
+  <p class="crumb"><a href="/m/database">Database</a></p>
+  {% if not view %}
+    <h1 class="page-title">No such table</h1>
+    <p class="lede">{{ problem }}</p>
+  {% else %}
+    <h1 class="page-title mono">{{ view.name }}</h1>
+    <p class="lede">{{ view.total|number }} {{ 'row' if view.total == 1 else 'rows' }}. Read-only. Long values are shortened.</p>
+    {% if view.rows %}
+    <div class="table-wrap table-scroll"><table class="table">
+      <thead><tr>{% for c in view.columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in view.rows %}
+        <tr>{% for cell in row %}<td class="mono">{{ cell }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="empty">{{ 'This table is empty.' if view.total == 0 else 'There are no rows on this page.' }}</p>
+    {% endif %}
+    <p class="pager">
+      {% if has_newer %}<a href="/m/database/table?name={{ view.name|urlencode }}&amp;page={{ view.page - 1 }}">Newer</a>{% endif %}
+      {% if has_older %}<a href="/m/database/table?name={{ view.name|urlencode }}&amp;page={{ view.page + 1 }}">Older</a>{% endif %}
+    </p>
+  {% endif %}
+{% endblock %}

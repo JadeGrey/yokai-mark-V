@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Database - Yokai admin{% endblock %}
+{% block content %}
+  <h1 class="page-title">Database</h1>
+  <p class="lede">What the bot has stored. Browse any table, check the file, and keep backups you can restore from.</p>
+  {% include "database/_body.html" %}
+{% endblock %}

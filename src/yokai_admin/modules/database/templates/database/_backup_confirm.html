@@ -1,0 +1,18 @@
+<div id="backup-action" class="confirm-box">
+  {% if action == 'delete' %}
+  <p>Delete <strong class="mono">{{ backup.name }}</strong> permanently? This cannot be undone.</p>
+  <div class="confirm-row">
+    <button type="button" class="btn danger" hx-post="/m/database/backups/{{ backup.name }}/delete" hx-target="#db-body" hx-swap="outerHTML">Delete backup</button>
+    <button type="button" class="btn plain" hx-get="/m/database/body" hx-target="#db-body" hx-swap="outerHTML" autofocus>Cancel</button>
+  </div>
+  {% else %}
+  <p>Replace the live database with <strong class="mono">{{ backup.name }}</strong>? Everything changed since it was made is lost. The database as it is now is saved first as a safety backup.</p>
+  <p class="hint">The bot must be stopped (stop the bot first). Type <strong>RESTORE</strong> to confirm.</p>
+  <form hx-post="/m/database/backups/{{ backup.name }}/restore" hx-target="#db-body" hx-swap="outerHTML" class="confirm-row">
+    <label class="sr-only" for="restore-confirm">Type RESTORE to confirm</label>
+    <input id="restore-confirm" name="confirm" autocomplete="off" placeholder="RESTORE" required>
+    <button type="submit" class="btn danger">Restore this backup</button>
+    <button type="button" class="btn plain" hx-get="/m/database/body" hx-target="#db-body" hx-swap="outerHTML" autofocus>Cancel</button>
+  </form>
+  {% endif %}
+</div>

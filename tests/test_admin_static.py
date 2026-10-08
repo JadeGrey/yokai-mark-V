@@ -108,3 +108,9 @@ def test_numeric_table_headers_align_with_their_numbers() -> None:
     left-aligned header."""
     css = _css()
     assert ".table th.num" in css and ".table td.num" in css
+
+
+def test_database_page_styles_exist() -> None:
+    css = _css()
+    for selector in (".mono", ".table-scroll", ".row-actions"):
+        assert selector in css

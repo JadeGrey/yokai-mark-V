@@ -21,6 +21,10 @@ _LABELS = {
     "admin.remove": "Removed from the admin list",
     "balance.adjust": "Adjusted Renown",
     "daily.reset": "Reset the daily cooldown",
+    "backup.create": "Created a backup",
+    "backup.delete": "Deleted a backup",
+    "vacuum": "Compacted the database",
+    "restore": "Restored a backup",
 }
 
 
