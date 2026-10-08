@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Mapping, Optional
 
 import discord
 
-from yokai.errors import YokaiError
+from yokai.errors import LobbyClosedError, YokaiError
 from yokai.gambling.engines.bjtable import BlackjackTable
 from yokai.gambling.engines.blackjack import Outcome, build_shoe, hand_value
 from yokai.gambling.lobby import Lobby
@@ -41,6 +41,7 @@ class BlackjackTableView(discord.ui.View):
         self.message: Optional[discord.Message] = None
         self.acted = asyncio.Event()
         self.lock = asyncio.Lock()
+        self.closed = False  # set by the runner, under the lock, once it is about to settle
         self.deadline_ts = 0
         self.reset_deadline()
 
@@ -79,6 +80,13 @@ class BlackjackTableView(discord.ui.View):
 
     async def _act(self, interaction: discord.Interaction, move: str) -> None:
         async with self.lock:
+            if self.closed:
+                await reply_error(
+                    self.bot,
+                    interaction,
+                    LobbyClosedError("The round is over.", user_hint=None),
+                )
+                return
             try:
                 getattr(self.table, move)(interaction.user.id)
             except YokaiError as err:
@@ -144,6 +152,11 @@ async def run_bjtable(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> 
                     view.reset_deadline()
                     with contextlib.suppress(discord.HTTPException):
                         await message.edit(embed=view.build_embed(), view=view)
+        # A player's last action edits the message from its own handler while holding the lock.
+        # Wait for that edit to finish before the result goes up, or a slow in-play edit can land
+        # last and leave a frozen board with live buttons over the settled result.
+        async with view.lock:
+            view.closed = True
         view.stop()
         table.play_dealer()
         stakes = {user_id: seat.stake for user_id, seat in lobby.seats.items()}

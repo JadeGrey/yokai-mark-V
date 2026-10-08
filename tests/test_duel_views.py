@@ -233,3 +233,56 @@ async def test_a_failed_settlement_also_tells_the_players(tmp_path: Path) -> Non
                 await run_duel(make_bot(db, manager), lobby, message)
         assert lobby.state is LobbyState.CANCELLED
         assert "cancelled" in message.edit.await_args.kwargs["embed"].title.lower()
+
+
+@pytest.mark.asyncio
+async def test_the_duel_result_is_not_overwritten_by_a_slow_progress_edit(
+    tmp_path: Path,
+) -> None:
+    """Same race as the blackjack table: the first picker's 'locked in' refresh is in flight
+    when the second pick resolves the duel; it must finish before the result is posted."""
+    import asyncio
+
+    async with world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        message = make_message()
+        order: list[str] = []
+        release = asyncio.Event()
+        holder: dict[str, DuelView] = {}
+        original_init = DuelView.__init__
+
+        def init(self, *a, **kw):  # type: ignore[no-untyped-def]
+            original_init(self, *a, **kw)
+            holder["view"] = self
+
+        async def message_edit(**kwargs):  # type: ignore[no-untyped-def]
+            if kwargs.get("view") is None:
+                order.append("result-edit")
+            elif len(order) == 0 and holder["view"].duel.picked_ids:
+                await release.wait()  # the progress refresh after the first pick is slow
+                order.append("progress-edit")
+
+        message.edit = AsyncMock(side_effect=message_edit)
+        with patch.object(DuelView, "__init__", init):
+            runner = asyncio.create_task(run_duel(make_bot(db, manager), lobby, message))
+            for _ in range(100):
+                if "view" in holder:
+                    break
+                await asyncio.sleep(0.01)
+            view = holder["view"]
+            first = PickSelect(view)
+            first._values = ["3"]  # type: ignore[attr-defined]
+            first_pick = asyncio.create_task(first.callback(make_interaction(1)))
+            await asyncio.sleep(0.05)  # the first pick's refresh is now stuck in flight
+            second = PickSelect(view)
+            second._values = ["7"]  # type: ignore[attr-defined]
+            await second.callback(make_interaction(2))
+            for _ in range(60):
+                if "result-edit" in order:
+                    break
+                await asyncio.sleep(0.02)
+            assert "result-edit" not in order, "the result was posted over an open edit"
+            release.set()
+            await first_pick
+            await runner
+        assert order == ["progress-edit", "result-edit"]

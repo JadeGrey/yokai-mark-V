@@ -33,6 +33,8 @@ class DuelView(discord.ui.View):
         self.deadline_ts = deadline_ts
         self.message: "discord.Message | None" = None
         self.all_picked = asyncio.Event()
+        self.edit_lock = asyncio.Lock()  # serialises edits of the public table message
+        self.closed = False
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return not await screen(interaction)
@@ -53,7 +55,9 @@ class DuelView(discord.ui.View):
         if self.duel.ready:
             self.all_picked.set()  # the result replaces the message, so it needs no refresh
             return
-        if self.message is not None:
+        async with self.edit_lock:
+            if self.closed or self.message is None:
+                return
             try:
                 await self.message.edit(embed=self.build_embed(), view=self)
             except discord.HTTPException as exc:
@@ -131,6 +135,10 @@ async def run_duel(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> Non
         await message.edit(embed=view.build_embed(), view=view)
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(view.all_picked.wait(), timeout=tables.pick_seconds)
+        # A 'locked in' refresh of the table message may still be in flight; let it finish so it
+        # cannot land after the result and bring back a stale board with a live button.
+        async with view.edit_lock:
+            view.closed = True
         result = await tables.resolve_duel(lobby, duel)
     except BaseException as exc:
         await tables.abort(lobby)

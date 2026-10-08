@@ -274,3 +274,83 @@ async def test_a_hit_that_races_the_timeout_is_not_followed_by_a_forced_stand(
         assert calls["n"] == 3
         assert await balance_of(db, 1) == 900  # 15 loses to the dealer's 17
         assert await balance_of(db, 2) == 1100  # 18 beats 17
+
+
+@pytest.mark.asyncio
+async def test_the_result_is_posted_after_the_last_players_own_message_edit_finishes(
+    tmp_path: Path,
+) -> None:
+    """Regression: the last action's in-play edit and the result edit raced, and a slow
+    in-play edit landing last left a frozen board with live buttons and no visible result."""
+    import asyncio
+
+    from yokai.ui import bjtable_views
+
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        lobby = await _running(manager)
+        message = make_message()
+        order: list[str] = []
+        release = asyncio.Event()
+
+        async def message_edit(**kwargs):  # type: ignore[no-untyped-def]
+            if kwargs.get("view") is None:
+                order.append("result-edit")
+
+        message.edit = AsyncMock(side_effect=message_edit)
+        holder: dict[str, BlackjackTableView] = {}
+        real_wait = bjtable_views._await_action
+
+        async def spying_wait(view: BlackjackTableView, seconds: float) -> bool:
+            holder["view"] = view
+            return await real_wait(view, seconds)
+
+        shoe = cards("10h 10d 7h 8c 6c 10s 10c")  # P1 18, P2 16 and busts on the next ten
+        with (
+            patch("yokai.ui.bjtable_views.build_shoe", return_value=shoe),
+            patch("yokai.ui.bjtable_views._await_action", new=spying_wait),
+        ):
+            runner = asyncio.create_task(run_bjtable(make_bot(db, manager), lobby, message))
+            for _ in range(100):
+                if "view" in holder:
+                    break
+                await asyncio.sleep(0.01)
+            view = holder["view"]
+            await view.stand_button.callback(make_interaction(1))
+
+            slow = make_interaction(2)
+
+            async def slow_edit(**kwargs):  # type: ignore[no-untyped-def]
+                await release.wait()
+                order.append("handler-edit")
+
+            slow.response.edit_message = AsyncMock(side_effect=slow_edit)
+            last_action = asyncio.create_task(view.hit_button.callback(slow))
+            for _ in range(60):  # give the runner every chance to jump the queue
+                if "result-edit" in order:
+                    break
+                await asyncio.sleep(0.02)
+            assert "result-edit" not in order, "the result was posted while the last edit was open"
+            release.set()
+            await last_action
+            await runner
+
+        assert order == ["handler-edit", "result-edit"]
+        assert lobby.state is LobbyState.SETTLED
+
+
+@pytest.mark.asyncio
+async def test_a_press_after_the_round_is_over_is_refused_not_applied(tmp_path: Path) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        lobby = await _running(manager)
+        from yokai.gambling.engines.bjtable import BlackjackTable
+
+        table = BlackjackTable(cards("10h 9d 7h 8c 9s 10d 3c"), [1, 2])
+        view = BlackjackTableView(make_bot(db, manager), lobby, table)
+        view.message = make_message()
+        view.closed = True  # the runner has taken over to settle
+        interaction = make_interaction(1)
+        with patch("yokai.ui.table_common.send", new=AsyncMock()) as sent:
+            await view.hit_button.callback(interaction)
+        assert len(table.hands[1]) == 2  # no card was dealt
+        assert sent.await_args.kwargs["ephemeral"] is True
+        interaction.response.edit_message.assert_not_awaited()
