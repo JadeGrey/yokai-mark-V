@@ -546,6 +546,40 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 "<@42>", [("blackjack", 1, 10, 20), ("slots", 2, 20, 40)], bot_avatar_url=av
             ),
         ),
+        (
+            "Table channel (Play embed)",
+            EmbedFactory.table_play(
+                "Duel", "Two players, one hidden number from 1 to 10.", 10, 5000, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Table lobby (open)",
+            EmbedFactory.table_lobby(
+                "Duel", [(42, 100)], 2, 2, closes_ts=1_900_000_000, pot=100, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Table cancelled",
+            EmbedFactory.table_notice(
+                "Table cancelled",
+                "Not enough players joined in time. Every stake was refunded.",
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Duel (picking)",
+            EmbedFactory.duel_picking(
+                [42, 43], 100, 200, 2, 1_900_000_045, [42], bot_avatar_url=av
+            ),
+        ),
+        (
+            "Duel (win)",
+            EmbedFactory.duel_result({42: 4, 43: 9}, 5, 42, 196, 4, bot_avatar_url=av),
+        ),
+        (
+            "Duel (tie)",
+            EmbedFactory.duel_result({42: 3, 43: 7}, 5, None, 0, 0, bot_avatar_url=av),
+        ),
     ]
     return samples
 

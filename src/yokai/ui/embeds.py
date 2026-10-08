@@ -11,6 +11,7 @@ from yokai.textutil import escape_md
 from yokai.theme import (
     COLOR_BRAND,
     COLOR_ERROR,
+    COLOR_IDLE,
     COLOR_SUCCESS,
     COLOR_WARNING,
     PROGRESS_EMPTY,
@@ -839,6 +840,147 @@ class EmbedFactory:
             color=COLOR_BRAND,
             context="Gambling",
             bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def table_play(
+        cls,
+        game_label: str,
+        rules: str,
+        min_bet: int,
+        max_bet: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The persistent embed in a table channel, above its Play button."""
+        fields: list[FieldSpec] = [
+            ("Stake", f"**{min_bet:,}** to **{max_bet:,}** Renown", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.DICE} {game_label} table",
+            description=f"{rules}\
+\
+Press **Play** to open a table.",
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def table_lobby(
+        cls,
+        game_label: str,
+        seats: Sequence[tuple[int, int]],  # (user_id, stake)
+        min_players: int,
+        max_players: int,
+        closes_ts: int,
+        pot: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """An open table: who is seated, the pot, and a live countdown to the start."""
+        listed = "\
+".join(f"<@{user_id}> — **{stake:,}**" for user_id, stake in seats)
+        fields: list[FieldSpec] = [
+            ("Players", f"**{len(seats)}/{max_players}**", True),
+            ("Pot", f"**{pot:,}**", True),
+            ("Starts", f"<t:{closes_ts}:R>", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.DICE} {game_label} table",
+            description=(
+                f"**Seats**\
+{listed or 'Nobody yet.'}\
+\
+"
+                f"Press **Join** to take a seat. Needs {min_players} to start."
+            ),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def table_notice(
+        cls, title: str, description: str, bot_avatar_url: Optional[str] = None
+    ) -> discord.Embed:
+        """A table that ended without a game: cancelled, or closed by a restart."""
+        return cls._create_base(
+            title=title,
+            description=description,
+            color=COLOR_IDLE,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def duel_picking(
+        cls,
+        seat_ids: Sequence[int],
+        stake: int,
+        pot: int,
+        rake_percent: int,
+        deadline_ts: int,
+        picked: Sequence[int],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The duel while players choose; picks stay secret, only who has locked in shows."""
+        locked = " ".join(f"<@{user_id}>" for user_id in picked) or "Nobody yet."
+        fields: list[FieldSpec] = [
+            ("Stake", f"**{stake:,}** each", True),
+            ("Pot", f"**{pot:,}**", True),
+            ("Picks close", f"<t:{deadline_ts}:R>", True),
+        ]
+        rake_note = f" The house keeps {rake_percent}%." if rake_percent else ""
+        return cls._create_base(
+            title=f"{Emoji.DICE} Duel",
+            description=(
+                f"{' vs '.join(f'<@{user_id}>' for user_id in seat_ids)}\
+"
+                "A hidden number from **1** to **10** has been drawn. Press **Pick your number** "
+                "to lock in a secret pick. The pick closest to the hidden number wins the pot."
+                f"{rake_note}\
+\
+**Locked in:** {locked}"
+            ),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def duel_result(
+        cls,
+        picks: Mapping[int, int],
+        target: int,
+        winner_id: Optional[int],
+        prize: int,
+        rake: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A finished duel: the hidden number, both picks, and who won or that it tied."""
+        lines = [f"The hidden number was **{target}**."]
+        lines.extend(f"<@{user_id}> picked **{number}**" for user_id, number in picks.items())
+        fields: list[FieldSpec] = []
+        if winner_id is None:
+            lines.append("**It's a tie.** Both stakes were returned.")
+            color, quip_key = COLOR_BRAND, "game_push"
+        else:
+            lines.append(f"**<@{winner_id}> wins {prize:,} Renown.**")
+            color, quip_key = COLOR_SUCCESS, "game_win"
+            fields.append(("Prize", f"**{prize:,}**", True))
+            if rake:
+                fields.append(("Rake", f"**{rake:,}**", True))
+        return cls._create_base(
+            title=f"{Emoji.DICE} Duel",
+            description="\
+".join(lines),
+            color=color,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get(quip_key),
             fields=_grid(fields),
         )
 
