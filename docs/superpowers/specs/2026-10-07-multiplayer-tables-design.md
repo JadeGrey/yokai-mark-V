@@ -58,12 +58,14 @@ CREATE TABLE multiplayer_channels (
   game TEXT NOT NULL UNIQUE,      -- duel|jackpot|crash|bjtable|lottery
   play_message_id INTEGER,        -- the persistent Play embed
   table_message_id INTEGER,       -- current or last table message (NULL for lottery)
+  table_active INTEGER NOT NULL DEFAULT 0,  -- 1 while a table is open or running
   updated_ts INTEGER NOT NULL
 );
 CREATE TABLE lottery_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   pot INTEGER NOT NULL DEFAULT 0
 );
+INSERT OR IGNORE INTO lottery_state (id, pot) VALUES (1, 0);
 CREATE TABLE lottery_pot_entries (
   id INTEGER PRIMARY KEY,
   ts INTEGER NOT NULL,
@@ -78,7 +80,7 @@ CREATE TABLE lottery_pot_entries (
 
 ### Persistent Play embed
 
-One `PlayView(timeout=None)` with a fixed `custom_id` (`yokai:table:play`) is registered in `setup_hook`. Its handler finds the game from `interaction.channel_id`. On startup the bot reconciles every configured channel: a missing Play embed is reposted and `play_message_id` updated; a stale table message is edited to say the table was closed by the restart (its stakes are already refunded by the startup sweep).
+One `PlayView(timeout=None)` with a fixed `custom_id` (`yokai:table:play`) is registered in `setup_hook`. Its handler finds the game from `interaction.channel_id`. On startup the bot reconciles every configured channel: a missing Play embed is reposted and `play_message_id` updated; a table message whose channel is still marked `table_active` is edited to say the table was closed by the restart (its stakes are already refunded by the startup sweep); a finished table is never rewritten, so its result stays on screen.
 
 ### Pressing Play
 

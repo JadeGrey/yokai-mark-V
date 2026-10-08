@@ -6,8 +6,14 @@ from yokai.errors import (
     AlreadyInGameError,
     BetNotOpenError,
     BetOutOfRangeError,
+    ChannelNotConfiguredError,
     InsufficientFundsError,
     InvalidGameChoiceError,
+    LobbyClosedError,
+    NotAtTableError,
+    NotHostError,
+    TableBusyError,
+    TablePermissionError,
     YokaiError,
 )
 
@@ -37,3 +43,27 @@ def test_every_new_error_is_a_yokai_error_with_a_title() -> None:
     ):
         assert isinstance(err, YokaiError)
         assert err.title and err.message
+
+
+def test_table_errors_are_plain_domain_errors() -> None:
+    for err in (
+        TableBusyError(),
+        ChannelNotConfiguredError(),
+        LobbyClosedError(),
+        NotAtTableError(),
+        NotHostError(),
+        TablePermissionError(["Send Messages", "Embed Links"], "tables"),
+    ):
+        assert isinstance(err, YokaiError)
+        assert err.message and err.title
+
+
+def test_lobby_closed_error_accepts_a_custom_message_without_a_hint() -> None:
+    err = LobbyClosedError("This table is full.", user_hint=None)
+    assert err.message == "This table is full." and err.user_hint is None
+
+
+def test_table_permission_error_names_what_is_missing() -> None:
+    err = TablePermissionError(["Send Messages", "Embed Links"], "tables")
+    assert "Send Messages" in err.message and "Embed Links" in err.message
+    assert "#tables" in err.message

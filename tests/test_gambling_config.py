@@ -36,3 +36,36 @@ def test_min_bet_is_floored_at_one() -> None:
 def test_max_bet_below_min_bet_is_a_config_error() -> None:
     with pytest.raises(ConfigError, match="GAMBLING_MAX_BET"):
         _load({"GAMBLING_MIN_BET": "100", "GAMBLING_MAX_BET": "50"})
+
+
+def test_table_defaults() -> None:
+    cfg = _load()
+    assert cfg.gambling_duel_rake_percent == 2
+    assert cfg.gambling_lobby_join_seconds == 60
+    assert cfg.gambling_turn_seconds == 45
+
+
+def test_table_overrides() -> None:
+    cfg = _load(
+        {
+            "GAMBLING_DUEL_RAKE_PERCENT": "5",
+            "GAMBLING_LOBBY_JOIN_SECONDS": "90",
+            "GAMBLING_TURN_SECONDS": "30",
+        }
+    )
+    assert (
+        cfg.gambling_duel_rake_percent,
+        cfg.gambling_lobby_join_seconds,
+        cfg.gambling_turn_seconds,
+    ) == (5, 90, 30)
+
+
+def test_rake_is_clamped_between_zero_and_fifty() -> None:
+    assert _load({"GAMBLING_DUEL_RAKE_PERCENT": "-3"}).gambling_duel_rake_percent == 0
+    assert _load({"GAMBLING_DUEL_RAKE_PERCENT": "0"}).gambling_duel_rake_percent == 0
+    assert _load({"GAMBLING_DUEL_RAKE_PERCENT": "99"}).gambling_duel_rake_percent == 50
+
+
+def test_timers_have_a_five_second_floor() -> None:
+    cfg = _load({"GAMBLING_LOBBY_JOIN_SECONDS": "0", "GAMBLING_TURN_SECONDS": "1"})
+    assert (cfg.gambling_lobby_join_seconds, cfg.gambling_turn_seconds) == (5, 5)

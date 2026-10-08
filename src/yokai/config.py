@@ -62,6 +62,11 @@ class Config:
     gambling_min_bet: int = 10
     gambling_max_bet: int = 5000
 
+    # Gambling: multiplayer tables
+    gambling_duel_rake_percent: int = 2
+    gambling_lobby_join_seconds: int = 60
+    gambling_turn_seconds: int = 45
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -175,6 +180,21 @@ def load_config(env_path: Path | str | None = None) -> Config:
     if gambling_max_bet < gambling_min_bet:
         raise ConfigError("GAMBLING_MAX_BET must be greater than or equal to GAMBLING_MIN_BET.")
 
+    gambling_duel_rake_percent = min(
+        50,
+        max(
+            0,
+            _parse_int("GAMBLING_DUEL_RAKE_PERCENT", os.getenv("GAMBLING_DUEL_RAKE_PERCENT"), 2),
+        ),
+    )
+    gambling_lobby_join_seconds = max(
+        5,
+        _parse_int("GAMBLING_LOBBY_JOIN_SECONDS", os.getenv("GAMBLING_LOBBY_JOIN_SECONDS"), 60),
+    )
+    gambling_turn_seconds = max(
+        5, _parse_int("GAMBLING_TURN_SECONDS", os.getenv("GAMBLING_TURN_SECONDS"), 45)
+    )
+
     return Config(
         discord_token=token,
         guild_id=guild_id,
@@ -204,4 +224,7 @@ def load_config(env_path: Path | str | None = None) -> Config:
         economy_command_rate_limit=economy_command_rate_limit,
         gambling_min_bet=gambling_min_bet,
         gambling_max_bet=gambling_max_bet,
+        gambling_duel_rake_percent=gambling_duel_rake_percent,
+        gambling_lobby_join_seconds=gambling_lobby_join_seconds,
+        gambling_turn_seconds=gambling_turn_seconds,
     )

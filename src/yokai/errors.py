@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Sequence
 
 from yokai.textutil import escape_md
 
@@ -247,3 +247,79 @@ class InvalidGameChoiceError(YokaiError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, user_hint="Check the command options and try again.")
+
+
+class TableBusyError(YokaiError):
+    """Raised when a table is requested in a channel that already has a live one."""
+
+    title = "Table in use"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "A table is already open in this channel.",
+            user_hint="Wait for it to finish, or ask the host to cancel it if it has not started.",
+        )
+
+
+class ChannelNotConfiguredError(YokaiError):
+    """Raised when Play is pressed in a channel that is not a table channel."""
+
+    title = "Not a table channel"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This channel is not set up for a multiplayer game.",
+            user_hint="An admin can set one up with /admin set_multiplayer.",
+        )
+
+
+class LobbyClosedError(YokaiError):
+    """Raised when a table action is not possible in the table's current state."""
+
+    title = "Table closed"
+
+    def __init__(
+        self,
+        message: str = "This table is no longer open.",
+        user_hint: Optional[str] = "Press Play in the table channel to start a new one.",
+    ) -> None:
+        super().__init__(message, user_hint=user_hint)
+
+
+class NotAtTableError(YokaiError):
+    """Raised when someone who is not seated tries to act as a player."""
+
+    title = "Not at this table"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You are not seated at this table.",
+            user_hint="Only players at the table can do that.",
+        )
+
+
+class NotHostError(YokaiError):
+    """Raised when a host-only table action is attempted by someone else."""
+
+    title = "Host only"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Only the host or an admin can do that.",
+            user_hint="Ask the host of this table.",
+        )
+
+
+class TablePermissionError(YokaiError):
+    """Raised when the bot lacks permissions in a channel chosen as a table channel."""
+
+    title = "Missing permission"
+
+    def __init__(self, missing: Sequence[str], channel_name: str) -> None:
+        listed = ", ".join(missing)
+        super().__init__(
+            f"I am missing these permissions in #{channel_name}: {listed}.",
+            user_hint="Grant them to Yokai in that channel's settings and run the command again.",
+        )
+        self.missing = list(missing)
+        self.channel_name = channel_name
