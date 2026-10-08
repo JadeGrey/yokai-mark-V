@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tests.table_helpers import ANNOUNCED_MESSAGE_ID, CHANNEL, NOW, announce_ok, balance_of, world
+from tests.table_helpers import (
+    ALL_PLAYABLE,
+    ANNOUNCED_MESSAGE_ID,
+    CHANNEL,
+    NOW,
+    announce_ok,
+    balance_of,
+    world,
+)
 from yokai.errors import (
     AlreadyInGameError,
     BetOutOfRangeError,
@@ -502,3 +511,67 @@ async def test_leaving_keeps_the_seat_and_the_claim_when_the_refund_fails(
         await manager.leave(lobby, 2)  # the database is back: leaving now works
         assert 2 not in lobby.seats and not active.is_active(2)
         assert await balance_of(db, 2) == 1000
+
+
+# ---- the jackpot ------------------------------------------------------------------------
+
+
+class FixedRoll(random.Random):
+    """A random source whose randrange always returns the same value."""
+
+    def __init__(self, value: int) -> None:
+        super().__init__()
+        self.value = value
+
+    def randrange(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return self.value
+
+
+async def _running_jackpot(manager):  # type: ignore[no-untyped-def]
+    lobby = await manager.open_table(CHANNEL, "jackpot", 1, 100, announce_ok)
+    await manager.join(lobby, 2, 200)
+    await manager.join(lobby, 3, 300)
+    assert await manager.begin(lobby) is BeginOutcome.STARTED
+    return lobby
+
+
+@pytest.mark.asyncio
+async def test_a_jackpot_pays_the_drawn_player_the_pot_minus_the_rake(tmp_path: Path) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, active):
+        manager.rng_factory = lambda: FixedRoll(599)  # the last entrant, user 3
+        lobby = await _running_jackpot(manager)
+        result = await manager.resolve_jackpot(lobby)
+        assert result.winner_id == 3 and (result.prize, result.rake) == (588, 12)
+        assert result.chances == {1: 100 / 600, 2: 200 / 600, 3: 300 / 600}
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (900, 800)
+        assert await balance_of(db, 3) == 1000 - 300 + 588
+        assert await db.get_pot() == 12 and lobby.state is LobbyState.SETTLED
+        assert not active.is_active(1) and await db.refund_open_bets() == 0
+
+
+@pytest.mark.asyncio
+async def test_a_jackpot_with_one_entrant_is_cancelled_and_refunded(tmp_path: Path) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, active):
+        lobby = await manager.open_table(CHANNEL, "jackpot", 1, 100, announce_ok)
+        assert await manager.begin(lobby) is BeginOutcome.CANCELLED
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
+
+
+@pytest.mark.asyncio
+async def test_each_jackpot_guest_picks_their_own_stake(tmp_path: Path) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE) as (db, manager, _):
+        lobby = await manager.open_table(CHANNEL, "jackpot", 1, 100, announce_ok)
+        seat = await manager.join(lobby, 2, 450)
+        assert seat.stake == 450 and lobby.pot == 550
+        with pytest.raises(BetOutOfRangeError):
+            await manager.join(lobby, 3, 9999)
+
+
+@pytest.mark.asyncio
+async def test_a_zero_jackpot_rake_pays_the_whole_pot(tmp_path: Path) -> None:
+    async with world(tmp_path, specs=ALL_PLAYABLE, jackpot_rake_percent=0) as (db, manager, _):
+        manager.rng_factory = lambda: FixedRoll(0)
+        lobby = await _running_jackpot(manager)
+        result = await manager.resolve_jackpot(lobby)
+        assert (result.winner_id, result.prize, result.rake) == (1, 600, 0)
+        assert await db.get_pot() == 0

@@ -93,6 +93,8 @@ class YokaiBot(commands.Bot):
             rake_percent=config.gambling_duel_rake_percent,
             join_seconds=config.gambling_lobby_join_seconds,
             pick_seconds=config.gambling_turn_seconds,
+            jackpot_rake_percent=config.gambling_jackpot_rake_percent,
+            crash_max_multiplier=config.gambling_crash_max_multiplier,
         )
         self._tables_reconciled = False
         self._tables_reconciled = False

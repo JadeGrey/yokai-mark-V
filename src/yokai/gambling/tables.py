@@ -22,6 +22,7 @@ from yokai.errors import (
     NotHostError,
     TableBusyError,
 )
+from yokai.gambling.engines import jackpot
 from yokai.gambling.engines.duel import DuelOutcome, DuelRound, prize_after_rake
 from yokai.gambling.escrow import validate_bet
 from yokai.gambling.lobby import GAME_SPECS, GameSpec, Lobby, LobbyState, Seat
@@ -56,6 +57,15 @@ class DuelResult:
     balances: dict[int, int]  # user id -> balance after the duel
 
 
+@dataclass(frozen=True)
+class JackpotResult:
+    winner_id: int
+    prize: int
+    rake: int
+    chances: dict[int, float]  # user id -> share of the pot, 0 to 1
+    balances: dict[int, int]  # user id -> balance after the draw
+
+
 class TableManager:
     """Owns every live table. All stake movements for tables go through here."""
 
@@ -70,6 +80,8 @@ class TableManager:
         rake_percent: int,
         join_seconds: int,
         pick_seconds: int,
+        jackpot_rake_percent: int = 2,
+        crash_max_multiplier: int = 100,
         specs: Optional[Mapping[str, GameSpec]] = None,
         clock: Callable[[], float] = time.time,
         rng_factory: Callable[[], random.Random] = new_rng,
@@ -80,6 +92,8 @@ class TableManager:
         self.min_bet = min_bet
         self.max_bet = max_bet
         self.rake_percent = rake_percent
+        self.jackpot_rake_percent = jackpot_rake_percent
+        self.crash_max_multiplier = crash_max_multiplier
         self.join_seconds = join_seconds
         self.pick_seconds = pick_seconds
         self.specs: Mapping[str, GameSpec] = specs if specs is not None else GAME_SPECS
@@ -277,6 +291,20 @@ class TableManager:
         }
         balances = await self.settle(lobby, payouts)
         return DuelResult(outcome, prize=prize, rake=rake, balances=balances)
+
+    async def resolve_jackpot(self, lobby: Lobby) -> JackpotResult:
+        """Draw the jackpot winner by stake and pay out in one transaction."""
+        entries = [(user_id, seat.stake) for user_id, seat in lobby.seats.items()]
+        winner_id = jackpot.draw_winner(entries, self.rng_factory())
+        payouts, prize, rake = jackpot.payouts(entries, winner_id, self.jackpot_rake_percent)
+        balances = await self.settle(lobby, payouts)
+        return JackpotResult(
+            winner_id=winner_id,
+            prize=prize,
+            rake=rake,
+            chances=jackpot.win_chances(entries),
+            balances=balances,
+        )
 
     # ---- internals -----------------------------------------------------------------------
 
