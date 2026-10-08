@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
 import time
@@ -22,7 +23,13 @@ from yokai.errors import (
     LotteryClosedError,
     TicketLimitError,
 )
-from yokai.gambling.models import LotteryPurchase, LotteryState, MultiplayerChannel
+from yokai.gambling.engines.lottery import split_pot
+from yokai.gambling.models import (
+    LotteryDraw,
+    LotteryPurchase,
+    LotteryState,
+    MultiplayerChannel,
+)
 from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
@@ -874,6 +881,99 @@ class Database:
             new_balance=wallet.balance,
             pot=state.pot + cost,
         )
+
+    @staticmethod
+    def _draw_from_row(row: tuple[int, int, int, int, str, int, int]) -> LotteryDraw:
+        return LotteryDraw(
+            draw_no=row[0],
+            ts=row[1],
+            winning_number=row[2],
+            pot=row[3],
+            winners=tuple(json.loads(row[4])),
+            prize_each=row[5],
+            announced=bool(row[6]),
+        )
+
+    _DRAW_COLUMNS = "draw_no, ts, winning_number, pot, winners, prize_each, announced"
+
+    async def run_lottery_draw(
+        self, winning_number: int, interval_s: int, now: Optional[int] = None
+    ) -> Optional[LotteryDraw]:
+        """Make the weekly draw if it is due; None when it is not (or the clock never started).
+
+        One transaction: winners are credited, the pot is reduced to the leftover remainder,
+        the draw is recorded, and the draw number and next draw time move on. The next draw
+        time jumps by whole intervals past `now`, so a bot that was offline draws once.
+        """
+        ts = int(time.time()) if now is None else now
+        async with self._write_tx():
+            state = await self.get_lottery_state()
+            if state.next_draw_ts is None or ts < state.next_draw_ts:
+                await self.conn.rollback()
+                return None
+            async with self.conn.execute(
+                "SELECT user_id FROM lottery_tickets WHERE draw_no = ? AND number = ? "
+                "ORDER BY user_id;",
+                (state.draw_no, winning_number),
+            ) as cursor:
+                winners = [row[0] for row in await cursor.fetchall()]
+            each, remainder = split_pot(state.pot, len(winners))
+            if each > 0:
+                for user_id in winners:
+                    await self._ensure_wallet(user_id, 0, ts)
+                    await self.conn.execute(
+                        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                        (each, user_id),
+                    )
+                    wallet = await self.get_wallet(user_id)
+                    assert wallet is not None
+                    await self._insert_transaction(
+                        user_id, each, "win:lottery", None, wallet.balance, ts
+                    )
+            next_ts = state.next_draw_ts + interval_s
+            while next_ts <= ts:
+                next_ts += interval_s
+            await self.conn.execute(
+                "UPDATE lottery_state SET pot = ?, draw_no = draw_no + 1, next_draw_ts = ? "
+                "WHERE id = 1;",
+                (remainder, next_ts),
+            )
+            await self.conn.execute(
+                "INSERT INTO lottery_draws "
+                "(draw_no, ts, winning_number, pot, winners, prize_each, announced) "
+                "VALUES (?, ?, ?, ?, ?, ?, 0);",
+                (state.draw_no, ts, winning_number, state.pot, json.dumps(winners), each),
+            )
+            await self.conn.commit()
+        return LotteryDraw(
+            draw_no=state.draw_no,
+            ts=ts,
+            winning_number=winning_number,
+            pot=state.pot,
+            winners=tuple(winners),
+            prize_each=each,
+            announced=False,
+        )
+
+    async def get_unannounced_draws(self) -> list[LotteryDraw]:
+        async with self.conn.execute(
+            f"SELECT {self._DRAW_COLUMNS} FROM lottery_draws WHERE announced = 0 ORDER BY draw_no;"
+        ) as cursor:
+            return [self._draw_from_row(r) for r in await cursor.fetchall()]
+
+    async def mark_draw_announced(self, draw_no: int) -> None:
+        async with self._write_lock:
+            await self.conn.execute(
+                "UPDATE lottery_draws SET announced = 1 WHERE draw_no = ?;", (draw_no,)
+            )
+            await self.conn.commit()
+
+    async def get_last_draw(self) -> Optional[LotteryDraw]:
+        async with self.conn.execute(
+            f"SELECT {self._DRAW_COLUMNS} FROM lottery_draws ORDER BY draw_no DESC LIMIT 1;"
+        ) as cursor:
+            row = await cursor.fetchone()
+        return self._draw_from_row(row) if row else None
 
     async def _credit_pot(self, source: str, amount: int, now: int) -> None:
         """Add the house's take to the lottery pot inside the caller's open transaction.
