@@ -8,14 +8,21 @@ import random
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Mapping, Optional
+from typing import AsyncIterator, Mapping, Optional, Sequence
 
 import aiosqlite
 
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
-from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
-from yokai.gambling.models import LotteryState, MultiplayerChannel
+from yokai.errors import (
+    BetNotOpenError,
+    DailyOnCooldownError,
+    InsufficientFundsError,
+    InvalidGameChoiceError,
+    LotteryClosedError,
+    TicketLimitError,
+)
+from yokai.gambling.models import LotteryPurchase, LotteryState, MultiplayerChannel
 from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
@@ -206,10 +213,10 @@ CREATE TABLE IF NOT EXISTS lottery_draws (
   prize_each INTEGER NOT NULL,
   announced INTEGER NOT NULL DEFAULT 0
 );
-
-ALTER TABLE lottery_state ADD COLUMN draw_no INTEGER NOT NULL DEFAULT 1;
-ALTER TABLE lottery_state ADD COLUMN next_draw_ts INTEGER;
 """
+
+# lottery_state gains two columns; they are added in _migrate only when missing, because
+# ALTER TABLE ... ADD COLUMN cannot be repeated and a crash mid-upgrade replays the step.
 
 
 class Database:
@@ -303,9 +310,23 @@ class Database:
         if version < 7:
             logger.info("Applying SQLite migration v7...")
             await self.conn.executescript(MIGRATION_V7)
+            await self._add_column_if_missing(
+                "lottery_state", "draw_no", "INTEGER NOT NULL DEFAULT 1"
+            )
+            await self._add_column_if_missing("lottery_state", "next_draw_ts", "INTEGER")
             await self.conn.execute("PRAGMA user_version = 7;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 7.")
+
+    async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
+        """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
+
+        Names are constants chosen by the migration code, never user input.
+        """
+        async with self.conn.execute(f"PRAGMA table_info({table});") as cursor:
+            existing = {row[1] for row in await cursor.fetchall()}
+        if column not in existing:
+            await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition};")
 
     async def ping(self) -> float:
         """Execute a quick SELECT 1 and return roundtrip latency in milliseconds."""
@@ -786,6 +807,73 @@ class Database:
             (user_id,),
         ) as cursor:
             return [row[0] for row in await cursor.fetchall()]
+
+    async def buy_lottery_tickets(
+        self,
+        user_id: int,
+        numbers: Sequence[int],
+        price: int,
+        max_per_user: int,
+        welcome_bonus: int,
+        now: Optional[int] = None,
+    ) -> LotteryPurchase:
+        """Buy one ticket per number for the draw on sale, all or nothing.
+
+        Debits the wallet, stores the tickets, credits the pot and writes the ledger row in
+        one transaction. Raises LotteryClosedError, TicketLimitError, InvalidGameChoiceError
+        (a number already held) or InsufficientFundsError; any failure changes nothing.
+        """
+        if not numbers:
+            raise ValueError("buy_lottery_tickets needs at least one number")
+        ts = int(time.time()) if now is None else now
+        cost = price * len(numbers)
+        async with self._write_tx():
+            await self._ensure_wallet(user_id, welcome_bonus, ts)
+            state = await self.get_lottery_state()
+            if state.next_draw_ts is None:
+                raise LotteryClosedError(
+                    "Tickets are not on sale yet.", user_hint="Ask an admin to set up the lottery."
+                )
+            if ts >= state.next_draw_ts:
+                raise LotteryClosedError()
+            async with self.conn.execute(
+                "SELECT number FROM lottery_tickets WHERE draw_no = ? AND user_id = ?;",
+                (state.draw_no, user_id),
+            ) as cursor:
+                held = {row[0] for row in await cursor.fetchall()}
+            if len(held) + len(numbers) > max_per_user:
+                raise TicketLimitError(len(held), max_per_user)
+            clash = sorted(held & set(numbers))
+            if clash:
+                raise InvalidGameChoiceError(
+                    f"You already hold {', '.join(str(n) for n in clash)}."
+                )
+            cursor = await self.conn.execute(
+                "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
+                (cost, user_id, cost),
+            )
+            wallet = await self.get_wallet(user_id)
+            assert wallet is not None
+            if cursor.rowcount == 0:
+                raise InsufficientFundsError(
+                    balance=wallet.balance, amount=cost, action="buy tickets"
+                )
+            await self.conn.executemany(
+                "INSERT INTO lottery_tickets (draw_no, user_id, number, ts) VALUES (?, ?, ?, ?);",
+                [(state.draw_no, user_id, number, ts) for number in numbers],
+            )
+            await self._insert_transaction(
+                user_id, -cost, "ticket:lottery", None, wallet.balance, ts
+            )
+            await self._credit_pot("ticket", cost, ts)
+            await self.conn.commit()
+        return LotteryPurchase(
+            draw_no=state.draw_no,
+            numbers=tuple(numbers),
+            cost=cost,
+            new_balance=wallet.balance,
+            pot=state.pot + cost,
+        )
 
     async def _credit_pot(self, source: str, amount: int, now: int) -> None:
         """Add the house's take to the lottery pot inside the caller's open transaction.

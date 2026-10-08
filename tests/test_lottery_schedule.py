@@ -90,3 +90,30 @@ async def test_a_fresh_lottery_has_no_tickets(tmp_path: Path) -> None:
         assert await db.user_lottery_numbers(1) == []
     finally:
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_migration_v7_can_be_replayed_after_a_half_finished_upgrade(tmp_path: Path) -> None:
+    """The version number only moves at the end, so a crash mid-upgrade replays the whole step.
+
+    ALTER TABLE ... ADD COLUMN fails on a column that already exists, so the step must add the
+    lottery columns only when they are missing.
+    """
+    path = tmp_path / "replay.db"
+    db = Database(path)
+    await db.initialize()
+    await db.ensure_lottery_schedule(1_000, WEEK)
+    await db.conn.execute("PRAGMA user_version = 6;")  # as if the upgrade had not finished
+    await db.conn.commit()
+    await db.close()
+
+    again = Database(path)
+    await again.initialize()  # must not raise "duplicate column name"
+    try:
+        state = await again.get_lottery_state()
+        assert state.next_draw_ts == 1_000 + WEEK  # nothing was reset
+        async with again.conn.execute("PRAGMA user_version;") as cursor:
+            row = await cursor.fetchone()
+        assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
+    finally:
+        await again.close()
