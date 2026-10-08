@@ -8,14 +8,14 @@ import random
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Mapping, Optional
 
 import aiosqlite
 
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
 from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
-from yokai.gambling.pot import bet_house_take
+from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
@@ -772,6 +772,70 @@ class Database:
         if payout < 0:
             raise ValueError("settle_bet payout must not be negative")
         return await self._finish_bet(bet_id, payout, refund=False)
+
+    async def settle_lobby(self, payouts: Mapping[int, int]) -> dict[int, int]:
+        """Settle every bet of one table in ONE transaction; returns {bet_id: owner's new balance}.
+
+        All or nothing: if any bet is not open, a payout is invalid, or anything fails midway,
+        nothing changes, so a crash can never leave a pot half paid.
+        """
+        if not payouts:
+            raise ValueError("settle_lobby needs at least one bet")
+        if any(amount < 0 for amount in payouts.values()):
+            raise ValueError("settle_lobby payouts must not be negative")
+        now = int(time.time())
+        async with self._write_tx():
+            rows: dict[int, tuple[int, str, int]] = {}
+            for bet_id in payouts:
+                async with self.conn.execute(
+                    "SELECT user_id, game, stake FROM gambling_bets "
+                    "WHERE id = ? AND status = 'open';",
+                    (bet_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row is None:
+                    raise BetNotOpenError(bet_id)
+                rows[bet_id] = (row[0], row[1], row[2])
+            games = {game for _, game, _ in rows.values()}
+            if len(games) != 1:
+                raise ValueError("a lobby settles one game at a time")
+            game = games.pop()
+            stakes = [rows[bet_id][2] for bet_id in payouts]
+            amounts = list(payouts.values())
+            if game in POOLED_GAMES and sum(amounts) > sum(stakes):
+                raise ValueError("a pooled game cannot pay out more than was staked")
+
+            balances: dict[int, int] = {}
+            for bet_id, payout in payouts.items():
+                user_id, _, stake = rows[bet_id]
+                cursor = await self.conn.execute(
+                    "UPDATE gambling_bets SET status = 'settled', payout = ? "
+                    "WHERE id = ? AND status = 'open';",
+                    (payout, bet_id),
+                )
+                if cursor.rowcount == 0:
+                    raise BetNotOpenError(bet_id)
+                if payout > 0:
+                    await self.conn.execute(
+                        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                        (payout, user_id),
+                    )
+                wallet = await self.get_wallet(user_id)
+                assert wallet is not None
+                if payout > 0:
+                    if payout > stake:
+                        prefix = "win"
+                    elif payout == stake:
+                        prefix = "push"
+                    else:
+                        prefix = "payout"
+                    await self._insert_transaction(
+                        user_id, payout, f"{prefix}:{game}", None, wallet.balance, now
+                    )
+                balances[bet_id] = wallet.balance
+            await self._credit_pot(game, lobby_house_take(game, stakes, amounts), now)
+            await self.conn.commit()
+        return balances
 
     async def refund_bet(self, bet_id: int) -> int:
         """Return an open bet's stake to the wallet; returns the new balance."""
