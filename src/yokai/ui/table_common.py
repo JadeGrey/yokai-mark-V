@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
 import discord
 
@@ -13,6 +13,7 @@ from yokai.ui.embeds import EmbedFactory, send
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
+    from yokai.gambling.lobby import Lobby
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,39 @@ def parse_stake(text: str) -> int:
     if not cleaned.isdigit():
         raise InvalidGameChoiceError("Enter your stake as a whole number, like 100.")
     return int(cleaned)
+
+
+async def tell_cancelled(bot: YokaiBot, message: discord.Message) -> None:
+    """Best effort: replace a table's message so nobody waits on dead buttons."""
+    notice = EmbedFactory.table_notice(
+        "Table cancelled",
+        "Something went wrong. Every stake was refunded.",
+        bot_avatar_url=avatar_url(bot),
+    )
+    try:
+        await message.edit(embed=notice, view=None)
+    except discord.HTTPException as exc:
+        logger.warning("Could not tell the players the table was cancelled: %s", exc)
+
+
+async def finish_table(
+    bot: YokaiBot,
+    lobby: Lobby,
+    message: discord.Message,
+    play: Callable[[], Awaitable[discord.Embed]],
+) -> None:
+    """Run a game: `play` settles the table and returns the final embed.
+
+    If anything fails, every stake is refunded, the players are told, and the error is re-raised.
+    """
+    try:
+        final = await play()
+    except BaseException as exc:
+        await bot.tables.abort(lobby)
+        if isinstance(exc, Exception):
+            await tell_cancelled(bot, message)
+        raise
+    try:
+        await message.edit(embed=final, view=None)
+    except discord.HTTPException as exc:
+        logger.warning("Could not show the result (the stakes are already settled): %s", exc)

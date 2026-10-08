@@ -14,7 +14,7 @@ from yokai.gambling.engines.duel import NUMBER_MAX, NUMBER_MIN, DuelRound, draw_
 from yokai.gambling.lobby import Lobby
 from yokai.moderation.gate import screen
 from yokai.ui.embeds import EmbedFactory, send
-from yokai.ui.table_common import avatar_url, reply_error
+from yokai.ui.table_common import avatar_url, reply_error, tell_cancelled
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -120,19 +120,6 @@ class PickSelect(discord.ui.Select):
         await self.duel_view.after_pick()
 
 
-async def _tell_cancelled(bot: YokaiBot, message: discord.Message) -> None:
-    """Best effort: replace the table message so nobody waits on a dead 'Pick your number'."""
-    notice = EmbedFactory.table_notice(
-        "Table cancelled",
-        "Something went wrong. Every stake was refunded.",
-        bot_avatar_url=avatar_url(bot),
-    )
-    try:
-        await message.edit(embed=notice, view=None)
-    except discord.HTTPException as exc:
-        logger.warning("Could not tell the players the duel was cancelled: %s", exc)
-
-
 async def run_duel(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> None:
     """Run a started duel: collect picks, resolve, reveal. Any failure refunds both stakes."""
     tables = bot.tables
@@ -149,7 +136,7 @@ async def run_duel(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> Non
         await tables.abort(lobby)
         view.stop()
         if isinstance(exc, Exception):
-            await _tell_cancelled(bot, message)
+            await tell_cancelled(bot, message)
         raise
     view.stop()
     final = EmbedFactory.duel_result(
