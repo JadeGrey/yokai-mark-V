@@ -58,7 +58,7 @@
 **Files:** `modules/logs/__init__.py` (docstring), `modules/logs/files.py`, `tests/test_admin_logs_files.py`
 
 ```python
-NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}\\.log(?:\\.\\d{1,3})?$")
+NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}[.]log(?:[.][0-9]{1,3})?$")
 MAX_FILES = 200
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +68,7 @@ def list_log_files(log_dir: Path) -> list[LogFile]   # missing dir -> []; regula
 def find_log_file(log_dir: Path, name: str) -> LogFile   # InputRefused unless listed
 ```
 
-- [ ] **Step 1: Failing tests:** listing order (`supervisor.log`, `yokai.log`, `yokai.log.1`, `yokai.log.2`, ... `.10` after `.9`), ignored entries (`notes.txt`, `yokai.log.bak`, `yokai.log~`, a directory `x.log`, a symlink where the platform allows it, `yokai.log:stream`-like names that exist), a missing folder is `[]`, a folder that is a file raises `PanelDbError`-style message via a typed `PanelLogError`? (reuse `PanelDbError` text "log folder could not be read"), cap at `MAX_FILES`; `find_log_file` refuses the whole hostile name list from Review Focus 1 and returns the right file for each listed name.
+- [ ] **Step 1: Failing tests:** listing order (`supervisor.log`, `yokai.log`, `yokai.log.1`, `yokai.log.2`, ... `.10` after `.9`), ignored entries (`notes.txt`, `yokai.log.bak`, `yokai.log~`, a directory `x.log`, a symlink where the platform allows it, `yokai.log:stream`-like names that exist), a missing folder is `[]`, a folder that cannot be read raises `PanelDbError` ("The log folder could not be read"), cap at `MAX_FILES`; `find_log_file` refuses the whole hostile name list from Review Focus 1 and returns the right file for each listed name.
 - [ ] **Step 2: Implement; Step 3:** run, lint, commit `feat(admin): add the log file listing with safe lookup`.
 
 ### Task 2: Entries, filtering and paging
