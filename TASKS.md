@@ -260,7 +260,7 @@ own plan after the previous phase is reviewed.
 - [x] P-A3 Access (blacklist/adminlist) and Audit modules, plus a bot-side name cache (schema v5).
 - [x] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
       cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
-- [ ] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
+- [x] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
 - [ ] P-A6 Logs module (current and rotated, live tail).
 
 **Acceptance criteria (P-A1)**
@@ -279,6 +279,27 @@ own plan after the previous phase is reviewed.
   seconds, then run `/ping` and press a button as that account: both are refused. Delete the
   row and confirm access returns. Add an account to `admins` and confirm `/diag` works for it.
   Watch `bot_heartbeat.ts` advance every 30 s, and vanish after stopping the bot with Ctrl+C.
+
+**Acceptance criteria (P-A5)**
+- Overview shows file size, schema, bot state and every table with its row count; the browser pages
+  any table read-only; names are validated against `sqlite_master`; cell values are escaped,
+  control characters dropped and long values shortened.
+- Integrity check reports `ok` or up to 20 problems and writes nothing.
+- VACUUM asks first, reports before/after sizes, is audited, and gives a message when the database
+  is busy.
+- Backups use the online backup API, are verified, never overwrite, are listed newest first, and
+  can be deleted after a confirm; backup names come only from the folder listing.
+- Restore needs the typed word `RESTORE`, refuses while the heartbeat is fresh or the file is in
+  use, verifies the chosen backup and its schema, takes a safety backup first, removes stale WAL
+  files, replaces the file, and audits into the restored database; every refusal leaves the live
+  file untouched.
+- Write endpoints require session and CSRF; GETs change nothing; failures answer with a message.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(checked in headless Edge while building)* overview, wide table browser, integrity, backup,
+  restore form, refusal with a fresh heartbeat, successful restore, VACUUM, delete confirm,
+  failed-request notice and audit page, in dark 1280, light 1280 and dark 390.
+- *(manual, real bot)* With the bot running but disconnected from Discord, confirm a restore is
+  refused because the file is in use.
 
 **Acceptance criteria (P-A4)**
 - Bot side: wallet operations (`credit_wallet`, `pay`, `claim_daily`, `admin_adjust_wallet`) run in

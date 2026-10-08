@@ -114,3 +114,20 @@ def test_database_page_styles_exist() -> None:
     css = _css()
     for selector in (".mono", ".table-scroll", ".row-actions"):
         assert selector in css
+
+
+def test_database_page_polish_found_in_a_real_browser() -> None:
+    """The restore field was unstyled, backup actions fell off a phone screen, and table cells
+    were bold and crushed."""
+    css = _css()
+    assert ".confirm-row input" in css
+    assert ".stack" in css and "display: block" in css
+    assert ".table-scroll .table td" in css and "font-weight: 400" in css
+
+
+def test_long_paths_wrap_and_stacked_numbers_align_left() -> None:
+    """Found on a 390 px screen: a long path ran off the edge and sizes hugged the right."""
+    css = _css()
+    mono = css[css.index(".mono {") : css.index("}", css.index(".mono {"))]
+    assert "overflow-wrap: anywhere" in mono
+    assert ".table.stack .num" in css

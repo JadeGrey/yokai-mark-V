@@ -136,9 +136,16 @@ read-then-write paths need the same treatment.
 
 **Database.** Per-table row counts and file size; paged read-only table browser (table names
 validated against `sqlite_master`); `PRAGMA integrity_check`; VACUUM; backup via the SQLite online
-backup API to `BACKUP_DIR/yokai-<timestamp>.db`; list/delete backups; restore. Restore takes a
-safety backup first, requires typing `RESTORE`, and refuses while the bot appears online
-(heartbeat fresh or DB locked), telling the owner to stop the bot. Every action is audited.
+backup API to `BACKUP_DIR/yokai-<timestamp>.db` (default: a `backups` folder beside the database;
+each backup is verified and never overwrites another); list/delete backups, named only through a
+listing of the folder (never from request text); restore. Restore requires typing `RESTORE`,
+refuses while the bot appears online (fresh heartbeat) or the file is in use (a held write lock, or
+the operating system refusing to replace an open file, which is the only guard for a bot that is
+running but disconnected from Discord), checks the chosen backup (integrity, schema not older than
+the panel supports nor newer than the live file), takes a `-pre-restore` safety backup, removes
+stale `-wal`/`-shm` files, replaces the file and writes its audit row (and clears the stale
+heartbeat) in the restored database. Backup, delete, VACUUM and restore are audited; read-only
+actions (browsing, integrity check) are not.
 
 **Access.** Blacklist and adminlist add/remove with reason; adding the owner to the blacklist or
 the admins table is rejected. IDs must be plain ASCII digits (non-ASCII digits that `int()` would

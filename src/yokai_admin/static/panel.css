@@ -547,6 +547,7 @@ a {
 
 .add input,
 .filters input,
+.confirm-row input,
 .filters select {
   min-width: 0;
   padding: 0.55rem 0.7rem;
@@ -672,6 +673,7 @@ a {
 .mono {
   font-family: var(--mono);
   font-size: 0.8125rem;
+  overflow-wrap: anywhere;
 }
 
 .table-scroll {
@@ -679,8 +681,10 @@ a {
 }
 
 .table-scroll .table td {
+  min-width: 7rem;
   max-width: 24rem;
   overflow-wrap: anywhere;
+  font-weight: 400;
 }
 
 .row-actions {
@@ -695,5 +699,44 @@ a {
 @media (max-width: 48rem) {
   .add {
     grid-template-columns: 1fr;
+  }
+}
+
+/* A table that becomes a stack of cards on a phone, so row actions never fall off the edge */
+@media (max-width: 48rem) {
+  .table.stack {
+    min-width: 0;
+  }
+
+  .table.stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .table.stack tr,
+  .table.stack td {
+    display: block;
+  }
+
+  .table.stack tr {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table.stack td {
+    padding: 0.15rem 0;
+    border-bottom: 0;
+  }
+
+  .table.stack .num,
+  .table.stack .row-actions {
+    text-align: left;
+  }
+
+  .table.stack .row-actions .link-danger {
+    margin: 0 0.75rem 0 0;
   }
 }

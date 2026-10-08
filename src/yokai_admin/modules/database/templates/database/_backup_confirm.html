@@ -7,7 +7,7 @@
   </div>
   {% else %}
   <p>Replace the live database with <strong class="mono">{{ backup.name }}</strong>? Everything changed since it was made is lost. The database as it is now is saved first as a safety backup.</p>
-  <p class="hint">The bot must be stopped (stop the bot first). Type <strong>RESTORE</strong> to confirm.</p>
+  <p class="hint">Stop the bot first. Then type <strong>RESTORE</strong> to confirm.</p>
   <form hx-post="/m/database/backups/{{ backup.name }}/restore" hx-target="#db-body" hx-swap="outerHTML" class="confirm-row">
     <label class="sr-only" for="restore-confirm">Type RESTORE to confirm</label>
     <input id="restore-confirm" name="confirm" autocomplete="off" placeholder="RESTORE" required>

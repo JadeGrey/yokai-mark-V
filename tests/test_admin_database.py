@@ -296,3 +296,14 @@ def test_the_dashboard_tile_shows_size_and_the_last_backup(s: Setup) -> None:
         after = client.get("/m/dashboard").text
     assert "Database" in before and "no backups yet" in before
     assert "last backup 2 hours ago" in after
+
+
+def test_the_table_page_title_and_restore_wording_are_plain(s: Setup) -> None:
+    name = s.backup()
+    with s.client() as (client, _):
+        table = client.get("/m/database/table", params={"name": "wallets"}).text
+        form = client.get(f"/m/database/backups/{name}/restore/confirm", headers=HX).text
+        body = client.get("/m/database").text
+    assert '<h1 class="page-title">wallets</h1>' in table
+    assert "(stop the bot first)" not in form and "Stop the bot first" in form
+    assert 'class="table stack"' in body

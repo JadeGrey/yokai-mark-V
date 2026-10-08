@@ -6,7 +6,7 @@
     <h1 class="page-title">No such table</h1>
     <p class="lede">{{ problem }}</p>
   {% else %}
-    <h1 class="page-title mono">{{ view.name }}</h1>
+    <h1 class="page-title">{{ view.name }}</h1>
     <p class="lede">{{ view.total|number }} {{ 'row' if view.total == 1 else 'rows' }}. Read-only. Long values are shortened.</p>
     {% if view.rows %}
     <div class="table-wrap table-scroll"><table class="table">
