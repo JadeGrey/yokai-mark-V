@@ -1113,6 +1113,115 @@ Press **Play** to open a table.",
             fields=_grid(fields),
         )
 
+    @classmethod
+    def lottery_panel(
+        cls,
+        pot: int,
+        tickets_sold: int,
+        number_range: int,
+        price: int,
+        max_tickets: int,
+        next_draw_ts: Optional[int],
+        last_draw: Optional[
+            tuple[int, Sequence[int], int]
+        ],  # (winning number, winners, prize each)
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The always-on lottery embed: the pot, the odds ingredients and the next draw."""
+        lines = [
+            f"Pick numbers from **1 to {number_range}** (up to {max_tickets} tickets each) at "
+            f"**{price:,}** Renown a ticket. One number is drawn; everyone holding it splits "
+            "the pot. If nobody holds it, the pot rolls over and grows.",
+            "",
+            "Press **Buy tickets** to pick your numbers or take quick picks.",
+        ]
+        if last_draw is not None:
+            number, winners, prize_each = last_draw
+            if winners:
+                names = " ".join(f"<@{user_id}>" for user_id in winners[:10])
+                lines.append(f"\n**Last draw:** {number} — {names} won **{prize_each:,}** each.")
+            else:
+                lines.append(f"\n**Last draw:** {number} — nobody held it.")
+        fields: list[FieldSpec] = [
+            ("Pot", f"**{pot:,}**", True),
+            ("Tickets sold", f"**{tickets_sold:,}**", True),
+            ("Next draw", f"<t:{next_draw_ts}:R>" if next_draw_ts else "Not started", True),
+        ]
+        return cls._create_base(
+            title=f"{Emoji.COIN} Lottery",
+            description="\n".join(lines),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def lottery_receipt(
+        cls,
+        numbers: Sequence[int],
+        cost: int,
+        pot: int,
+        balance: int,
+        next_draw_ts: Optional[int],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The private confirmation after buying tickets."""
+        fields: list[FieldSpec] = [
+            ("Cost", f"**{cost:,}**", True),
+            ("Pot", f"**{pot:,}**", True),
+            ("Balance", f"**{balance:,}**", True),
+        ]
+        when = f" Next draw <t:{next_draw_ts}:R>." if next_draw_ts else ""
+        return cls._create_base(
+            title=f"{Emoji.COIN} Tickets bought",
+            description=f"Your numbers: **{', '.join(str(n) for n in numbers)}**.{when}",
+            color=COLOR_SUCCESS,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def lottery_announcement(
+        cls,
+        draw_no: int,
+        winning_number: int,
+        pot: int,
+        winners: Sequence[int],
+        prize_each: int,
+        next_pot: int,
+        next_draw_ts: Optional[int],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The public result of a draw."""
+        when = f"\nNext draw <t:{next_draw_ts}:R>." if next_draw_ts else ""
+        if winners:
+            shown = " ".join(f"<@{user_id}>" for user_id in winners[:20])
+            more = f" and {len(winners) - 20} more" if len(winners) > 20 else ""
+            body = (
+                f"The winning number is **{winning_number}**.\n"
+                f"**{len(winners)}** held it: {shown}{more}\n"
+                f"Each wins **{prize_each:,}** Renown.{when}"
+            )
+            color, quip_key = COLOR_SUCCESS, "game_win"
+        else:
+            body = (
+                f"The winning number is **{winning_number}**.\n"
+                f"Nobody held it, so the pot rolls over. It now stands at **{next_pot:,}**.{when}"
+            )
+            color, quip_key = COLOR_BRAND, "game_loss"
+        fields: list[FieldSpec] = [("Pot", f"**{pot:,}**", True)]
+        return cls._create_base(
+            title=f"{Emoji.COIN} Lottery draw #{draw_no}",
+            description=body,
+            color=color,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get(quip_key),
+            fields=_grid(fields),
+        )
+
 
 def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH) -> str:
     """A bar of `length` glyphs with one head marker; never an emoji."""

@@ -632,6 +632,30 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 bot_avatar_url=av,
             ),
         ),
+        (
+            "Lottery (panel)",
+            EmbedFactory.lottery_panel(
+                1500, 12, 20, 100, 10, 1_900_000_000, (7, [42, 43], 750), bot_avatar_url=av
+            ),
+        ),
+        (
+            "Lottery (tickets bought)",
+            EmbedFactory.lottery_receipt(
+                [3, 7, 19], 300, 1800, 700, 1_900_000_000, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Lottery (draw won)",
+            EmbedFactory.lottery_announcement(
+                4, 7, 1500, [42, 43], 750, 0, 1_900_000_000, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Lottery (rollover)",
+            EmbedFactory.lottery_announcement(
+                5, 12, 1500, [], 0, 1500, 1_900_000_000, bot_avatar_url=av
+            ),
+        ),
     ]
     return samples
 
