@@ -25,6 +25,20 @@ The bot's single connection reads a wallet *outside* a write transaction and wri
 
 The fix is minimal: `BEGIN IMMEDIATE` at the top of those three paths (through one helper that also rolls back on any error, so a failure can never leave the write lock held). The tests inject a panel write into the gap (after the bot's read, before its write) and assert the ledger invariant, so they fail before the fix and pass after.
 
+> **Correction found while executing Task 1.** The first audit above overstated the problem.
+> The three "mid-operation" tests pass on the unfixed code: every one of those paths starts with
+> `_ensure_wallet`, an `INSERT OR IGNORE`, and SQLite takes the write lock as soon as a write
+> statement starts (even when it inserts nothing). The wallet read that follows is therefore
+> already inside a write transaction, and the interleaving race does not exist today; the
+> protection was accidental. What the new tests did find is a real **failure-path bug**: if
+> anything unexpected raises inside `admin_adjust_wallet`, `claim_daily`, `pay` or
+> `credit_wallet`, the transaction is left open, holding the write lock (the panel's writes then
+> block) and the next wallet operation's `commit()` would commit the leftover half-update. Task 1
+> therefore makes the lock explicit (so the protection no longer depends on statement order),
+> rolls back on any error, and also covers `credit_wallet`. The mid-operation tests stay as
+> regression guards; a mutation that recreates the old hazard (no `BEGIN IMMEDIATE`, read first)
+> fails four of them.
+
 ## Deltas and carried requirements
 
 - **Daily reset keeps the streak.** Setting `last_daily_ts` to NULL would make the bot treat the next claim as day 1. The panel instead back-dates the last claim to exactly 24 hours ago: the cooldown is clear and the streak continues (+1) on the next claim. Refused when the person never claimed, or can already claim.

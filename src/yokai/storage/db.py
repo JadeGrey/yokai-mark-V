@@ -6,8 +6,9 @@ import asyncio
 import logging
 import random
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import aiosqlite
 
@@ -402,6 +403,25 @@ class Database:
             await self.conn.execute(query, (spotify_id, video_id, confidence, now))
             await self.conn.commit()
 
+    @asynccontextmanager
+    async def _write_tx(self) -> AsyncIterator[None]:
+        """Hold the in-process write lock and SQLite's write lock for a read-modify-write.
+
+        `BEGIN IMMEDIATE` takes the file's write lock before the first read, so another process
+        (the admin panel) cannot change a wallet between this code's read and the write that
+        depends on it, and the protection no longer relies on a leading `INSERT OR IGNORE`
+        happening to take the lock. Any error rolls back, so a failure can never leave a
+        half-finished transaction open (it would hold the lock, and the next operation's commit
+        would commit the leftovers). Callers still `commit()` on success.
+        """
+        async with self._write_lock:
+            await self.conn.execute("BEGIN IMMEDIATE;")
+            try:
+                yield
+            except BaseException:
+                await self.conn.rollback()
+                raise
+
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
         """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).
 
@@ -474,7 +494,7 @@ class Database:
         if amount <= 0:
             raise ValueError("credit_wallet amount must be positive")
         now = int(time.time())
-        async with self._write_lock:
+        async with self._write_tx():
             await self._ensure_wallet(user_id, welcome_bonus, now)
             await self.conn.execute(
                 "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, user_id)
@@ -494,7 +514,7 @@ class Database:
         if amount <= 0:
             raise ValueError("pay amount must be positive")
         now = int(time.time())
-        async with self._write_lock:
+        async with self._write_tx():
             await self._ensure_wallet(sender_id, welcome_bonus, now)
             sender = await self.get_wallet(sender_id)
             assert sender is not None
@@ -535,7 +555,7 @@ class Database:
         self, user_id: int, base: int, welcome_bonus: int, now: int, rng: random.Random
     ) -> DailyClaimResult:
         """Roll and apply a /daily payout, or raise DailyOnCooldownError."""
-        async with self._write_lock:
+        async with self._write_tx():
             await self._ensure_wallet(user_id, welcome_bonus, now)
             wallet = await self.get_wallet(user_id)
             assert wallet is not None
@@ -573,7 +593,7 @@ class Database:
         Returns (applied_delta, new_balance).
         """
         now = int(time.time())
-        async with self._write_lock:
+        async with self._write_tx():
             await self._ensure_wallet(user_id, welcome_bonus, now)
             wallet = await self.get_wallet(user_id)
             assert wallet is not None
