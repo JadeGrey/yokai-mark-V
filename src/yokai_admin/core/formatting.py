@@ -23,12 +23,27 @@ def format_when(ts: Optional[int]) -> str:
     """Local date and time of a Unix timestamp, or an en dash when there is none."""
     if ts is None:
         return "–"
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    try:
+        return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    except (OverflowError, OSError, ValueError):
+        return "–"
 
 
 def format_number(value: Optional[int]) -> str:
     """A whole number with thousands separators, or an en dash when there is none."""
     return "\u2013" if value is None else f"{value:,}"
+
+
+def format_bytes(size: Optional[int]) -> str:
+    """A file size in the largest sensible unit (1024 steps), or an en dash when unknown."""
+    if size is None:
+        return "–"
+    value = float(max(size, 0))
+    for unit in ("B", "KB", "MB"):
+        if value < 1024:
+            return f"{int(value)} B" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"
 
 
 def format_signed(value: int) -> str:

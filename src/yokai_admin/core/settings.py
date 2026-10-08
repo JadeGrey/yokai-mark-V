@@ -23,6 +23,12 @@ class PanelSettings:
     log_dir: Path
     port: int = DEFAULT_PORT
     owner_id: Optional[int] = None
+    backup_dir: Optional[Path] = None
+
+    @property
+    def effective_backup_dir(self) -> Path:
+        """Where backups live: BACKUP_DIR, else a `backups` folder beside the database."""
+        return self.backup_dir or self.db_path.parent / "backups"
 
 
 def load_settings(env_path: Path | str | None = None) -> PanelSettings:
@@ -34,6 +40,9 @@ def load_settings(env_path: Path | str | None = None) -> PanelSettings:
 
     db_path = Path(os.getenv("DB_PATH", "data/yokai.db").strip() or "data/yokai.db")
     log_dir = Path(os.getenv("LOG_DIR", "logs").strip() or "logs")
+
+    raw_backup = os.getenv("BACKUP_DIR", "").strip()
+    backup_dir = Path(raw_backup) if raw_backup else None
 
     raw_port = os.getenv("ADMIN_PORT", str(DEFAULT_PORT)).strip() or str(DEFAULT_PORT)
     try:
@@ -53,4 +62,6 @@ def load_settings(env_path: Path | str | None = None) -> PanelSettings:
         if owner_id <= 0:
             raise PanelConfigError(f"OWNER_ID must be a positive number, got {owner_id}.")
 
-    return PanelSettings(db_path=db_path, log_dir=log_dir, port=port, owner_id=owner_id)
+    return PanelSettings(
+        db_path=db_path, log_dir=log_dir, port=port, owner_id=owner_id, backup_dir=backup_dir
+    )

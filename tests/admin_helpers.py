@@ -75,10 +75,14 @@ def panel_client(
     token: str = "t0ken",
     login: bool = True,
     owner_id: Optional[int] = 111,
+    backup_dir: Optional[Path] = None,
 ) -> Iterator[tuple[TestClient, str]]:
     """Run the real app in a TestClient; yields (client, csrf_token) after the token exchange."""
     settings = PanelSettings(
-        db_path=db_path or tmp_path / "yokai.db", log_dir=tmp_path / "logs", owner_id=owner_id
+        db_path=db_path or tmp_path / "yokai.db",
+        log_dir=tmp_path / "logs",
+        owner_id=owner_id,
+        backup_dir=backup_dir,
     )
     auth = AuthState(token=token)
     app = create_app(settings, module_paths, auth)

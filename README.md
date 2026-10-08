@@ -159,7 +159,7 @@ A local web panel for the owner (bot status, people and their wallets with ledge
 python -m yokai_admin
 ```
 
-It opens your browser through a **single-use link** (also printed in the console). If you close the tab, restart the panel to get a new link. Settings in `.env`: `ADMIN_PORT` (default `8765`), `DB_PATH`, `LOG_DIR`. The panel never needs the Discord token. Set `OWNER_ID` in `.env` to enable editing the blacklist and admin list (the owner can never be added to either); without it the pages are read-only. Run the bot once after updating so it can upgrade the database.
+It opens your browser through a **single-use link** (also printed in the console). If you close the tab, restart the panel to get a new link. Settings in `.env`: `ADMIN_PORT` (default `8765`), `DB_PATH`, `LOG_DIR`, `BACKUP_DIR` (default: a `backups` folder beside the database). The panel never needs the Discord token. Set `OWNER_ID` in `.env` to enable editing the blacklist and admin list (the owner can never be added to either); without it the pages are read-only. Run the bot once after updating so it can upgrade the database.
 
 ## Updating yt-dlp
 

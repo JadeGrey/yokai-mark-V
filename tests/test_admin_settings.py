@@ -57,3 +57,18 @@ def test_a_bad_owner_id_is_rejected_with_a_clear_message(value: str) -> None:
     with patch.dict(os.environ, {"OWNER_ID": value}, clear=True):
         with pytest.raises(PanelConfigError, match="OWNER_ID"):
             load_settings(env_path=NO_ENV_FILE)
+
+
+def test_backup_dir_defaults_beside_the_database_and_can_be_set() -> None:
+    plain = PanelSettings(db_path=Path("data/yokai.db"), log_dir=Path("logs"))
+    assert plain.backup_dir is None
+    assert plain.effective_backup_dir == Path("data") / "backups"
+    with patch.dict(os.environ, {"DB_PATH": "d/x.db"}, clear=True):
+        loaded = load_settings(env_path=NO_ENV_FILE)
+    assert loaded.effective_backup_dir == Path("d") / "backups"
+    with patch.dict(os.environ, {"BACKUP_DIR": "safe/copies"}, clear=True):
+        custom = load_settings(env_path=NO_ENV_FILE)
+    assert custom.backup_dir == Path("safe/copies")
+    assert custom.effective_backup_dir == Path("safe/copies")
+    with patch.dict(os.environ, {"BACKUP_DIR": "   "}, clear=True):
+        assert load_settings(env_path=NO_ENV_FILE).backup_dir is None
