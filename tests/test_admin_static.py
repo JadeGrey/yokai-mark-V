@@ -95,3 +95,9 @@ def test_the_panel_script_shows_a_notice_for_failed_requests_outside_the_status_
     script = (STATIC / "panel.js").read_text(encoding="utf-8")
     assert "request-error" in script and "hidden" in script
     assert "contains" in script  # the status block is excluded
+
+
+def test_people_page_styles_exist() -> None:
+    css = _css()
+    for selector in (".num", ".pos", ".neg", ".person-head", ".confirm-box", ".search"):
+        assert selector in css

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}People - Yokai admin{% endblock %}
+{% block content %}
+  {% if profile_view %}
+    <p class="crumb"><a href="/m/users">All people</a></p>
+    {% include "users/_person.html" %}
+  {% else %}
+    <h1 class="page-title">People</h1>
+    <p class="lede">Everyone the bot has met. Open a person to see their wallet, music and commands, and to correct a balance.</p>
+    {% include "users/_list.html" %}
+  {% endif %}
+{% endblock %}

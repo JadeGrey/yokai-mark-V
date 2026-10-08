@@ -1,0 +1,7 @@
+<div id="daily" class="confirm-box">
+  <p>Let <strong>{{ profile.user.display }}</strong> claim their daily reward now? Their streak of {{ profile.wallet.daily_streak }} is kept.</p>
+  <div class="confirm-row">
+    <button type="button" class="btn danger" hx-post="/m/users/{{ profile.user.id }}/daily/reset" hx-target="#person" hx-swap="outerHTML">Reset cooldown</button>
+    <button type="button" class="btn plain" hx-get="/m/users/{{ profile.user.id }}/daily/button" hx-target="#daily" hx-swap="outerHTML" autofocus>Cancel</button>
+  </div>
+</div>

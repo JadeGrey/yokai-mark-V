@@ -115,3 +115,24 @@ def test_the_dashboard_tile_shows_how_long_ago_the_last_action_was(tmp_path: Pat
     with panel_client(tmp_path, paths, db_path=db) as (client, _):
         page = client.get("/m/dashboard").text
     assert "Last admin action" in page and "2 minutes ago" in page
+
+
+def test_the_audit_log_labels_and_names_people_for_balance_changes(tmp_path: Path) -> None:
+    from yokai_admin.modules.users.actions import adjust_balance
+
+    db = tmp_path / "yokai.db"
+    seed_database(db, credits={1: 300}, names={1: "Alex"})
+    adjust_balance(
+        db,
+        raw_id="1",
+        raw_amount="-900",
+        raw_reason="reset exploit",
+        expected_balance=500,
+        now=1_000,
+    )
+    with panel_client(tmp_path, [AUDIT], db_path=db) as (client, _):
+        page = client.get("/m/audit").text
+    assert "Adjusted Renown" in page and "<strong>Alex</strong>" in page
+    assert "reset exploit" in page
+    assert "applied: -500" in page and "requested: -900" in page
+    assert action_label("daily.reset") == "Reset the daily cooldown"

@@ -616,6 +616,50 @@ a {
   gap: 1.5rem;
 }
 
+/* People */
+
+.crumb {
+  margin: 0 0 1rem;
+}
+
+.person-head {
+  margin-bottom: 2rem;
+}
+
+.search {
+  margin-bottom: 1.5rem;
+}
+
+.num {
+  text-align: right;
+}
+
+.pos {
+  color: var(--lichen);
+}
+
+.neg {
+  color: var(--flare);
+}
+
+.plain-list {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.confirm-box {
+  max-width: 56rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--flare);
+  background: color-mix(in srgb, var(--flare) 8%, transparent);
+}
+
+.add .flash {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 @media (max-width: 48rem) {
   .add {
     grid-template-columns: 1fr;

@@ -16,6 +16,8 @@ _LABELS = {
     "blacklist.remove": "Removed from the blacklist",
     "admin.add": "Made an admin",
     "admin.remove": "Removed from the admin list",
+    "balance.adjust": "Adjusted Renown",
+    "daily.reset": "Reset the daily cooldown",
 }
 
 
@@ -59,7 +61,7 @@ class AuditPage:
 def _person_id(entry: AuditEntry) -> Optional[int]:
     """The user ID an access entry is about, when its target is one."""
     target = entry.target
-    if entry.module == "access" and target and target.isascii() and target.isdigit():
+    if entry.module in ("access", "users") and target and target.isascii() and target.isdigit():
         return int(target) if len(target) <= 19 else None
     return None
 

@@ -1,0 +1,12 @@
+<div id="adjust" class="confirm-box">
+  <p><strong>{{ preview.user.display }}</strong> ({{ preview.user.id }}): {{ preview.before|number }} to <strong>{{ preview.after|number }}</strong> Renown ({{ preview.applied|signed }}).</p>
+  {% if preview.clamped %}<p class="hint">{{ preview.requested|signed }} would take the balance below 0, so the change is limited to {{ preview.applied|signed }} and the balance ends at 0.</p>{% endif %}
+  <p class="hint">Reason: {{ reason }}</p>
+  <form hx-post="/m/users/{{ user_id }}/adjust" hx-target="#person" hx-swap="outerHTML" class="confirm-row">
+    <input type="hidden" name="amount" value="{{ preview.requested }}">
+    <input type="hidden" name="reason" value="{{ reason }}">
+    <input type="hidden" name="expected" value="{{ preview.before }}">
+    <button type="submit" class="btn danger" autofocus>Confirm change</button>
+    <button type="button" class="btn plain" hx-get="/m/users/{{ user_id }}/adjust/form" hx-target="#adjust" hx-swap="outerHTML">Cancel</button>
+  </form>
+</div>

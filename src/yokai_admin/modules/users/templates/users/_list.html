@@ -1,0 +1,26 @@
+{% if db_error %}<p class="flash" data-kind="error" role="alert"><span class="sr-only">Problem: </span>{{ db_error }}</p>{% endif %}
+<form class="filters search" method="get" action="/m/users">
+  <label>Search by name or Discord user ID<input name="q" value="{{ query }}" maxlength="80" autocomplete="off"></label>
+  <button type="submit" class="btn">Search</button>
+  {% if query %}<a href="/m/users">Clear</a>{% endif %}
+</form>
+{% if rows %}
+<div class="table-wrap"><table class="table">
+  <thead><tr><th scope="col">Person</th><th scope="col" class="num">Renown</th><th scope="col">Last command</th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+    <tr>
+      <td class="who"><a href="/m/users/{{ p.user.id }}"><strong>{{ p.user.display }}</strong></a><span class="id">{{ p.user.id }}</span></td>
+      <td class="num">{{ p.balance|number if p.balance is not none else "No wallet" }}</td>
+      <td class="when">{{ p.last_seen_ts|when }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="pager">
+  {% if has_newer %}<a href="/m/users?q={{ query|urlencode }}&amp;page={{ page_number - 1 }}">Newer</a>{% endif %}
+  {% if has_older %}<a href="/m/users?q={{ query|urlencode }}&amp;page={{ page_number + 1 }}">Older</a>{% endif %}
+</p>
+{% elif not db_error %}
+<p class="empty">{% if query %}No one matches that search.{% else %}The bot has not met anyone yet.{% endif %}</p>
+{% endif %}
