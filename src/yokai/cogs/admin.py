@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import platform
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import discord
+import ytmusicapi
 from discord import app_commands
 from discord.ext import commands
 
 from yokai.errors import InvalidPaymentError
 from yokai.ui.embeds import EmbedFactory, send
+from yokai.ui.views import DiagView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -79,6 +83,99 @@ class AdminCog(commands.Cog, name="Admin"):
             bot_avatar_url=self._avatar_url(),
         )
         await send(interaction, embed=embed, ephemeral=True)
+
+    @admin.command(name="diag", description="Run comprehensive system diagnostics.")
+    async def diag(self, interaction: discord.Interaction) -> None:
+        """Diagnostic overview and yt-dlp updater."""
+        avatar_url = self._avatar_url()
+
+        if await self._deny_unless_admin(interaction, "Ask the bot owner if you need diagnostics."):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # 1. Inspect DB size
+        db_file = Path(self.bot.config.db_path)
+        if db_file.exists():
+            size_bytes = db_file.stat().st_size
+            if size_bytes < 1024 * 1024:
+                db_size_str = f"{size_bytes / 1024:.1f} KB"
+            else:
+                db_size_str = f"{size_bytes / (1024 * 1024):.2f} MB"
+        else:
+            db_size_str = "File not created"
+
+        # 2. Inspect Spotify orchestrator status
+        sp_status = self.bot.spotify.get_provider_status()
+        sp_official_str = (
+            f"Configured: {sp_status['official_configured']} · "
+            f"Circuit: {'Open' if not sp_status['official_circuit_available'] else 'Closed'} · "
+            f"Failures: {sp_status['official_failures']}"
+        )
+        sp_scraper_str = (
+            f"Enabled: {sp_status['scraper_enabled']} · "
+            f"Circuit: {'Open' if not sp_status['scraper_circuit_available'] else 'Closed'} · "
+            f"Failures: {sp_status['scraper_failures']}"
+        )
+
+        # 3. Inspect YouTube resolver health
+        yt_health_str = (
+            f"Degraded ({self.bot.resolver.consecutive_failures} failures)"
+            if getattr(self.bot.resolver, "is_degraded", False)
+            else "Healthy"
+        )
+
+        # 4. Inspect DAVE status
+        dave_str = (
+            f"Enabled (davey {self.bot.health.davey_version})"
+            if self.bot.health.davey_available
+            else "Disabled (davey missing)"
+        )
+
+        # 5. Inspect yt-dlp age
+        ytdlp_age_str = (
+            f"{self.bot.health.ytdlp_version} ({self.bot.health.ytdlp_age_days}d old)"
+            if self.bot.health.ytdlp_age_days is not None
+            else (self.bot.health.ytdlp_version or "Unknown")
+        )
+        if self.bot.health.ytdlp_outdated:
+            ytdlp_age_str += " (outdated)"
+
+        diagnostics = {
+            "Python / discord.py": f"{platform.python_version()} / {discord.__version__}",
+            "DAVE E2EE": dave_str,
+            "FFmpeg Path": self.bot.health.ffmpeg_path or "Missing",
+            "Deno Path": self.bot.health.deno_path or "Missing",
+            "yt-dlp Version": ytdlp_age_str,
+            "YouTube Health": yt_health_str,
+            "Spotify Official": sp_official_str,
+            "Spotify Scraper": sp_scraper_str,
+            "ytmusicapi": getattr(ytmusicapi, "__version__", "Unknown"),
+            "Database Size": db_size_str,
+        }
+
+        # Gather recent errors
+        recent_errors: list[str] = list(self.bot.error_ring_buffer)
+        for err in getattr(self.bot.resolver, "error_ring_buffer", []):
+            if err not in recent_errors:
+                recent_errors.append(err)
+
+        needs_attention = (
+            getattr(self.bot.resolver, "is_degraded", False) is True
+            or self.bot.health.ytdlp_outdated is True
+            or self.bot.health.davey_available is False
+        )
+        embed = EmbedFactory.diag(
+            diagnostics=diagnostics,
+            recent_errors=recent_errors,
+            bot_avatar_url=avatar_url,
+            status="warn" if needs_attention else "ok",
+        )
+
+        view = DiagView(admin_id=interaction.user.id, bot_avatar_url=avatar_url)
+        msg = await send(interaction, embed=embed, view=view, ephemeral=True)
+        if isinstance(msg, discord.Message):
+            view.message = msg
 
 
 async def setup(bot: YokaiBot) -> None:
