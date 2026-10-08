@@ -247,3 +247,42 @@ def test_the_dashboard_tile_counts_people(tmp_path: Path) -> None:
     with panel_client(tmp_path, paths, db_path=db) as (client, _):
         page = client.get("/m/dashboard").text
     assert "People" in page and "3 known, 2 with wallets" in page
+
+
+def test_the_daily_reset_does_not_overpromise_the_streak(tmp_path: Path) -> None:
+    """Review: the reset gives 24 hours to claim, which can be less than the streak had left."""
+    db = _seeded(tmp_path)
+    with panel_client(tmp_path, [USERS], db_path=db) as (client, csrf):
+        asked = client.get("/m/users/1/daily/confirm", headers={"HX-Request": "true"})
+        done = post(client, csrf, "/m/users/1/daily/reset")
+    for text in (asked.text, done.text):
+        assert "is kept." not in text and "24 hours" in text
+
+
+def test_a_hostile_id_in_the_path_never_reaches_a_url(tmp_path: Path) -> None:
+    """Review: the raw path text was echoed into hx-post and hx-get URLs."""
+    db = _seeded(tmp_path)
+    with panel_client(tmp_path, [USERS], db_path=db) as (client, csrf):
+        form = client.get("/m/users/%2E%2E/adjust/form", headers={"HX-Request": "true"})
+        button = client.get("/m/users/a%3Fb/daily/button", headers={"HX-Request": "true"})
+        refused = post(client, csrf, "/m/users/%2E%2E/adjust/preview", amount="x", reason="gift")
+    for response in (form, button, refused):
+        assert "/m/users/.." not in response.text and "a?b" not in response.text
+        assert "hx-post" not in response.text and "hx-get" not in response.text
+
+
+def test_a_failed_read_during_a_preview_does_not_claim_a_failed_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    users_router = sys.modules["yokai_admin.modules.users.router"]
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    db = _seeded(tmp_path)
+    monkeypatch.setattr(users_router, "preview_adjustment", broken)
+    with panel_client(tmp_path, [USERS], db_path=db) as (client, csrf):
+        response = post(client, csrf, "/m/users/1/adjust/preview", amount="5", reason="gift")
+    assert "could not be read" in response.text and "Nothing was saved" not in response.text

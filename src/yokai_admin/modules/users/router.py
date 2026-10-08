@@ -57,6 +57,20 @@ def _db_message(exc: Exception) -> str:
     return f"The database could not be read right now ({exc}). It will retry shortly."
 
 
+def _safe_id(raw: str) -> Optional[int]:
+    """The parsed ID, or None; only parsed integers may reach a URL in a template."""
+    try:
+        return parse_user_id(raw)
+    except InputRefused:
+        return None
+
+
+def _gone(request: Request) -> Response:
+    return render_fragment(
+        request, "users/_person.html", profile=None, problem=_NOT_KNOWN, flash=None
+    )
+
+
 @router.get("")
 def people(request: Request, q: str = "", page: str = "1") -> Response:
     settings: PanelSettings = request.app.state.settings
@@ -121,7 +135,10 @@ def person_page(request: Request, user_id: str) -> Response:
 
 @router.get("/{user_id}/adjust/form")
 def adjust_form(request: Request, user_id: str) -> Response:
-    return render_fragment(request, "users/_adjust_form.html", user_id=user_id, form={})
+    uid = _safe_id(user_id)
+    if uid is None:
+        return _gone(request)
+    return render_fragment(request, "users/_adjust_form.html", user_id=uid, form={})
 
 
 @router.post("/{user_id}/adjust/preview")
@@ -130,19 +147,21 @@ def adjust_preview(
 ) -> Response:
     settings: PanelSettings = request.app.state.settings
     form = {"amount": amount, "reason": reason}
+    uid = _safe_id(user_id)
+    if uid is None:
+        return _gone(request)
     try:
-        uid = parse_user_id(user_id)
         value = parse_amount(amount)
         clean = clean_reason(reason, required=True)
         with readonly(settings.db_path) as conn:
             require_schema(conn)
             preview: AdjustPreview = preview_adjustment(conn, uid, value)
     except (InputRefused, PanelDbError, sqlite3.Error) as exc:
-        message = str(exc) if isinstance(exc, (InputRefused, PanelDbError)) else _SAVE_FAILED
+        message = str(exc) if isinstance(exc, (InputRefused, PanelDbError)) else _db_message(exc)
         return render_fragment(
             request,
             "users/_adjust_form.html",
-            user_id=user_id,
+            user_id=uid,
             form=form,
             form_flash=Flash("error", message),
         )
@@ -194,7 +213,10 @@ def adjust(
 
 @router.get("/{user_id}/daily/button")
 def daily_button(request: Request, user_id: str) -> Response:
-    return render_fragment(request, "users/_daily_button.html", user_id=user_id)
+    uid = _safe_id(user_id)
+    if uid is None:
+        return _gone(request)
+    return render_fragment(request, "users/_daily_button.html", user_id=uid)
 
 
 @router.get("/{user_id}/daily/confirm")
@@ -216,7 +238,7 @@ def daily_reset(request: Request, user_id: str) -> Response:
         result = reset_daily(settings.db_path, raw_id=user_id)
         return (
             f"{result.user.label} can claim their daily reward now. "
-            f"Their streak of {result.streak} is kept."
+            f"They keep their streak of {result.streak} if they claim within 24 hours."
         )
 
     return _act(request, user_id, run)
