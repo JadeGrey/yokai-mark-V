@@ -15,6 +15,7 @@ import aiosqlite
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
 from yokai.errors import BetNotOpenError, DailyOnCooldownError, InsufficientFundsError
+from yokai.gambling.models import MultiplayerChannel
 from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,24 @@ CREATE TABLE IF NOT EXISTS lottery_pot_entries (
 
 CREATE INDEX IF NOT EXISTS idx_lottery_pot_entries_ts ON lottery_pot_entries(ts);
 """
+
+
+_CHANNEL_SELECT = (
+    "SELECT channel_id, game, play_message_id, table_message_id, table_active "
+    "FROM multiplayer_channels"
+)
+
+
+def _channel_from_row(
+    row: tuple[int, str, Optional[int], Optional[int], int],
+) -> MultiplayerChannel:
+    return MultiplayerChannel(
+        channel_id=row[0],
+        game=row[1],
+        play_message_id=row[2],
+        table_message_id=row[3],
+        table_active=bool(row[4]),
+    )
 
 
 class Database:
@@ -713,6 +732,90 @@ class Database:
         async with self.conn.execute("SELECT pot FROM lottery_state WHERE id = 1;") as cursor:
             row = await cursor.fetchone()
         return row[0] if row else 0
+
+    async def set_multiplayer_channel(
+        self, channel_id: int, game: str, play_message_id: int, now: Optional[int] = None
+    ) -> list[MultiplayerChannel]:
+        """Dedicate a channel to a game; returns the rows it displaced.
+
+        A game has one channel, so the same game elsewhere is displaced, and so is whatever this
+        channel hosted before. The caller deletes the displaced rows' Discord messages.
+        """
+        ts = int(time.time()) if now is None else now
+        async with self._write_lock:
+            try:
+                async with self.conn.execute(
+                    _CHANNEL_SELECT + " WHERE game = ? OR channel_id = ? ORDER BY channel_id;",
+                    (game, channel_id),
+                ) as cursor:
+                    removed = [_channel_from_row(r) for r in await cursor.fetchall()]
+                await self.conn.execute(
+                    "DELETE FROM multiplayer_channels WHERE game = ? OR channel_id = ?;",
+                    (game, channel_id),
+                )
+                await self.conn.execute(
+                    "INSERT INTO multiplayer_channels "
+                    "(channel_id, game, play_message_id, table_message_id, table_active, "
+                    "updated_ts) VALUES (?, ?, ?, NULL, 0, ?);",
+                    (channel_id, game, play_message_id, ts),
+                )
+                await self.conn.commit()
+            except BaseException:
+                await self.conn.rollback()
+                raise
+        return removed
+
+    async def get_multiplayer_channel(self, channel_id: int) -> Optional[MultiplayerChannel]:
+        async with self.conn.execute(
+            _CHANNEL_SELECT + " WHERE channel_id = ?;", (channel_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        return _channel_from_row(row) if row else None
+
+    async def list_multiplayer_channels(self) -> list[MultiplayerChannel]:
+        async with self.conn.execute(_CHANNEL_SELECT + " ORDER BY channel_id;") as cursor:
+            return [_channel_from_row(r) for r in await cursor.fetchall()]
+
+    async def _update_channel(self, sql: str, params: tuple[object, ...]) -> None:
+        async with self._write_lock:
+            await self.conn.execute(sql, params)
+            await self.conn.commit()
+
+    async def set_play_message(self, channel_id: int, message_id: int) -> None:
+        await self._update_channel(
+            "UPDATE multiplayer_channels SET play_message_id = ?, updated_ts = ? "
+            "WHERE channel_id = ?;",
+            (message_id, int(time.time()), channel_id),
+        )
+
+    async def set_table_message(self, channel_id: int, message_id: int, active: bool) -> None:
+        await self._update_channel(
+            "UPDATE multiplayer_channels SET table_message_id = ?, table_active = ?, "
+            "updated_ts = ? WHERE channel_id = ?;",
+            (message_id, 1 if active else 0, int(time.time()), channel_id),
+        )
+
+    async def set_table_inactive(self, channel_id: int) -> None:
+        await self._update_channel(
+            "UPDATE multiplayer_channels SET table_active = 0, updated_ts = ? "
+            "WHERE channel_id = ?;",
+            (int(time.time()), channel_id),
+        )
+
+    async def clear_multiplayer_channel(self, channel_id: int) -> Optional[MultiplayerChannel]:
+        """Stop dedicating a channel; returns the removed row, or None if it had none."""
+        async with self._write_lock:
+            async with self.conn.execute(
+                _CHANNEL_SELECT + " WHERE channel_id = ?;", (channel_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row is None:
+                return None
+            await self.conn.execute(
+                "DELETE FROM multiplayer_channels WHERE channel_id = ?;", (channel_id,)
+            )
+            await self.conn.commit()
+        return _channel_from_row(row)
 
     async def _finish_bet(self, bet_id: int, payout: int, refund: bool) -> int:
         """Close an open bet exactly once, crediting `payout` (the stake when refunding)."""
