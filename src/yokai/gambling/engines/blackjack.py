@@ -57,6 +57,27 @@ def payout_for(outcome: Outcome, stake: int) -> int:
     return 0
 
 
+def compare_hands(player: Sequence[Card], dealer: Sequence[Card]) -> Outcome:
+    """The result of a finished hand against the dealer's finished hand."""
+    player_total = hand_value(player)[0]
+    dealer_total = hand_value(dealer)[0]
+    if player_total > 21:
+        return Outcome.LOSE
+    player_natural = is_blackjack(player)
+    dealer_natural = is_blackjack(dealer)
+    if player_natural and dealer_natural:
+        return Outcome.PUSH
+    if player_natural:
+        return Outcome.BLACKJACK
+    if dealer_natural:
+        return Outcome.LOSE
+    if dealer_total > 21 or player_total > dealer_total:
+        return Outcome.WIN
+    if player_total == dealer_total:
+        return Outcome.PUSH
+    return Outcome.LOSE
+
+
 class BlackjackGame:
     """One hand against the dealer. Draw order from `shoe`: P, D, P, D, then play."""
 
@@ -121,20 +142,5 @@ class BlackjackGame:
             self.stand()
 
     def _compare(self) -> None:
-        player_total = hand_value(self.player)[0]
-        dealer_total = hand_value(self.dealer)[0]
-        player_natural = is_blackjack(self.player)
-        dealer_natural = is_blackjack(self.dealer)
-        if player_natural and dealer_natural:
-            self.outcome = Outcome.PUSH
-        elif player_natural:
-            self.outcome = Outcome.BLACKJACK
-        elif dealer_natural:
-            self.outcome = Outcome.LOSE
-        elif dealer_total > 21 or player_total > dealer_total:
-            self.outcome = Outcome.WIN
-        elif player_total == dealer_total:
-            self.outcome = Outcome.PUSH
-        else:
-            self.outcome = Outcome.LOSE
+        self.outcome = compare_hands(self.player, self.dealer)
         self.finished = True
