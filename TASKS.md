@@ -258,7 +258,7 @@ own plan after the previous phase is reviewed.
       admin widening, voice-earning skip, heartbeat.
 - [x] P-A2 Panel core and Dashboard (FastAPI + Jinja2 + HTMX, auth/CSRF, module contract).
 - [x] P-A3 Access (blacklist/adminlist) and Audit modules, plus a bot-side name cache (schema v5).
-- [ ] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
+- [x] P-A4 Users module (profiles, ledger-safe balance edits). Must follow the spec's
       cross-process write rule (`BEGIN IMMEDIATE`, relative updates, re-read before ledger row).
 - [ ] P-A5 Database module (browse, integrity, VACUUM, backup/restore).
 - [ ] P-A6 Logs module (current and rotated, live tail).
@@ -279,6 +279,26 @@ own plan after the previous phase is reviewed.
   seconds, then run `/ping` and press a button as that account: both are refused. Delete the
   row and confirm access returns. Add an account to `admins` and confirm `/diag` works for it.
   Watch `bot_heartbeat.ts` advance every 30 s, and vanish after stopping the bot with Ctrl+C.
+
+**Acceptance criteria (P-A4)**
+- Bot side: wallet operations (`credit_wallet`, `pay`, `claim_daily`, `admin_adjust_wallet`) run in
+  a `BEGIN IMMEDIATE` transaction that rolls back and releases the write lock on any failure
+  (a failed operation used to leave the lock held). Review found no interleaving race: the first
+  statement of each operation already took the write lock. Restart the bot to pick this up.
+- People lists everyone known (wallet or name), searches by name or ID (literal match, `%` and `_`
+  are not wildcards) and pages; a profile shows wallet, daily status, ledger, gambling per game,
+  top tracks and commands. Unknown or malformed IDs answer with a message, never an error.
+- A balance edit needs a reason, shows a preview (with a clamp explanation), asks to confirm,
+  refuses a stale preview, caps at 100,000, and records the applied amount; balance equals the sum
+  of deltas afterwards.
+- Resetting the daily cooldown asks first, keeps the streak, and is refused when pointless.
+- Refused forms keep what was typed; a failed request shows a visible notice; hostile names,
+  titles and reasons are escaped; GET never changes anything.
+- The audit log labels both actions and names the person.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(checked in headless Edge while building)* search, profile, clamped preview, confirm, stale
+  preview, daily reset, refused form, failed-request notice and the audit page, in dark 1280, light
+  1280 and dark 390.
 
 **Acceptance criteria (P-A2)**
 - `python -m yokai_admin` serves on `127.0.0.1:ADMIN_PORT`, opens the browser through a single-use

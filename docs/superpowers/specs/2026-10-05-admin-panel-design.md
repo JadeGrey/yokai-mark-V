@@ -116,12 +116,15 @@ treats the owner as implicitly admin and unblacklistable.
 **Dashboard.** Online/offline (heartbeat), DB size, schema version, wallet count, commands in the
 last 24 h, last error lines from the current log, plus module tiles.
 
-**Users.** Search by user ID. Profile: wallet, daily streak, last daily, recent transactions,
+**Users (shipped as the People module).** List and search by name or user ID. Profile: wallet, daily streak, last daily, recent transactions,
 gambling results per game, top played tracks, command counts. Edits:
-- *Balance adjustment:* signed delta + required reason; one `BEGIN IMMEDIATE` transaction updates
-  the wallet (floored at 0, same as `Database.admin_adjust_wallet`), inserts a
-  `renown_transactions` row with reason `admin`, and an `admin_audit` row carrying the reason.
-- *Reset daily cooldown:* clears `last_daily_ts`, audited.
+- *Balance adjustment:* signed delta (capped at 100,000) + required reason, with a preview and a
+  confirm step. One `BEGIN IMMEDIATE` transaction applies a relative update (floored at 0),
+  inserts a `renown_transactions` row for the amount actually applied, and writes an
+  `admin_audit` row. A confirm whose preview is stale (balance changed) is refused.
+- *Reset daily cooldown:* back-dates `last_daily_ts` to 24 h ago so the streak survives
+  (NULL would reset it); refused if there is no wallet, no prior claim, or it is already
+  claimable. Audited.
 The panel shows IDs only; it never calls Discord.
 
 *Cross-process write rule (from the P-A1 review, binding on P-A4/P-A5):* the bot's `_write_lock`
