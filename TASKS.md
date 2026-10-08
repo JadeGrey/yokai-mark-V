@@ -267,7 +267,7 @@ own plan after the previous phase is reviewed.
 - Schema version is 4; a v3 database upgrades with its rows intact.
 - A blacklisted user gets an ephemeral "Access blocked" embed on every slash command and view
   button; autocomplete is denied silently; the owner can never be blocked.
-- `/diag` and `/economy-admin` work for the owner and for adminlist members, and refuse others
+- `/diag` and `/economy-admin` (renamed `/admin diag` and `/admin economy` in Phase 10 M1) work for the owner and for adminlist members, and refuse others
   with an "Admins only" embed; a user on both lists is not an admin.
 - A change to either table takes effect within about 5 seconds, with no restart.
 - A moderation read failure never breaks commands (last good copy, else fail open).
@@ -397,3 +397,32 @@ own plan after the previous phase is reviewed.
 
 ## Later (do not start without owner approval)
 Hybrid recommender using local play/skip data, custom model, autoplay, `/search` picker, lyrics, Lavalink engine, new entertainment and QoL modules, `/privacy` data commands.
+
+---
+
+## Phase 10 — Multiplayer tables and lottery
+
+**Goal:** Dedicated-channel multiplayer tables, a house-funded lottery, and tidy `/admin` and `/owner`
+command groups. Spec: `docs/superpowers/specs/2026-10-07-multiplayer-tables-design.md`. Phases M1 to
+M4 each get their own plan and a stop for owner review.
+
+### M1 — Command groups
+
+Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m1-command-groups.md`.
+
+- [x] M1.1 `/admin` group with `economy` (was `/economy-admin`).
+- [x] M1.2 `/admin diag` (was `/diag`).
+- [x] M1.3 `/owner` group, registered only once it has a subcommand.
+- [x] M1.4 Extensions loaded; `/diag` mentions updated; docs updated.
+
+**Acceptance criteria (M1)**
+- `/admin economy` and `/admin diag` work for the owner and for adminlist members and refuse others
+  with the ephemeral "Admins only" embed; the old `/economy-admin` and `/diag` no longer exist.
+- `/owner` is absent from the command tree until it has a subcommand.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Restart the bot; `/admin` offers `economy` and `diag`; `/diag` and
+  `/economy-admin` are gone; `/admin diag` shows the **Update yt-dlp** button; a non-admin is refused.
+
+**STOP — owner review.**
+
+(M2 tables and duel, M3 jackpot, crash and blackjack table, M4 lottery: planned after M1 is reviewed.)

@@ -12,7 +12,7 @@ Companion files: `AGENTS.md` (standing rules) and `TASKS.md` (ordered phases). I
 1. Foundations: config, logging, SQLite storage, universal embed system, presence manager.
 2. Music package: play from YouTube links, YouTube search queries, and Spotify track/album/playlist links; queue controls.
 3. `/recommend`: recommendations from YouTube Music radio, with a button that queues them.
-4. Utility commands: `/ping`, `/usage`, `/about`, plus an owner-only `/diag`.
+4. Utility commands: `/ping`, `/usage`, `/about`, plus an owner-only `/admin diag`.
 
 ### Non-goals for v1
 Other entertainment/QoL modules (they come later, so keep the architecture extensible), multi-server support, web dashboard, Lavalink, non-YouTube audio sources, lyrics, audio filters, a custom ML recommender, autoplay when the queue ends, per-user Spotify/YouTube account linking.
@@ -103,7 +103,7 @@ Goal: every message Yokai sends looks like it came from the same bot, and featur
 - **Import summaries** (playlist or album loads) use Loaded / Queued / Now playing fields, plus a note line when the queue limit cut the import short.
 - **Grid:** every run of inline fields is padded to three columns so Discord's layout stays aligned.
 - **Safety:** all user-supplied track text goes through `escape_md`, so a title cannot inject a link or formatting.
-- **`/ping`** color comes from gateway, REST, voice and database latency only; the resolver figure is displayed but not counted (see section 9). `/diag` is amber when YouTube is degraded, yt-dlp is outdated, or DAVE voice encryption is unavailable; green otherwise.
+- **`/ping`** color comes from gateway, REST, voice and database latency only; the resolver figure is displayed but not counted (see section 9). `/admin diag` is amber when YouTube is degraded, yt-dlp is outdated, or DAVE voice encryption is unavailable; green otherwise.
 - **Design review:** `scripts/preview_embeds.py` renders every builder with sample data to `docs/preview/embeds.html`. Regenerate it after changing any builder.
 
 ---
@@ -129,7 +129,7 @@ All are slash commands, guild-scoped. Anything touching the network defers first
 | `/ping` | none | See §9. |
 | `/usage` | `period`: all / 30d / 7d | See §9. |
 | `/about` | none | See §9. |
-| `/diag` | none | Owner-only, ephemeral. See §9. |
+| `/admin diag` | none | Owner-only, ephemeral. See §9. |
 
 **Voice-channel rules.** Music commands require the caller to be in a voice channel (except `/queue` and `/nowplaying`). If the bot is in a different channel that still has non-bot listeners, refuse politely. If the bot lacks Connect/Speak permission, say exactly which permission is missing. Everyone in the voice channel may use playback controls (small trusted group; no vote-skip).
 
@@ -157,8 +157,8 @@ Stream URLs expire, so **never store stream URLs in the queue**. Queue entries a
 - Options to start from: `format="bestaudio/best"`, `noplaylist=True` for single items, `extract_flat="in_playlist"` for playlists, `skip_download=True`, `quiet=True`, `socket_timeout=15`. Optional `cookiefile` from `YTDLP_COOKIES_FILE` (off by default).
 - **JavaScript runtime:** current yt-dlp needs an external JS runtime (Deno) plus the `yt-dlp-ejs` component (included with `yt-dlp[default]`) for full YouTube support. Configure it through yt-dlp's params (`js_runtimes`, `remote_components` — verify names against the installed version and the EJS wiki) and verify Deno at startup.
 - Pass yt-dlp's returned `http_headers` to FFmpeg when needed.
-- **YouTube is the fragile part.** YouTube has been moving clients to SABR-only streaming, which removes direct audio URLs for some clients. Expect breakage every few weeks. Mitigations: keep yt-dlp current (see below), keep the resolver behind an interface, classify failures (§7.7), and surface health in `/diag`. A PO-token provider (e.g. `bgutil-ytdlp-pot-provider`) is a later fallback only if 403 or bot-check errors appear.
-- **Update workflow:** log the yt-dlp version at startup and warn if its release date is more than 30 days old. `/diag` shows the version and has an **Update yt-dlp** button (owner-only) that runs `python -m pip install -U "yt-dlp[default]"` as a subprocess with an argument list (no shell), then tells the owner to restart the bot.
+- **YouTube is the fragile part.** YouTube has been moving clients to SABR-only streaming, which removes direct audio URLs for some clients. Expect breakage every few weeks. Mitigations: keep yt-dlp current (see below), keep the resolver behind an interface, classify failures (§7.7), and surface health in `/admin diag`. A PO-token provider (e.g. `bgutil-ytdlp-pot-provider`) is a later fallback only if 403 or bot-check errors appear.
+- **Update workflow:** log the yt-dlp version at startup and warn if its release date is more than 30 days old. `/admin diag` shows the version and has an **Update yt-dlp** button (owner-only) that runs `python -m pip install -U "yt-dlp[default]"` as a subprocess with an argument list (no shell), then tells the owner to restart the bot.
 
 ### 7.4 Spotify: hybrid, metadata only
 Spotify never provides audio. The job is: URL → list of `(title, artists, duration)` → match each to a YouTube track.
@@ -212,7 +212,7 @@ Spotify collection tracks queue as `PENDING_MATCH` and are matched lazily just b
 | `TimeoutError` | Extraction too slow | One retry; then skip |
 | `UnsupportedError` | Bad host, unsupported Spotify type, live stream | Friendly message |
 
-After 3 consecutive extraction failures, mark YouTube health as degraded, post one escalation embed ("YouTube is giving me trouble; owner can check `/diag`"), and record it. Keep a ring buffer of the last 20 sanitized errors for `/diag`.
+After 3 consecutive extraction failures, mark YouTube health as degraded, post one escalation embed ("YouTube is giving me trouble; owner can check `/admin diag`"), and record it. Keep a ring buffer of the last 20 sanitized errors for `/admin diag`.
 
 ---
 
@@ -245,7 +245,7 @@ After 3 consecutive extraction failures, mark YouTube health as degraded, post o
 
 **`/about`.** Name, bio, version (package metadata), uptime, host OS, stack with versions (Python, discord.py, yt-dlp, ytmusicapi, FFmpeg), owner mention, and the line: *"Unaffiliated fan project inspired by Echo's Yokai drone from Rainbow Six Siege. © Ubisoft."*
 
-**`/diag` (owner-only, ephemeral).** Python/discord.py versions; `davey` importable and its version (DAVE status); FFmpeg and Deno paths and versions; yt-dlp version and age; YouTube health flag; Spotify provider status (official enabled/healthy, scraper enabled/healthy, circuit-breaker state); ytmusicapi version; database size; last 20 sanitized errors; the **Update yt-dlp** button (§7.3).
+**`/admin diag` (owner-only, ephemeral).** Python/discord.py versions; `davey` importable and its version (DAVE status); FFmpeg and Deno paths and versions; yt-dlp version and age; YouTube health flag; Spotify provider status (official enabled/healthy, scraper enabled/healthy, circuit-breaker state); ytmusicapi version; database size; last 20 sanitized errors; the **Update yt-dlp** button (§7.3).
 
 ---
 
@@ -343,7 +343,7 @@ Invite scopes: `bot`, `applications.commands`. Permissions: View Channels, Send 
 | YouTube changes break extraction | Interface boundary, typed errors, health flag, update button, PO-token fallback only if needed |
 | Spotify changes or restricts scraping | Circuit breaker, official-first order, graceful "paste a YouTube link" message |
 | `ytmusicapi` is unofficial | Interface boundary; failures degrade to an error embed |
-| DAVE / voice library changes | `davey` check at startup; `/diag` surfaces status |
+| DAVE / voice library changes | `davey` check at startup; `/admin diag` surfaces status |
 | YouTube's terms restrict this kind of use | Private, small, non-monetized, not publicly listed |
 | PC uptime | Documented; auto-restart script |
 

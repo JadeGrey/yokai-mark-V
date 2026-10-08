@@ -18,7 +18,8 @@ Yokai is a private, single-server Discord bot (~10 users) hosted locally on the 
   - `/ping`: Real-time WebSocket Gateway, REST API, SQLite database, Voice, and audio Resolver rolling average latencies.
   - `/usage`: Usage leaderboard showing top operators and commands across customizable time windows (all-time, 30 days, 7 days).
   - `/about`: Detailed runtime stack versions, system uptime, and credits.
-  - `/diag`: Owner-only ephemeral diagnostic dashboard with in-place **Update yt-dlp** button.
+  - `/admin diag`: Admin-only ephemeral diagnostic dashboard with in-place **Update yt-dlp** button.
+  - `/admin economy`: Admin-only Renown grant or deduction (was `/economy-admin`).
 - **Operational Hardening:** Auto-disconnects when idle or left alone in voice channels, graceful process supervision (`run.ps1`), and zero privileged intents.
 
 ---
@@ -165,7 +166,7 @@ It opens your browser through a **single-use link** (also printed in the console
 
 YouTube frequently updates player algorithms and cipher signatures. Keeping `yt-dlp` up to date ensures uninterrupted streaming:
 
-1. **In Discord (Owner Only):** Run `/diag` and click the **Update yt-dlp** button.
+1. **In Discord (Admins only):** Run `/admin diag` and click the **Update yt-dlp** button.
 2. **Via PowerShell CLI:**
    ```powershell
    .\.venv\Scripts\Activate.ps1
