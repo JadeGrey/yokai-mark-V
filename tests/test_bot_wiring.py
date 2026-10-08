@@ -297,3 +297,42 @@ async def test_setup_hook_loads_the_admin_and_owner_extensions() -> None:
     loaded = [call.args[0] for call in bot.load_extension.await_args_list]
     assert "yokai.cogs.admin" in loaded
     assert "yokai.cogs.owner" in loaded
+
+
+@pytest.mark.asyncio
+async def test_the_bot_owns_a_table_manager_wired_from_config() -> None:
+    from yokai.gambling.tables import TableManager
+
+    bot = make_bot()
+    assert isinstance(bot.tables, TableManager)
+    assert bot.tables.active_games is bot.active_games
+    assert bot.tables.rake_percent == bot.config.gambling_duel_rake_percent
+    assert bot.tables.join_seconds == bot.config.gambling_lobby_join_seconds
+    assert bot.tables.pick_seconds == bot.config.gambling_turn_seconds
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_loads_the_tables_extension() -> None:
+    bot = make_bot()
+    bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=0)
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    with patch.object(bot.voice_earn_tracker, "start"):
+        await bot.setup_hook()
+    loaded = [call.args[0] for call in bot.load_extension.await_args_list]
+    assert "yokai.cogs.tables" in loaded
+
+
+@pytest.mark.asyncio
+async def test_on_ready_reconciles_the_table_channels_once() -> None:
+    bot = make_bot()
+    cog = MagicMock()
+    cog.reconcile = AsyncMock()
+    bot.get_cog = MagicMock(return_value=cog)  # type: ignore[method-assign]
+    with patch.object(bot.heartbeat, "start"):
+        await bot.on_ready()
+        await bot.on_ready()
+    cog.reconcile.assert_awaited_once()

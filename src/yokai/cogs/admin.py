@@ -11,12 +11,17 @@ import ytmusicapi
 from discord import app_commands
 from discord.ext import commands
 
-from yokai.errors import InvalidPaymentError
+from yokai.errors import InvalidGameChoiceError, InvalidPaymentError, YokaiError
+from yokai.gambling.lobby import GAME_SPECS
 from yokai.ui.embeds import EmbedFactory, send
 from yokai.ui.views import DiagView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
+
+GAME_CHOICES = [
+    app_commands.Choice(name=spec.label, value=name) for name, spec in GAME_SPECS.items()
+]
 
 
 class AdminCog(commands.Cog, name="Admin"):
@@ -176,6 +181,70 @@ class AdminCog(commands.Cog, name="Admin"):
         msg = await send(interaction, embed=embed, view=view, ephemeral=True)
         if isinstance(msg, discord.Message):
             view.message = msg
+
+    @admin.command(
+        name="set_multiplayer", description="Make this channel the table channel for a game."
+    )
+    @app_commands.describe(game="Which game this channel hosts")
+    @app_commands.choices(game=GAME_CHOICES)
+    async def set_multiplayer(
+        self, interaction: discord.Interaction, game: app_commands.Choice[str]
+    ) -> None:
+        """Dedicate the current channel to a multiplayer game and post its Play embed."""
+        if await self._deny_unless_admin(interaction, "Ask the bot owner to set up a table."):
+            return
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            await self._send_domain_error(
+                interaction, InvalidGameChoiceError("Run this in a normal text channel.")
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        tables = self.bot.get_cog("Tables")
+        try:
+            await tables.set_channel(channel, game.value)  # type: ignore[union-attr]
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        embed = EmbedFactory.success(
+            title="Table channel set",
+            description=(
+                f"This channel now hosts **{game.name}** tables. "
+                "Members open one with the Play button."
+            ),
+            context="Admin",
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    @admin.command(
+        name="unset_multiplayer", description="Stop using this channel as a table channel."
+    )
+    async def unset_multiplayer(self, interaction: discord.Interaction) -> None:
+        if await self._deny_unless_admin(interaction, "Ask the bot owner to change tables."):
+            return
+        await interaction.response.defer(ephemeral=True)
+        tables = self.bot.get_cog("Tables")
+        try:
+            removed = await tables.unset_channel(interaction.channel_id)  # type: ignore[union-attr]
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        if removed:
+            embed = EmbedFactory.success(
+                title="Table channel removed",
+                description="This channel is no longer a table channel.",
+                context="Admin",
+                bot_avatar_url=self._avatar_url(),
+            )
+        else:
+            embed = EmbedFactory.info(
+                title="Nothing to remove",
+                description="This is not a table channel.",
+                context="Admin",
+                bot_avatar_url=self._avatar_url(),
+            )
+        await send(interaction, embed=embed, ephemeral=True)
 
 
 async def setup(bot: YokaiBot) -> None:

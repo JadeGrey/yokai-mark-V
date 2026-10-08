@@ -6,9 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 import pytest
+from discord import app_commands
 
 from tests.moderation_helpers import fake_moderation
 from yokai.cogs.admin import AdminCog
+from yokai.errors import TableBusyError
 from yokai.theme import COLOR_WARNING
 from yokai.ui.views import DiagView
 
@@ -212,3 +214,124 @@ async def test_diag_marks_attention_with_status_color_not_extra_emoji() -> None:
     values = " ".join(f.value for f in embed.fields)
     assert "(outdated)" in values
     assert "⚠️" not in values
+
+
+def test_the_game_dropdown_lists_every_planned_game() -> None:
+    from yokai.cogs.admin import GAME_CHOICES
+
+    assert [choice.value for choice in GAME_CHOICES] == [
+        "duel",
+        "jackpot",
+        "crash",
+        "bjtable",
+        "lottery",
+    ]
+    assert [choice.name for choice in GAME_CHOICES][:2] == ["Duel", "Jackpot"]
+
+
+def make_text_channel(channel_id: int = 10) -> MagicMock:
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = channel_id
+    return channel
+
+
+@pytest.mark.asyncio
+async def test_set_multiplayer_refuses_non_admins() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.set_channel = AsyncMock()
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(111)
+    interaction.channel = make_text_channel()
+    with patch("yokai.cogs.admin.send", new=AsyncMock()) as sent:
+        await cog.set_multiplayer.callback(
+            cog, interaction, game=app_commands.Choice(name="Duel", value="duel")
+        )
+    tables.set_channel.assert_not_awaited()
+    assert sent.await_args.kwargs["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_set_multiplayer_dedicates_the_current_channel() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.set_channel = AsyncMock()
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(555)
+    channel = make_text_channel()
+    interaction.channel = channel
+    with patch("yokai.cogs.admin.send", new=AsyncMock()) as sent:
+        await cog.set_multiplayer.callback(
+            cog, interaction, game=app_commands.Choice(name="Duel", value="duel")
+        )
+    tables.set_channel.assert_awaited_once_with(channel, "duel")
+    interaction.response.defer.assert_awaited_once()
+    assert sent.await_args.kwargs["ephemeral"] is True
+    assert "Duel" in sent.await_args.kwargs["embed"].description
+
+
+@pytest.mark.asyncio
+async def test_set_multiplayer_needs_a_text_channel() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.set_channel = AsyncMock()
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(555)
+    interaction.channel = MagicMock(spec=discord.VoiceChannel)
+    with patch("yokai.cogs.admin.send", new=AsyncMock()) as sent:
+        await cog.set_multiplayer.callback(
+            cog, interaction, game=app_commands.Choice(name="Duel", value="duel")
+        )
+    tables.set_channel.assert_not_awaited()
+    assert sent.await_args.kwargs["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_set_multiplayer_reports_a_domain_error_ephemerally() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.set_channel = AsyncMock(side_effect=TableBusyError())
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(555)
+    interaction.channel = make_text_channel()
+    with patch("yokai.cogs.admin.send", new=AsyncMock()) as sent:
+        await cog.set_multiplayer.callback(
+            cog, interaction, game=app_commands.Choice(name="Duel", value="duel")
+        )
+    assert sent.await_args.kwargs["ephemeral"] is True
+    assert "already open" in sent.await_args.kwargs["embed"].description
+
+
+@pytest.mark.asyncio
+async def test_unset_multiplayer_reports_whether_anything_was_removed() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.unset_channel = AsyncMock(side_effect=[True, False])
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(555)
+    interaction.channel_id = 10
+    with patch("yokai.cogs.admin.send", new=AsyncMock()) as sent:
+        await cog.unset_multiplayer.callback(cog, interaction)
+        assert "no longer" in sent.await_args.kwargs["embed"].description.lower()
+        await cog.unset_multiplayer.callback(cog, interaction)
+        assert "not a table channel" in sent.await_args.kwargs["embed"].description.lower()
+    assert sent.await_args.kwargs["ephemeral"] is True
+
+
+@pytest.mark.asyncio
+async def test_unset_multiplayer_refuses_non_admins() -> None:
+    bot = make_bot()
+    tables = MagicMock()
+    tables.unset_channel = AsyncMock()
+    bot.get_cog = MagicMock(return_value=tables)
+    cog = AdminCog(bot)
+    interaction = make_interaction(111)
+    interaction.channel_id = 10
+    with patch("yokai.cogs.admin.send", new=AsyncMock()):
+        await cog.unset_multiplayer.callback(cog, interaction)
+    tables.unset_channel.assert_not_awaited()

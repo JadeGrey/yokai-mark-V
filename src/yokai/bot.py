@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Optional
 
+import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -19,6 +20,7 @@ from yokai.economy.ratelimit import CommandRewardLimiter
 from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
 from yokai.gambling.sessions import ActiveGames
+from yokai.gambling.tables import TableManager
 from yokai.health import HealthReport, check_health
 from yokai.heartbeat import HeartbeatWriter
 from yokai.moderation import ModerationStore, UserNameCache, YokaiTree
@@ -82,6 +84,18 @@ class YokaiBot(commands.Bot):
         self.recommender = YTMusicRadioRecommender()
         self.players: dict[int, GuildPlayer] = {}
         self.active_games = ActiveGames()
+        self.tables = TableManager(
+            self.db,
+            self.active_games,
+            welcome_bonus=config.economy_welcome_bonus,
+            min_bet=config.gambling_min_bet,
+            max_bet=config.gambling_max_bet,
+            rake_percent=config.gambling_duel_rake_percent,
+            join_seconds=config.gambling_lobby_join_seconds,
+            pick_seconds=config.gambling_turn_seconds,
+        )
+        self._tables_reconciled = False
+        self._tables_reconciled = False
         self.start_time = time.time()
         self.error_ring_buffer: collections.deque[str] = collections.deque(maxlen=20)
         self.command_reward_limiter = CommandRewardLimiter(
@@ -141,6 +155,7 @@ class YokaiBot(commands.Bot):
         await self.load_extension("yokai.cogs.gambling")
         await self.load_extension("yokai.cogs.admin")
         await self.load_extension("yokai.cogs.owner")
+        await self.load_extension("yokai.cogs.tables")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)
@@ -160,6 +175,14 @@ class YokaiBot(commands.Bot):
         logger.info("Yokai online as %s (Guild ID: %d)", user_str, self.config.guild_id)
         logger.info("Initial presence confirmed: IDLE, Watching for plant")
         self.heartbeat.start()
+        if not self._tables_reconciled:
+            self._tables_reconciled = True
+            tables_cog = self.get_cog("Tables")
+            if tables_cog is not None:
+                try:
+                    await tables_cog.reconcile()  # type: ignore[attr-defined]
+                except (discord.HTTPException, aiosqlite.Error) as exc:
+                    logger.error("Could not reconcile table channels: %s", exc)
 
     async def on_app_command_completion(
         self,

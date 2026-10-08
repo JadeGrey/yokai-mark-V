@@ -23,7 +23,12 @@ async def test_admin_commands_live_under_the_admin_group() -> None:
     tree = await _loaded_tree()
     admin = tree.get_command("admin")
     assert isinstance(admin, app_commands.Group)
-    assert {c.name for c in admin.commands} == {"economy", "diag"}
+    assert {c.name for c in admin.commands} == {
+        "economy",
+        "diag",
+        "set_multiplayer",
+        "unset_multiplayer",
+    }
 
 
 @pytest.mark.asyncio
