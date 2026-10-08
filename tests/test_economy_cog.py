@@ -193,59 +193,6 @@ async def test_pay_success_defers_publicly_and_transfers() -> None:
 
 
 @pytest.mark.asyncio
-async def test_economy_admin_refuses_non_owners() -> None:
-    bot = make_bot()
-    bot.db.admin_adjust_wallet = AsyncMock()
-    cog = EconomyCog(bot)
-    interaction = make_interaction(111)  # not the owner (999)
-    target = MagicMock(spec=discord.Member)
-    target.id = 222
-
-    with patch("yokai.cogs.economy.send", new=AsyncMock()) as sent:
-        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
-
-    bot.db.admin_adjust_wallet.assert_not_awaited()
-    interaction.response.defer.assert_not_awaited()
-    assert sent.await_args.kwargs["ephemeral"] is True
-
-
-@pytest.mark.asyncio
-async def test_economy_admin_allows_the_owner() -> None:
-    bot = make_bot()
-    bot.db.admin_adjust_wallet = AsyncMock(return_value=(100, 300))
-    cog = EconomyCog(bot)
-    interaction = make_interaction(999)  # the owner
-    target = MagicMock(spec=discord.Member)
-    target.id = 222
-    target.bot = False
-
-    with patch("yokai.cogs.economy.send", new=AsyncMock()) as sent:
-        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
-
-    bot.db.admin_adjust_wallet.assert_awaited_once_with(222, 100, welcome_bonus=200)
-    assert sent.await_args.kwargs["ephemeral"] is True
-
-
-@pytest.mark.asyncio
-async def test_economy_admin_rejects_a_bot_target() -> None:
-    """Review Focus: /economy-admin must not be able to create a wallet for a bot."""
-    bot = make_bot()
-    bot.db.admin_adjust_wallet = AsyncMock()
-    cog = EconomyCog(bot)
-    interaction = make_interaction(999)  # the owner
-    target = MagicMock(spec=discord.Member)
-    target.id = 222
-    target.bot = True
-
-    with patch("yokai.cogs.economy.send", new=AsyncMock()) as sent:
-        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
-
-    bot.db.admin_adjust_wallet.assert_not_awaited()
-    interaction.response.defer.assert_not_awaited()
-    assert sent.await_args.kwargs["ephemeral"] is True
-
-
-@pytest.mark.asyncio
 async def test_leaderboard_defers_and_sends_a_paginator_view() -> None:
     from yokai.ui.views import LeaderboardPaginator
 
@@ -299,19 +246,3 @@ async def test_leaderboard_treats_a_sub_one_page_as_page_one() -> None:
     view = sent.await_args.kwargs["view"]
     assert isinstance(view, LeaderboardPaginator)
     assert view.current_page == 1
-
-
-@pytest.mark.asyncio
-async def test_economy_admin_allows_an_adminlist_member() -> None:
-    bot = make_bot()
-    bot.db.admin_adjust_wallet = AsyncMock(return_value=(100, 300))
-    cog = EconomyCog(bot)
-    interaction = make_interaction(555)  # admin, not the owner
-    target = MagicMock(spec=discord.Member)
-    target.id = 222
-    target.bot = False
-
-    with patch("yokai.cogs.economy.send", new=AsyncMock()):
-        await cog.economy_admin.callback(cog, interaction, user=target, amount=100)
-
-    bot.db.admin_adjust_wallet.assert_awaited_once()

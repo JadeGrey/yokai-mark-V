@@ -150,45 +150,6 @@ class EconomyCog(commands.Cog, name="Economy"):
         if isinstance(msg, discord.Message):
             view.message = msg
 
-    @app_commands.command(
-        name="economy-admin", description="Admin-only: grant or deduct a member's Renown."
-    )
-    @app_commands.describe(user="Member to adjust", amount="Renown to add (negative to deduct)")
-    async def economy_admin(
-        self, interaction: discord.Interaction, user: discord.Member, amount: int
-    ) -> None:
-        """Admin-only balance correction, always ephemeral, floored at 0."""
-        if not await self.bot.moderation.is_admin(interaction.user.id):
-            embed = EmbedFactory.error(
-                message="Access denied: this command is restricted to Yokai admins.",
-                title="Admins only",
-                user_hint="Ask the bot owner if you need a balance corrected.",
-                context="Permissions",
-                bot_avatar_url=self._avatar_url(),
-                include_quip=False,
-            )
-            await send(interaction, embed=embed, ephemeral=True)
-            return
-
-        if user.bot:
-            await self._send_domain_error(
-                interaction,
-                InvalidPaymentError("You can only adjust another human member of the server."),
-            )
-            return
-
-        await interaction.response.defer(ephemeral=True)
-        applied, new_balance = await self.bot.db.admin_adjust_wallet(
-            user.id, amount, welcome_bonus=self.bot.config.economy_welcome_bonus
-        )
-        embed = EmbedFactory.economy_admin(
-            target_mention=f"<@{user.id}>",
-            delta_applied=applied,
-            new_balance=new_balance,
-            bot_avatar_url=self._avatar_url(),
-        )
-        await send(interaction, embed=embed, ephemeral=True)
-
 
 async def setup(bot: YokaiBot) -> None:
     """Extension setup entrypoint."""
