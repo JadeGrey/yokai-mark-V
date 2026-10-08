@@ -8,7 +8,6 @@ import logging
 import time
 from typing import TYPE_CHECKING, Optional
 
-import aiosqlite
 import discord
 from discord.ext import commands
 
@@ -33,6 +32,9 @@ class LotteryCog(commands.Cog, name="Lottery"):
     def __init__(self, bot: YokaiBot) -> None:
         self.bot = bot
         self._task: Optional[asyncio.Task[None]] = None
+        # Panel updates read the state and then edit the message; run one at a time so a slow,
+        # older edit can never land after (and overwrite) a newer one.
+        self._panel_lock = asyncio.Lock()
 
     async def cog_load(self) -> None:
         self.bot.add_view(BuyView(self.bot))
@@ -79,15 +81,16 @@ class LotteryCog(commands.Cog, name="Lottery"):
 
     async def update_panel(self) -> None:
         """Refresh the panel in place; a missing channel or message is not an error."""
-        row = await self._lottery_row()
-        if row is None or row.play_message_id is None:
-            return
-        channel = self.bot.get_channel(row.channel_id)
-        if channel is None:
-            return
-        await channel.get_partial_message(row.play_message_id).edit(  # type: ignore[union-attr]
-            embed=await self.panel_embed()
-        )
+        async with self._panel_lock:
+            row = await self._lottery_row()
+            if row is None or row.play_message_id is None:
+                return
+            channel = self.bot.get_channel(row.channel_id)
+            if channel is None:
+                return
+            await channel.get_partial_message(row.play_message_id).edit(  # type: ignore[union-attr]
+                embed=await self.panel_embed()
+            )
 
     # ---- the draw ------------------------------------------------------------------------
 
@@ -125,7 +128,7 @@ class LotteryCog(commands.Cog, name="Lottery"):
         """
         try:
             await self.announce(draw)
-        except (discord.HTTPException, aiosqlite.Error) as exc:
+        except Exception as exc:  # network errors (OSError, timeouts) are not Discord errors
             logger.warning("Could not announce lottery draw #%d yet: %s", draw.draw_no, exc)
 
     async def tick(self, now: Optional[int] = None) -> None:
@@ -148,7 +151,9 @@ class LotteryCog(commands.Cog, name="Lottery"):
         while True:
             try:
                 await self.tick()
-            except (discord.HTTPException, aiosqlite.Error) as exc:
+            except Exception as exc:
+                # A long-running task must outlive any one failure (a dropped connection raises
+                # a plain OSError); log it with its traceback and try again next pass.
                 logger.error("The lottery check failed: %s", exc, exc_info=exc)
             await asyncio.sleep(CHECK_SECONDS)
 

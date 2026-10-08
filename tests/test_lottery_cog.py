@@ -261,3 +261,97 @@ async def test_the_scheduler_survives_a_failing_tick(tmp_path: Path) -> None:
         assert calls["n"] >= 2  # it kept going after the first failure
     finally:
         await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [OSError("network is down"), TimeoutError("slow")])
+async def test_the_scheduler_survives_any_failure_not_just_discord_and_database_errors(
+    tmp_path: Path, error: Exception
+) -> None:
+    """Regression: a plain OSError (a dropped connection) escaped the loop and ended the
+    weekly lottery until the next restart, silently."""
+    import asyncio
+
+    db = await _db(tmp_path)
+    try:
+        cog = LotteryCog(make_bot(db))
+        calls = {"n": 0}
+
+        async def flaky(now=None):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise error
+
+        with patch.object(cog, "tick", new=flaky), patch("yokai.cogs.lottery.CHECK_SECONDS", 0.01):
+            await cog.cog_load()
+            await asyncio.sleep(0.15)
+            task = cog._task
+            await cog.cog_unload()
+        assert task is not None and calls["n"] >= 2  # it kept going after the failure
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_connection_while_announcing_leaves_the_draw_for_a_retry(
+    tmp_path: Path,
+) -> None:
+    db = await _db(tmp_path)
+    try:
+        await db.ensure_lottery_schedule(NOW, WEEK)
+        await db.buy_lottery_tickets(
+            1, [7], price=100, max_per_user=10, welcome_bonus=0, now=NOW + 5
+        )
+        bot = make_bot(db)
+        channel = make_channel()
+        channel.send = AsyncMock(side_effect=[OSError("network is down"), MagicMock(id=6000)])
+        bot.get_channel = MagicMock(return_value=channel)
+        cog = LotteryCog(bot)
+        with patch("yokai.cogs.lottery.draw_number", return_value=7):
+            await cog.tick(now=NOW + WEEK)  # must not raise
+            assert [d.draw_no for d in await db.get_unannounced_draws()] == [1]
+            await cog.tick(now=NOW + WEEK + 60)
+        assert await db.get_unannounced_draws() == []
+        wallet = await db.get_wallet(1)
+        assert wallet is not None and wallet.balance == 1000  # 900 left after the ticket + 100
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_a_slow_panel_edit_cannot_overwrite_a_newer_one(tmp_path: Path) -> None:
+    """Regression: two panel updates raced; the slower, older edit landed last and the panel
+    showed a stale pot until the next purchase."""
+    import asyncio
+
+    db = await _db(tmp_path)
+    try:
+        await db.ensure_lottery_schedule(NOW, WEEK)
+        bot = make_bot(db)
+        channel = make_channel()
+        bot.get_channel = MagicMock(return_value=channel)
+        landed: list[str] = []
+        gate = asyncio.Event()
+        calls = {"n": 0}
+
+        async def slow_first_edit(**kwargs):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            if calls["n"] == 1:
+                await gate.wait()
+            pot_field = next(f.value for f in kwargs["embed"].fields if f.name == "Pot")
+            landed.append(pot_field)
+
+        channel.get_partial_message.return_value.edit = AsyncMock(side_effect=slow_first_edit)
+        cog = LotteryCog(bot)
+        first = asyncio.create_task(cog.update_panel())  # reads pot 0, then its edit stalls
+        await asyncio.sleep(0.05)
+        await db.buy_lottery_tickets(
+            1, [3, 7], price=100, max_per_user=10, welcome_bonus=0, now=NOW + 5
+        )  # the pot becomes 200
+        second = asyncio.create_task(cog.update_panel())
+        await asyncio.sleep(0.05)
+        gate.set()
+        await asyncio.gather(first, second)
+        assert "200" in landed[-1], landed  # the newest state is what the panel ends on
+    finally:
+        await db.close()
