@@ -100,6 +100,9 @@ class TableManager:
         self.clock = clock
         self.rng_factory = rng_factory
         self.lobbies: dict[int, Lobby] = {}
+        # Awaited with the channel id whenever a table there has ended, however it ended;
+        # the Discord layer uses it to put a fresh Play embed under the result.
+        self.on_closed: Optional[Callable[[int], Awaitable[None]]] = None
         self._channel_locks: dict[int, asyncio.Lock] = {}
 
     # ---- lookups -------------------------------------------------------------------------
@@ -364,3 +367,8 @@ class TableManager:
             await self.db.set_table_inactive(lobby.channel_id)
         except aiosqlite.Error as exc:
             logger.error("Could not mark channel %d idle: %s", lobby.channel_id, exc)
+        if self.on_closed is not None:
+            try:
+                await self.on_closed(lobby.channel_id)
+            except Exception:
+                logger.exception("The table-closed hook failed for channel %d", lobby.channel_id)

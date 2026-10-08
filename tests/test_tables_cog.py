@@ -164,6 +164,9 @@ async def test_reconcile_rewrites_an_interrupted_table_but_not_a_finished_one(
         assert interrupted.edit.await_args.kwargs["view"] is None
         finished = channels[30].get_partial_message.return_value
         finished.edit.assert_not_awaited()
+        # the interrupted table gets a fresh Play embed under it; the finished one is untouched
+        channels[CHANNEL].send.assert_awaited_once()
+        channels[30].send.assert_not_awaited()
         row = await db.get_multiplayer_channel(CHANNEL)
         assert row is not None and row.table_active is False
 
@@ -191,3 +194,67 @@ async def test_reconcile_survives_a_channel_it_cannot_find(tmp_path: Path) -> No
         bot.fetch_channel = AsyncMock(side_effect=discord.NotFound(response, "gone"))
         await TablesCog(bot).reconcile()  # must not raise
         assert await db.get_multiplayer_channel(CHANNEL) is not None
+
+
+# ---- the Play embed returns under a finished table ---------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_loading_the_cog_hooks_table_endings_to_the_play_embed(tmp_path: Path) -> None:
+    async with world(tmp_path) as (db, manager, _):
+        bot = make_bot(db, manager)
+        cog = TablesCog(bot)
+        await cog.cog_load()
+        assert manager.on_closed == cog.repost_play_message
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_play_embed_is_posted_before_the_old_one_is_removed(
+    tmp_path: Path,
+) -> None:
+    async with world(tmp_path, users=()) as (db, manager, _):
+        bot = make_bot(db, manager)
+        channel = make_channel(CHANNEL)
+        bot.get_channel = MagicMock(return_value=channel)
+        order: list[str] = []
+        real_send = channel.send
+
+        async def send(**kwargs):  # type: ignore[no-untyped-def]
+            order.append("posted")
+            return await real_send(**kwargs)
+
+        channel.send = AsyncMock(side_effect=send)
+        channel.get_partial_message.return_value.delete = AsyncMock(
+            side_effect=lambda: order.append("deleted")
+        )
+        await TablesCog(bot).repost_play_message(CHANNEL)
+        assert order == ["posted", "deleted"]
+        assert isinstance(channel.send.await_args.kwargs["view"], PlayView)
+        channel.get_partial_message.assert_called_with(1)  # the old Play message
+        row = await db.get_multiplayer_channel(CHANNEL)
+        assert row is not None and row.play_message_id == 5000 + CHANNEL
+
+
+@pytest.mark.asyncio
+async def test_reposting_does_nothing_for_a_channel_that_is_gone(tmp_path: Path) -> None:
+    async with world(tmp_path, users=()) as (db, manager, _):
+        bot = make_bot(db, manager)
+        bot.get_channel = MagicMock(return_value=None)
+        await TablesCog(bot).repost_play_message(CHANNEL)  # must not raise
+        await TablesCog(bot).repost_play_message(99999)  # not a table channel
+        row = await db.get_multiplayer_channel(CHANNEL)
+        assert row is not None and row.play_message_id == 1
+
+
+@pytest.mark.asyncio
+async def test_a_discord_failure_while_reposting_keeps_the_old_play_embed(tmp_path: Path) -> None:
+    async with world(tmp_path, users=()) as (db, manager, _):
+        bot = make_bot(db, manager)
+        channel = make_channel(CHANNEL)
+        response = MagicMock(status=500, reason="Server Error")
+        channel.send = AsyncMock(side_effect=discord.HTTPException(response, "boom"))
+        bot.get_channel = MagicMock(return_value=channel)
+        await TablesCog(bot).repost_play_message(CHANNEL)  # logged, not raised
+        channel.get_partial_message.assert_not_called()  # the old embed is still there
+        row = await db.get_multiplayer_channel(CHANNEL)
+        assert row is not None and row.play_message_id == 1

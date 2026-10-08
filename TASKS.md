@@ -448,6 +448,9 @@ Plan: `docs/superpowers/plans/2026-10-07-multiplayer-m2-tables-and-duel.md`.
   finished table's result stays on screen until the next table is requested.
 - A table in play refuses another Play press; the host or an admin can cancel an unstarted
   table (everyone is refunded); a started table cannot be cancelled.
+- However a table ends (finished, tied, cancelled, aborted, or cut off by a restart), a fresh
+  Play embed is posted under its result and the old one is removed, so the button is always at
+  the bottom of the channel.
 - A duel starts when the second player joins at the host's stake; picks are private; the
   closest pick to the hidden number wins the pot minus the 2% rake; a tie refunds both.
 - Every settlement is one transaction; the lottery pot receives only the rake from a duel and

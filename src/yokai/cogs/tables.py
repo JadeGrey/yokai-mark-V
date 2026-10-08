@@ -29,6 +29,8 @@ class TablesCog(commands.Cog, name="Tables"):
     async def cog_load(self) -> None:
         # One persistent view answers every Play button, in every channel, across restarts.
         self.bot.add_view(PlayView(self.bot))
+        # When any table ends, put a fresh Play embed under its result.
+        self.bot.tables.on_closed = self.repost_play_message
 
     def _play_embed(self, game: str) -> discord.Embed:
         spec = self.bot.tables.spec(game)
@@ -52,6 +54,25 @@ class TablesCog(commands.Cog, name="Tables"):
         for message_id in (row.play_message_id, row.table_message_id):
             if message_id:
                 await delete_message_quietly(channel, message_id)
+
+    async def repost_play_message(self, channel_id: int) -> None:
+        """Post a fresh Play embed at the bottom of the channel, under the table that just ended.
+
+        The new embed goes up before the old one comes down, so the channel is never left
+        without a Play button.
+        """
+        row = await self.bot.db.get_multiplayer_channel(channel_id)
+        channel = self.bot.get_channel(channel_id)
+        if row is None or not isinstance(channel, discord.TextChannel):
+            return
+        try:
+            message = await self._post_play_message(channel, row.game)
+        except discord.HTTPException as exc:
+            logger.warning("Could not repost the Play embed in %d: %s", channel_id, exc)
+            return
+        await self.bot.db.set_play_message(channel_id, message.id)
+        if row.play_message_id:
+            await delete_message_quietly(channel, row.play_message_id)
 
     # ---- provisioning --------------------------------------------------------------------
 
@@ -116,6 +137,8 @@ class TablesCog(commands.Cog, name="Tables"):
                 continue
             if row.table_active:
                 await self._close_interrupted_table(channel, row)
+                await self.repost_play_message(row.channel_id)  # a fresh Play under the notice
+                continue
             await self._ensure_play_message(channel, row)
 
     async def _close_interrupted_table(

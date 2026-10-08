@@ -575,3 +575,49 @@ async def test_a_zero_jackpot_rake_pays_the_whole_pot(tmp_path: Path) -> None:
         result = await manager.resolve_jackpot(lobby)
         assert (result.winner_id, result.prize, result.rake) == (1, 600, 0)
         assert await db.get_pot() == 0
+
+
+# ---- the Play embed comes back when a table ends ------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_closed_hook_runs_when_a_table_is_cancelled(tmp_path: Path) -> None:
+    async with world(tmp_path) as (_, manager, _active):
+        manager.on_closed = AsyncMock()
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        manager.on_closed.assert_not_awaited()  # opening a table is not closing one
+        await manager.cancel(lobby, 1, is_admin=False)
+        manager.on_closed.assert_awaited_once_with(CHANNEL)
+
+
+@pytest.mark.asyncio
+async def test_the_closed_hook_runs_when_a_table_is_settled_tied_or_aborted(
+    tmp_path: Path,
+) -> None:
+    for how in ("settle", "tie", "abort", "too-few"):
+        async with world(tmp_path / how if False else tmp_path) as (db, manager, _):
+            manager.on_closed = AsyncMock()
+            lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+            if how == "too-few":
+                await manager.begin(lobby)
+            else:
+                await manager.join(lobby, 2, None)
+                await manager.begin(lobby)
+                if how == "settle":
+                    await manager.settle(lobby, {1: 196, 2: 0})
+                elif how == "tie":
+                    await manager.refund_round(lobby)
+                else:
+                    await manager.abort(lobby)
+            manager.on_closed.assert_awaited_once_with(CHANNEL)
+        (tmp_path / "tables.db").unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_a_failing_closed_hook_never_breaks_the_table(tmp_path: Path) -> None:
+    async with world(tmp_path) as (db, manager, active):
+        manager.on_closed = AsyncMock(side_effect=RuntimeError("discord is down"))
+        lobby = await manager.open_table(CHANNEL, "duel", 1, 100, announce_ok)
+        await manager.cancel(lobby, 1, is_admin=False)  # must not raise
+        assert lobby.state is LobbyState.CANCELLED
+        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
