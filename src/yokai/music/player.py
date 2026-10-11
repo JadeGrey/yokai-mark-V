@@ -52,11 +52,14 @@ RESUMED_END_GRACE_S = 5  # a resumed source ending this soon after its offset = 
 INSTANT_END_FLOOR_S = 5  # a clean end before this many seconds of a track = dead stream
 INSTANT_END_MIN_DURATION_S = 30  # ...but only for tracks at least this long
 PREFETCH_DEPTH = 2  # how many upcoming tracks get their stream URL and buffer file ready
-STALL_GRACE_S = 30  # PLAYING this long past the known duration = a stalled read
+STALL_GRACE_S = 8  # PLAYING this long past the known duration = a stalled read
 FFMPEG_EXIT_WAIT_S = 1.0  # max wait for a just-ended FFmpeg process to be reaped (see `_after`)
-# -rw_timeout (microseconds): give up on a network read that stalls for 15 s (dead TCP link)
+# -rw_timeout (microseconds): give up on a network read that stalls for 15 s (dead TCP link).
+# -reconnect_delay_max 1: retry a dropped read within a second; the old 5 s backoff was audible
+# as a pause followed by a skip forward when the voice sender caught up.
 FFMPEG_BEFORE_OPTIONS = (
-    "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -rw_timeout 15000000"
+    "-reconnect 1 -reconnect_streamed 1 -reconnect_on_network_error 1 "
+    "-reconnect_delay_max 1 -rw_timeout 15000000"
 )
 
 

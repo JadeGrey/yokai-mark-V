@@ -1000,3 +1000,11 @@ async def test_age_gated_track_is_not_retried(ffmpeg) -> None:
     assert resolver.stream_call_count == 1  # a login wall will not clear on a second try
     assert outcomes(bot, "gated") == ["error"]
     assert player.text_channel.send.await_count == 1
+
+
+def test_live_stream_reconnects_quickly_and_the_stall_grace_is_short() -> None:
+    """A dead read must not leave 5 s of silence or a 30 s hang at the end of a track."""
+    opts = player_module.FFMPEG_BEFORE_OPTIONS.split()
+    assert opts[opts.index("-reconnect_delay_max") + 1] == "1"
+    assert "-reconnect_on_network_error" in opts
+    assert player_module.STALL_GRACE_S <= 10
