@@ -335,6 +335,32 @@ def test_constructor_rejects_a_player_seated_twice() -> None:
         PokerHand({A: 100, B: 100}, [A, B, A], A, 5, 10, deck)
 
 
+def test_short_all_in_big_blind_does_not_lower_the_price_for_everyone_else() -> None:
+    """Players still owe the full big blind when the big blind could only post part of it."""
+    h = hand({A: 1000, B: 1000, C: 4}, {A: "2c 3d", B: "4c 5d", C: "6c 7d"}, "8h 9h 10h Jd Qs")
+    assert h.current_bet == 10
+    assert h.legal_actions(A).call_amount == 10
+    assert h.legal_actions(A).min_raise_to == 20
+
+
+def test_several_short_all_ins_that_add_up_to_a_full_raise_reopen_the_betting() -> None:
+    h = hand(
+        {A: 1000, B: 1000, C: 170, D: 230},
+        {A: "2c 3d", B: "4c 5d", C: "6c 7d", D: "9c 9d"},
+        "8h Kh 10h Jd Qs",
+        button=D,
+    )
+    for user in (C, D, A):  # everyone limps, the big blind checks
+        h.call(user)
+    h.check(B)
+    h.raise_to(A, 100)  # flop: a bet of 100, so a full raise is another 100
+    h.call(B)
+    h.all_in(C)  # to 160: a raise of 60, short
+    h.all_in(D)  # to 220: another 60, short on its own but 120 over A's bet in total
+    assert h.current == A
+    assert h.legal_actions(A).min_raise_to == 320
+
+
 # ---- conservation property --------------------------------------------------------------------
 
 

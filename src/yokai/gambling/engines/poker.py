@@ -178,7 +178,9 @@ class PokerHand:
         self._deck = list(deck)
         self._next = 0
         self._needs: set[int] = set()
-        self._no_raise: set[int] = set()  # acted already and only faced a short all-in since
+        # The bet each player faced when they last acted this street. They may raise again only
+        # once the bet has grown by at least a full raise since then.
+        self._acted_at: dict[int, int] = {}
         self._turn: Optional[int] = None
         self._result: Optional[HandResult] = None
 
@@ -195,7 +197,8 @@ class PokerHand:
             first = self._after(big)
         self._post(small, small_blind)
         self._post(big, big_blind)
-        self.current_bet = max(self.bet.values())
+        # A blind that could only be posted in part still costs everyone else the full blind.
+        self.current_bet = max(max(self.bet.values()), big_blind)
         self._needs = {u for u in self.order if not self._is_all_in(u)}
         self._settle_turn(first)
 
@@ -229,7 +232,10 @@ class PokerHand:
         to_call = min(self.current_bet - self.bet[user_id], stack)
         all_in_to = self.bet[user_id] + stack
         can_raise = (
-            user_id not in self._no_raise
+            (
+                user_id not in self._acted_at
+                or self.current_bet - self._acted_at[user_id] >= self.min_raise
+            )
             and all_in_to > self.current_bet
             and self._others_can_respond(user_id)
         )
@@ -329,11 +335,7 @@ class PokerHand:
         size = total - self.current_bet
         self._put_in(user_id, total - self.bet[user_id])
         if size >= self.min_raise:
-            self.min_raise = size
-            self._no_raise.clear()
-        else:
-            # A short all-in: players who already acted may call or fold but not re-raise.
-            self._no_raise |= {u for u in self.order if u not in self._needs and u != user_id}
+            self.min_raise = size  # a short all-in leaves the minimum raise as it was
         self.current_bet = total
         self._needs |= {
             u
@@ -344,6 +346,7 @@ class PokerHand:
 
     def _finish_action(self, user_id: int) -> None:
         self._needs.discard(user_id)
+        self._acted_at[user_id] = self.current_bet
         self._settle_turn(self._after(user_id))
 
     def _settle_turn(self, start: int) -> None:
@@ -383,7 +386,7 @@ class PokerHand:
         self.bet = {u: 0 for u in self.order}
         self.current_bet = 0
         self.min_raise = self.big_blind
-        self._no_raise.clear()
+        self._acted_at.clear()
         live = [u for u in self.in_hand() if not self._is_all_in(u)]
         self._needs = set(live) if len(live) > 1 else set()
 
