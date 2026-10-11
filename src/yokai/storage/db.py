@@ -1084,15 +1084,20 @@ class Database:
         async with self._write_lock:
             try:
                 async with self.conn.execute(
-                    "SELECT user_id, game, stake FROM gambling_bets "
+                    "SELECT user_id, game, stake, lobby_id FROM gambling_bets "
                     "WHERE id = ? AND status = 'open';",
                     (bet_id,),
                 ) as cursor:
                     row = await cursor.fetchone()
                 if row is None:
                     raise BetNotOpenError(bet_id)
-                user_id, game, stake = row
-                credit = stake if refund else payout
+                user_id, game, stake, lobby_id = row
+                if not refund:
+                    credit = payout
+                elif game == "poker" and lobby_id is not None:
+                    credit = await self._poker_refund_amount(lobby_id, stake)
+                else:
+                    credit = stake
                 status = "refunded" if refund else "settled"
                 # Conditioned on status = 'open', so a racing second close can never
                 # double-pay.
@@ -1137,6 +1142,40 @@ class Database:
             raise ValueError("settle_bet payout must not be negative")
         return await self._finish_bet(bet_id, payout, refund=False)
 
+    async def _close_bet_with_payout(
+        self, bet_id: int, user_id: int, game: str, stake: int, payout: int, now: int
+    ) -> int:
+        """Settle one open bet inside a caller-held transaction; returns the owner's balance.
+
+        Credits `payout`, records a win/push/payout row when it is above zero, and raises
+        BetNotOpenError if the bet is no longer open. The caller commits.
+        """
+        cursor = await self.conn.execute(
+            "UPDATE gambling_bets SET status = 'settled', payout = ? "
+            "WHERE id = ? AND status = 'open';",
+            (payout, bet_id),
+        )
+        if cursor.rowcount == 0:
+            raise BetNotOpenError(bet_id)
+        if payout > 0:
+            await self.conn.execute(
+                "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                (payout, user_id),
+            )
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        if payout > 0:
+            if payout > stake:
+                prefix = "win"
+            elif payout == stake:
+                prefix = "push"
+            else:
+                prefix = "payout"
+            await self._insert_transaction(
+                user_id, payout, f"{prefix}:{game}", None, wallet.balance, now
+            )
+        return wallet.balance
+
     async def settle_lobby(self, payouts: Mapping[int, int]) -> dict[int, int]:
         """Settle every bet of one table in ONE transaction; returns {bet_id: owner's new balance}.
 
@@ -1172,34 +1211,82 @@ class Database:
             balances: dict[int, int] = {}
             for bet_id, payout in payouts.items():
                 user_id, _, stake = rows[bet_id]
-                cursor = await self.conn.execute(
-                    "UPDATE gambling_bets SET status = 'settled', payout = ? "
-                    "WHERE id = ? AND status = 'open';",
-                    (payout, bet_id),
+                balances[bet_id] = await self._close_bet_with_payout(
+                    bet_id, user_id, game, stake, payout, now
                 )
-                if cursor.rowcount == 0:
-                    raise BetNotOpenError(bet_id)
-                if payout > 0:
-                    await self.conn.execute(
-                        "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
-                        (payout, user_id),
-                    )
-                wallet = await self.get_wallet(user_id)
-                assert wallet is not None
-                if payout > 0:
-                    if payout > stake:
-                        prefix = "win"
-                    elif payout == stake:
-                        prefix = "push"
-                    else:
-                        prefix = "payout"
-                    await self._insert_transaction(
-                        user_id, payout, f"{prefix}:{game}", None, wallet.balance, now
-                    )
-                balances[bet_id] = wallet.balance
             await self._credit_pot(game, lobby_house_take(game, stakes, amounts), now)
             await self.conn.commit()
         return balances
+
+    async def cash_out_lobby(self, lobby_id: str, payouts: Mapping[int, int]) -> dict[int, int]:
+        """Pay out poker seats of one table (one seat leaving, or the final settle) atomically.
+
+        `payouts` maps bet id to the Renown paid for that seat's chips. Unlike `settle_lobby`, a
+        seat may be paid more than its own buy-in; the limit is the whole table: everything paid
+        so far plus this call may not exceed the sum of all buy-ins. Poker has no rake, so
+        nothing goes to the lottery pot. Returns {bet_id: owner's new balance}.
+        """
+        if not payouts:
+            raise ValueError("cash_out_lobby needs at least one bet")
+        if any(amount < 0 for amount in payouts.values()):
+            raise ValueError("cash_out_lobby payouts must not be negative")
+        now = int(time.time())
+        async with self._write_tx():
+            rows: dict[int, tuple[int, int]] = {}
+            for bet_id in payouts:
+                async with self.conn.execute(
+                    "SELECT user_id, game, stake, lobby_id FROM gambling_bets "
+                    "WHERE id = ? AND status = 'open';",
+                    (bet_id,),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row is None:
+                    raise BetNotOpenError(bet_id)
+                if row[1] != "poker" or row[3] != lobby_id:
+                    raise ValueError("only poker bets of this table can be cashed out here")
+                rows[bet_id] = (row[0], row[2])
+            total, paid = await self._poker_table_totals(lobby_id)
+            if paid + sum(payouts.values()) > total:
+                raise ValueError("that would pay out more than the table holds")
+            balances: dict[int, int] = {}
+            for bet_id, payout in payouts.items():
+                user_id, stake = rows[bet_id]
+                balances[bet_id] = await self._close_bet_with_payout(
+                    bet_id, user_id, "poker", stake, payout, now
+                )
+            await self.conn.commit()
+        return balances
+
+    async def _poker_table_totals(self, lobby_id: str) -> tuple[int, int]:
+        """(all buy-ins, Renown already paid or refunded) for one poker table."""
+        async with self.conn.execute(
+            "SELECT COALESCE(SUM(stake), 0), "
+            "COALESCE(SUM(CASE WHEN status = 'open' THEN 0 ELSE payout END), 0) "
+            "FROM gambling_bets WHERE lobby_id = ?;",
+            (lobby_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        assert row is not None
+        return row[0], row[1]
+
+    async def _poker_refund_amount(self, lobby_id: str, stake: int) -> int:
+        """What an open poker bet is refunded: its buy-in, capped to its share of what is left.
+
+        When some seats were already paid (maybe more than their buy-in), the open seats can
+        only share the rest of the table, or a restart would pay out more than was bought in.
+        """
+        total, paid = await self._poker_table_totals(lobby_id)
+        async with self.conn.execute(
+            "SELECT COALESCE(SUM(stake), 0) FROM gambling_bets "
+            "WHERE lobby_id = ? AND status = 'open';",
+            (lobby_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        assert row is not None
+        open_stakes = row[0]
+        if open_stakes <= 0:
+            return 0
+        return max(0, min(stake, (total - paid) * stake // open_stakes))
 
     async def refund_bet(self, bet_id: int) -> int:
         """Return an open bet's stake to the wallet; returns the new balance."""
