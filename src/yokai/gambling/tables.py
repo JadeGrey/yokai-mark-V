@@ -19,6 +19,7 @@ from yokai.errors import (
     BetNotOpenError,
     InvalidGameChoiceError,
     LobbyClosedError,
+    NotAtTableError,
     NotHostError,
     TableBusyError,
 )
@@ -276,6 +277,56 @@ class TableManager:
             await self._mark_channel_idle(lobby)
             return {user_id: balances[seat.bet_id] for user_id, seat in lobby.seats.items()}
 
+    # ---- poker ---------------------------------------------------------------------------
+
+    async def cash_out(self, lobby: Lobby, user_id: int, chips: int) -> int:
+        """Pay one poker seat its chips now (it left or busted); returns their new balance.
+
+        The rest of the table keeps playing. The seat's one-game claim is released, so they can
+        start another game right away.
+        """
+        async with lobby.lock:
+            if lobby.state is not LobbyState.RUNNING:
+                raise LobbyClosedError()
+            if user_id not in lobby.seats:
+                raise NotAtTableError()
+            if user_id in lobby.paid_out:
+                raise ValueError("this seat was already paid out")
+            seat = lobby.seats[user_id]
+            balances = await self.db.cash_out_lobby(lobby.id, {seat.bet_id: chips})
+            lobby.mark_paid_out(user_id, chips)
+            self.active_games.release(user_id)
+            return balances[seat.bet_id]
+
+    async def settle_poker(self, lobby: Lobby, payouts: Mapping[int, int]) -> dict[int, int]:
+        """End a poker table: pay the seats still at it and close. Returns their new balances.
+
+        `payouts` must cover exactly the seats not yet cashed out, and together with what was
+        already paid it must equal the table's buy-ins (poker has no rake).
+        """
+        async with lobby.lock:
+            if lobby.state is not LobbyState.RUNNING:
+                raise LobbyClosedError()
+            remaining = lobby.remaining_seats
+            if set(payouts) != set(remaining):
+                raise ValueError("payouts must cover every seat still at the table, and only those")
+            if any(amount < 0 for amount in payouts.values()):
+                raise ValueError("payouts must not be negative")
+            if sum(lobby.paid_out.values()) + sum(payouts.values()) != lobby.pot:
+                raise ValueError("a poker table must pay out exactly what was bought in")
+            balances: dict[int, int] = {}
+            if payouts:
+                by_bet = {remaining[user_id].bet_id: amount for user_id, amount in payouts.items()}
+                try:
+                    paid = await self.db.cash_out_lobby(lobby.id, by_bet)
+                except BaseException:
+                    await self._refund_all_locked(lobby, LobbyState.CANCELLED)
+                    raise
+                balances = {user_id: paid[remaining[user_id].bet_id] for user_id in payouts}
+            self._finish(lobby, LobbyState.SETTLED)
+            await self._mark_channel_idle(lobby)
+            return balances
+
     async def refund_round(self, lobby: Lobby) -> dict[int, int]:
         """End a running table by returning every stake (a tie); returns new balances."""
         async with lobby.lock:
@@ -317,7 +368,7 @@ class TableManager:
 
     def _finish(self, lobby: Lobby, state: LobbyState) -> None:
         lobby.close(state)
-        for user_id in lobby.seats:
+        for user_id in lobby.remaining_seats:  # seats paid out earlier were released then
             self.active_games.release(user_id)
 
     async def _refund_seat(self, seat: Seat) -> tuple[bool, Optional[int]]:
@@ -352,7 +403,7 @@ class TableManager:
         balances: dict[int, int] = {}
         confirmed: set[int] = set()
         try:
-            for user_id, seat in list(lobby.seats.items()):
+            for user_id, seat in list(lobby.remaining_seats.items()):
                 closed, balance = await self._refund_seat(seat)
                 if balance is not None:
                     balances[user_id] = balance
