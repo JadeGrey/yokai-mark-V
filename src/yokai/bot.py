@@ -97,6 +97,7 @@ class YokaiBot(commands.Bot):
             pick_seconds=config.gambling_turn_seconds,
             jackpot_rake_percent=config.gambling_jackpot_rake_percent,
             crash_max_multiplier=config.gambling_crash_max_multiplier,
+            poker_max_hands=config.gambling_poker_max_hands,
         )
         self._tables_reconciled = False
         self._tables_reconciled = False

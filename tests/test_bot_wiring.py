@@ -343,6 +343,7 @@ async def test_the_table_manager_gets_the_jackpot_and_crash_settings() -> None:
     bot = make_bot()
     assert bot.tables.jackpot_rake_percent == bot.config.gambling_jackpot_rake_percent
     assert bot.tables.crash_max_multiplier == bot.config.gambling_crash_max_multiplier
+    assert bot.tables.poker_max_hands == bot.config.gambling_poker_max_hands
 
 
 @pytest.mark.asyncio

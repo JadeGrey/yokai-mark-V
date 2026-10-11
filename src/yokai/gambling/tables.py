@@ -82,6 +82,7 @@ class TableManager:
         pick_seconds: int,
         jackpot_rake_percent: int = 2,
         crash_max_multiplier: int = 100,
+        poker_max_hands: int = 30,
         specs: Optional[Mapping[str, GameSpec]] = None,
         clock: Callable[[], float] = time.time,
         rng_factory: Callable[[], random.Random] = new_rng,
@@ -94,6 +95,7 @@ class TableManager:
         self.rake_percent = rake_percent
         self.jackpot_rake_percent = jackpot_rake_percent
         self.crash_max_multiplier = crash_max_multiplier
+        self.poker_max_hands = poker_max_hands
         self.join_seconds = join_seconds
         self.pick_seconds = pick_seconds
         self.specs: Mapping[str, GameSpec] = specs if specs is not None else GAME_SPECS

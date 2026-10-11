@@ -92,6 +92,16 @@ def test_crash_cap_has_a_floor_of_two() -> None:
     assert _load({"GAMBLING_CRASH_MAX_MULTIPLIER": "0"}).gambling_crash_max_multiplier == 2
 
 
+def test_poker_hand_cap_defaults_to_thirty_and_can_be_changed() -> None:
+    assert _load().gambling_poker_max_hands == 30
+    assert _load({"GAMBLING_POKER_MAX_HANDS": "12"}).gambling_poker_max_hands == 12
+
+
+def test_poker_hand_cap_has_a_floor_of_one() -> None:
+    assert _load({"GAMBLING_POKER_MAX_HANDS": "0"}).gambling_poker_max_hands == 1
+    assert _load({"GAMBLING_POKER_MAX_HANDS": "-5"}).gambling_poker_max_hands == 1
+
+
 def test_lottery_defaults() -> None:
     cfg = _load()
     assert cfg.lottery_ticket_price == 100

@@ -68,6 +68,7 @@ class Config:
     gambling_turn_seconds: int = 45
     gambling_jackpot_rake_percent: int = 2
     gambling_crash_max_multiplier: int = 100
+    gambling_poker_max_hands: int = 30
 
     # Lottery
     lottery_ticket_price: int = 100
@@ -217,6 +218,9 @@ def load_config(env_path: Path | str | None = None) -> Config:
             "GAMBLING_CRASH_MAX_MULTIPLIER", os.getenv("GAMBLING_CRASH_MAX_MULTIPLIER"), 100
         ),
     )
+    gambling_poker_max_hands = max(
+        1, _parse_int("GAMBLING_POKER_MAX_HANDS", os.getenv("GAMBLING_POKER_MAX_HANDS"), 30)
+    )
     lottery_ticket_price = max(
         1, _parse_int("LOTTERY_TICKET_PRICE", os.getenv("LOTTERY_TICKET_PRICE"), 100)
     )
@@ -266,6 +270,7 @@ def load_config(env_path: Path | str | None = None) -> Config:
         gambling_turn_seconds=gambling_turn_seconds,
         gambling_jackpot_rake_percent=gambling_jackpot_rake_percent,
         gambling_crash_max_multiplier=gambling_crash_max_multiplier,
+        gambling_poker_max_hands=gambling_poker_max_hands,
         lottery_ticket_price=lottery_ticket_price,
         lottery_number_range=lottery_number_range,
         lottery_max_tickets_per_user=lottery_max_tickets_per_user,
