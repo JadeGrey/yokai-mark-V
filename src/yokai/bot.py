@@ -23,6 +23,7 @@ from yokai.gambling.sessions import ActiveGames
 from yokai.gambling.tables import TableManager
 from yokai.health import HealthReport, check_health
 from yokai.heartbeat import HeartbeatWriter
+from yokai.looplag import LoopLagMonitor
 from yokai.moderation import ModerationStore, UserNameCache, YokaiTree
 from yokai.music.buffer import AudioBuffer
 from yokai.music.player import GuildPlayer
@@ -52,6 +53,7 @@ class YokaiBot(commands.Bot):
         self.moderation = ModerationStore(self.db, config.owner_id)
         self.names = UserNameCache(self.db)
         self.heartbeat = HeartbeatWriter(self.db, __version__)
+        self.loop_lag = LoopLagMonitor()
         self.presence = PresenceManager(self)
         self.searcher = YtMusicSearcher(max_track_seconds=config.max_track_seconds)
         self.resolver = YtDlpResolver(
@@ -178,6 +180,7 @@ class YokaiBot(commands.Bot):
         logger.info("Yokai online as %s (Guild ID: %d)", user_str, self.config.guild_id)
         logger.info("Initial presence confirmed: IDLE, Watching for plant")
         self.heartbeat.start()
+        self.loop_lag.start()
         if not self._tables_reconciled:
             self._tables_reconciled = True
             tables_cog = self.get_cog("Tables")
@@ -303,6 +306,7 @@ class YokaiBot(commands.Bot):
                 logger.debug("Error stopping player during shutdown: %s", exc)
         await self.voice_earn_tracker.stop()
         await self.heartbeat.stop()
+        await self.loop_lag.stop()
         await self.names.close()
         try:
             await self.spotify.close()
