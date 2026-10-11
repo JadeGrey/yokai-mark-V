@@ -22,9 +22,9 @@ def test_the_duel_spec_is_a_two_seat_equal_stake_game() -> None:
     assert spec.label == "Duel" and spec.rules
 
 
-def test_every_planned_game_is_listed_and_only_poker_is_not_playable_yet() -> None:
+def test_every_planned_game_is_listed_and_playable_and_only_the_lottery_has_no_table() -> None:
     assert list(GAME_SPECS) == ["duel", "jackpot", "crash", "bjtable", "poker", "lottery"]
-    assert [name for name, spec in GAME_SPECS.items() if not spec.available] == ["poker"]
+    assert all(spec.available for spec in GAME_SPECS.values())
     assert [name for name, spec in GAME_SPECS.items() if not spec.is_table] == ["lottery"]
     assert all(spec.label and spec.rules for spec in GAME_SPECS.values())
     assert GAME_SPECS["crash"].window_factor == 0.5 and GAME_SPECS["bjtable"].window_factor == 0.5
@@ -36,7 +36,7 @@ def test_every_planned_game_is_listed_and_only_poker_is_not_playable_yet() -> No
 def test_the_poker_spec_is_a_two_to_six_seat_equal_buy_in_game() -> None:
     spec = GAME_SPECS["poker"]
     assert (spec.min_players, spec.max_players, spec.equal_stakes) == (2, 6, True)
-    assert spec.is_table and not spec.available
+    assert spec.is_table and spec.available
     assert spec.label == "Poker table" and "hold'em" in spec.rules
 
 

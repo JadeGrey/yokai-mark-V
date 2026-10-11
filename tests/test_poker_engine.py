@@ -7,8 +7,8 @@ import random
 import pytest
 
 from tests.card_helpers import cards
+from tests.poker_helpers import stacked_deck
 from yokai.errors import InvalidPokerActionError, NotYourTurnError
-from yokai.gambling.engines.blackjack import Card
 from yokai.gambling.engines.poker import (
     FLUSH,
     FULL_HOUSE,
@@ -29,17 +29,6 @@ from yokai.gambling.engines.poker import (
 )
 
 A, B, C, D = 1, 2, 3, 4
-
-
-def stacked_deck(order: list[int], button: int, holes: dict[int, str], board: str) -> list[Card]:
-    """A deck that deals `holes` and then `board` (flop, turn, river) to a hand with `order`."""
-    start = order.index(button)
-    seats = [order[(start + i) % len(order)] for i in range(1, len(order) + 1)]
-    first = [cards(holes[u])[0] for u in seats]
-    second = [cards(holes[u])[1] for u in seats]
-    chosen = [*first, *second, *cards(board)]
-    rest = [c for c in build_deck(random.Random(0)) if str(c) not in {str(x) for x in chosen}]
-    return [*chosen, *rest]
 
 
 def hand(

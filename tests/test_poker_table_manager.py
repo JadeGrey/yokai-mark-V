@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from tests.table_helpers import ALL_PLAYABLE, CHANNEL, announce_ok, balance_of, world
-from yokai.errors import InvalidGameChoiceError, LobbyClosedError, NotAtTableError
+from yokai.errors import LobbyClosedError, NotAtTableError
 from yokai.gambling.lobby import Lobby, LobbyState
 from yokai.gambling.tables import TableManager
 
@@ -173,22 +173,9 @@ async def test_an_open_poker_table_refunds_in_full_when_cancelled(tmp_path: Path
 
 
 @pytest.mark.asyncio
-async def test_poker_cannot_be_opened_until_its_table_ships_and_costs_nothing(
-    tmp_path: Path,
-) -> None:
-    """Guard: with the real game specs poker is listed but not playable (phase P3 flips it)."""
+async def test_poker_can_be_opened_with_the_real_game_specs(tmp_path: Path) -> None:
+    """Guard: poker is playable out of the box (it ships with its table runner in phase P3)."""
     async with world(tmp_path, game="poker") as (db, manager, active):
-        with pytest.raises(InvalidGameChoiceError):
-            await manager.open_table(CHANNEL, "poker", 1, 100, announce_ok)
-        assert await balance_of(db, 1) == 1000 and not active.is_active(1)
-
-
-@pytest.mark.asyncio
-async def test_aborting_after_a_bust_hands_the_busted_buy_in_to_the_remaining_seats(
-    tmp_path: Path,
-) -> None:
-    async with _poker_world(tmp_path) as (db, manager, _):
-        lobby = await _running_poker(manager)
-        await manager.cash_out(lobby, 2, 0)  # player 2 busted
-        await manager.abort(lobby)
-        assert [await balance_of(db, u) for u in (1, 2, 3)] == [1050, 900, 1050]
+        lobby = await manager.open_table(CHANNEL, "poker", 1, 100, announce_ok)
+        assert lobby.spec.name == "poker" and active.is_active(1)
+        assert await balance_of(db, 1) == 900

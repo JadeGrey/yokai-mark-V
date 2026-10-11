@@ -79,7 +79,6 @@ GAME_SPECS: dict[str, GameSpec] = {
         min_players=2,
         max_players=6,
         equal_stakes=True,
-        available=False,  # until its table runner ships (phase P3)
         rules=(
             "Texas hold'em with chips. Everyone buys in for the same amount and plays hands "
             "until the hand limit; leave or bust and your chips are paid out in Renown."

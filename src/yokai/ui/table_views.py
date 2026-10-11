@@ -22,6 +22,7 @@ from yokai.ui.crash_views import run_crash
 from yokai.ui.duel_views import run_duel
 from yokai.ui.embeds import EmbedFactory
 from yokai.ui.jackpot_views import run_jackpot
+from yokai.ui.poker_views import run_poker
 from yokai.ui.table_common import (
     NO_MENTIONS,
     avatar_url,
@@ -48,6 +49,7 @@ GAME_RUNNERS: dict[str, GameRunner] = {
     "jackpot": run_jackpot,
     "crash": run_crash,
     "bjtable": run_bjtable,
+    "poker": run_poker,
 }
 
 
