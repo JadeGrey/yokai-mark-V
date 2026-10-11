@@ -333,3 +333,39 @@ def test_constructor_rejects_a_player_seated_twice() -> None:
     deck = build_deck(random.Random(1))
     with pytest.raises(ValueError):
         PokerHand({A: 100, B: 100}, [A, B, A], A, 5, 10, deck)
+
+
+# ---- conservation property --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("seed", range(300))
+def test_random_hands_conserve_chips(seed: int) -> None:
+    rng = random.Random(seed)
+    n = rng.randint(2, 6)
+    order = list(range(1, n + 1))
+    stacks = {u: rng.choice([5, 20, 100, 250, 1000]) for u in order}
+    total = sum(stacks.values())
+    h = PokerHand(stacks, order, rng.choice(order), 5, 10, build_deck(rng))
+    for _ in range(200):
+        if h.is_over:
+            break
+        user = h.current
+        assert user is not None
+        legal = h.legal_actions(user)
+        move = rng.choice(["fold", "check_call", "check_call", "raise", "all_in"])
+        if move == "fold":
+            h.fold(user)
+        elif move == "raise" and legal.min_raise_to is not None:
+            assert legal.max_raise_to is not None
+            h.raise_to(user, rng.randint(legal.min_raise_to, legal.max_raise_to))
+        elif move == "all_in":
+            h.all_in(user)
+        elif legal.can_check:
+            h.check(user)
+        else:
+            h.call(user)
+    assert h.is_over
+    result = h.result()
+    assert sum(result.stacks.values()) == total
+    assert all(chips >= 0 for chips in result.stacks.values())
+    assert sum(award.amount for award in result.pots) == sum(h.contrib.values())

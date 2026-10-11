@@ -530,3 +530,33 @@ Plan: `docs/superpowers/plans/2026-10-08-multiplayer-m4-lottery.md`.
   restarting the bot keeps the Buy button working.
 
 **STOP — owner review.** This completes Phase 10.
+
+
+---
+
+## Phase 11 — Poker table
+
+**Goal:** Texas hold'em as a cash-game table in a dedicated channel. Spec:
+`docs/superpowers/specs/2026-10-10-poker-design.md`. Phases P1 to P4 each get their own plan and a
+stop for owner review.
+
+### P1 — Engine
+
+Plan: `docs/superpowers/plans/2026-10-10-poker-p1-engine.md`.
+
+- [x] P1.1 Error type, deck and hand evaluator.
+- [x] P1.2 Side pots and the one-hand betting engine.
+- [x] P1.3 Conservation property test.
+
+**Acceptance criteria (P1)**
+- The evaluator ranks all nine categories correctly, including the wheel and steel wheel, kickers
+  and best-5-of-7.
+- A hand plays blinds, action order (heads-up included), min-raise, short all-ins that do not
+  reopen betting, check-or-fold timeouts, fold-wins and showdowns.
+- Side pots are built from contribution levels; ties split with the odd chip to the first winner
+  left of the button; uncalled chips are returned.
+- 300 random legal hands never create or destroy chips.
+- `pytest`, `ruff check` and `ruff format --check` are clean. Nothing here touches Discord, the
+  database or the network.
+
+**STOP — owner review.** P2 (money: `cash_out`) is planned after this review.
