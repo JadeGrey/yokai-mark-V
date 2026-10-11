@@ -363,3 +363,9 @@ class TicketLimitError(YokaiError):
         )
         self.held = held
         self.maximum = maximum
+
+
+class InvalidPokerActionError(YokaiError):
+    """Raised when a poker move is not allowed right now (bad raise size, nothing to call...)."""
+
+    title = "Can't do that"
