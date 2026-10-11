@@ -38,7 +38,8 @@ Success criteria:
 ```
 gambling/engines/poker.py     pure: deck, evaluator, betting state machine, side pots
 gambling/tables.py            + TableManager.cash_out(), + poker table settle
-storage/db.py                 + Database.cash_out_bet() (lobby-level conservation check)
+storage/db.py                 + Database.cash_out_lobby() (lobby-level conservation check),
+                                capped poker refunds
 ui/poker_views.py             public table view, My cards, Raise modal, runner (run_poker)
 ui/embeds.py                  + poker table / result / hand-recap builders
 gambling/lobby.py             + GameSpec "poker" (min 2, max 6, equal_stakes)
@@ -71,21 +72,29 @@ Buy-in goes through the existing `open_table` / `join` (escrow, one-active-game 
 runs in memory.
 
 - `TableManager.cash_out(lobby, user_id, chips)`: under `lobby.lock`, pays one seat its chips and
-  releases that user's one-game claim. Calls `Database.cash_out_bet(bet_id, chips, lobby_id)`.
-- `Database.cash_out_bet`: in one transaction, marks the bet settled with `payout = chips`, credits the
-  wallet, writes the usual `win:` / `push:` / `payout:` transaction row, and **checks conservation at
-  lobby level**: `payouts already settled in this lobby + chips <= total stakes of this lobby`.
-  This replaces the per-seat `payout <= stake` rule of `settle_lobby` for poker, because a winner may
-  legitimately leave with more than their own buy-in. Idempotent: a bet that is not open raises
-  `BetNotOpenError` and changes nothing.
-- When the table ends, the manager settles the remaining seats with the same lobby-level check and
-  finishes the lobby (`SETTLED`). Final invariant asserted in the manager: total paid out equals total
-  buy-ins.
-- Abort/error path: `abort` refunds every **still-open** bet at its original buy-in. A seat that was
-  already cashed out stays paid. (Bets already settled are skipped by the existing
-  `BetNotOpenError`-tolerant refund path.)
-- `lobby.seats` keeps cashed-out users out of the active player list (the runner tracks
-  `active_players`), while `lobby.pot` stays the total of buy-ins for conservation checks.
+  releases that user's one-game claim. Calls `Database.cash_out_lobby(lobby_id, {bet_id: chips})`.
+- `Database.cash_out_lobby(lobby_id, payouts)` (one seat leaving, or the final settle): in one
+  transaction, marks each bet settled with `payout = chips`, credits the wallet, writes the usual
+  `win:` / `push:` / `payout:` transaction row, and **checks conservation at lobby level**:
+  `Renown already paid or refunded in this lobby + this call <= total buy-ins of this lobby`. This
+  replaces the per-batch `payout <= stake` rule of `settle_lobby` for poker, because a winner may
+  legitimately leave with more than their own buy-in. Poker has no rake, so nothing goes to the
+  lottery pot. A bet that is not open raises `BetNotOpenError` and changes nothing; a bet from
+  another table or another game raises `ValueError`.
+- When the table ends, `TableManager.settle_poker(lobby, payouts)` pays the seats still at the table
+  (`payouts` must cover exactly those) through the same method and finishes the lobby (`SETTLED`).
+  Invariant asserted in the manager: total paid out equals total buy-ins.
+- `Lobby.paid_out` (user id -> Renown) records seats already paid. `Lobby.remaining_seats` is the
+  rest. `_finish` and the refund path use `remaining_seats`, so a seat that left earlier is never
+  refunded again and a new game that player started afterwards keeps its claim. `lobby.pot` stays the
+  total of buy-ins.
+- **Refund cap (found while planning P2):** refunding a poker bet at its full buy-in after another
+  seat cashed out with winnings would pay out more than was bought in. So an open poker bet is
+  refunded `min(stake, (all buy-ins - already paid) * stake // open buy-ins)`. With nothing paid
+  yet this is the full buy-in. This applies on every refund path: `abort`, a failed settlement and
+  the startup sweep.
+- Abort/error path: `abort` refunds every **still-open** bet (capped as above). A seat that was
+  already cashed out stays paid.
 
 ### 3.3 UI and runner (`ui/poker_views.py`)
 
@@ -108,7 +117,8 @@ Follows `bjtable_views.py`: one public message edited in place, a lock around st
 
 ### 3.4 Restart and failure handling
 
-No new persistence. The existing startup sweep refunds every open bet; `TablesCog.reconcile` already
+No new persistence. The existing startup sweep refunds every open bet (poker bets capped to what is
+left of the table, see §3.2); `TablesCog.reconcile` already
 closes a table left marked active and reposts the Play embed. A player who leaves the server mid-hand
 is folded and cashed out after the hand.
 

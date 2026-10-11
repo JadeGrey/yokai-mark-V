@@ -560,3 +560,28 @@ Plan: `docs/superpowers/plans/2026-10-10-poker-p1-engine.md`.
   database or the network.
 
 **STOP — owner review.** P2 (money: `cash_out`) is planned after this review.
+
+### P2 — Money
+
+Plan: `docs/superpowers/plans/2026-10-10-poker-p2-money.md`.
+
+- [x] P2.1 `GAMBLING_POKER_MAX_HANDS` setting and wiring.
+- [x] P2.2 Poker game spec (listed, not yet playable) and lobby cash-out bookkeeping.
+- [x] P2.3 `Database.cash_out_lobby` and capped poker refunds.
+- [x] P2.4 `TableManager.cash_out` and `settle_poker`.
+
+**Acceptance criteria (P2)**
+- A poker seat can be paid its chips mid-game, including more than its buy-in, and the one-game
+  claim is released; the table keeps running.
+- The table-wide limit holds: Renown paid out never exceeds the sum of buy-ins, and a batch that
+  would break it pays nobody.
+- The final settle must pay exactly what was bought in; seats paid earlier are never paid or
+  refunded again, and a claim they took since is left alone.
+- After a cash-out, an abort, a failed settlement or a restart refunds the remaining seats only
+  their share of what is left, so no Renown is created.
+- Poker cash-outs add nothing to the lottery pot.
+- Poker is listed in the `/admin set_multiplayer` dropdown but cannot be opened yet (P3).
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+
+**STOP — owner review.** P3 (table UI) is planned after this review.
+
