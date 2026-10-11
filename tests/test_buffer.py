@@ -533,3 +533,58 @@ async def test_ffmpeg_download_timeout(tmp_path: Path, monkeypatch: pytest.Monke
         await ffmpeg_download(url, dest)
     assert fake_proc.kill.called
     assert fake_proc.wait.called
+
+
+@pytest.mark.asyncio
+async def test_download_is_retried_once_after_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("yokai.music.buffer.RETRY_DELAY_S", 0.0)
+    attempts: list[str] = []
+
+    async def flaky(url: str, dest: Path) -> None:
+        attempts.append(url)
+        if len(attempts) == 1:
+            raise RuntimeError("tls pull error")
+        dest.write_bytes(b"x" * 10)
+
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=flaky)
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    assert len(attempts) == 2
+    assert buffer.get("aaaaaaaa") is not None
+
+
+@pytest.mark.asyncio
+async def test_download_gives_up_after_one_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("yokai.music.buffer.RETRY_DELAY_S", 0.0)
+    attempts: list[str] = []
+
+    async def failing(url: str, dest: Path) -> None:
+        attempts.append(url)
+        raise RuntimeError("still broken")
+
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=failing)
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+    await buffer.wait_idle()
+    assert len(attempts) == 2
+    assert buffer.get("aaaaaaaa") is None
+
+
+@pytest.mark.asyncio
+async def test_failure_log_names_the_exception_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A timeout has an empty str(); the log must still say what happened."""
+    monkeypatch.setattr("yokai.music.buffer.RETRY_DELAY_S", 0.0)
+
+    async def timing_out(url: str, dest: Path) -> None:
+        raise asyncio.TimeoutError()
+
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=timing_out)
+    with caplog.at_level("WARNING", logger="yokai.music.buffer"):
+        buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
+        await buffer.wait_idle()
+    assert any("TimeoutError" in r.getMessage() for r in caplog.records)

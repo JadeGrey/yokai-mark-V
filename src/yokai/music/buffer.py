@@ -25,6 +25,7 @@ _URL = re.compile(r"https?://\S+")
 # complete, valid file: it is parser noise, not a failure. Addresses vary per run.
 _BENIGN_OPUS_LINE = re.compile(r"^\[opus @ [0-9a-fA-Fx]+\] Error parsing Opus packet header\.\s*$")
 DOWNLOAD_TIMEOUT_S = 120.0
+RETRY_DELAY_S = 2.0  # pause before the single retry of a failed pre-buffer download
 
 Downloader = Callable[[str, Path], Awaitable[None]]
 
@@ -188,18 +189,29 @@ class AudioBuffer:
             return None
         part = dest.with_suffix(".part")
         async with self._semaphore:
-            try:
-                self.directory.mkdir(parents=True, exist_ok=True)
-                await self._downloader(url, part)
-                os.replace(part, dest)
-                self._discarded.discard(video_id)  # the old file was replaced by a fresh one
-            except asyncio.CancelledError:
-                self._unlink_quietly(part)
-                raise
-            except Exception as exc:  # any failure just means "no buffer for this track"
-                logger.warning("Audio pre-buffer failed for %s: %s", video_id, exc)
-                self._unlink_quietly(part)
-                return None
+            for attempt in (1, 2):
+                try:
+                    self.directory.mkdir(parents=True, exist_ok=True)
+                    await self._downloader(url, part)
+                    os.replace(part, dest)
+                    self._discarded.discard(video_id)  # the old file was replaced by a fresh one
+                    break
+                except asyncio.CancelledError:
+                    self._unlink_quietly(part)
+                    raise
+                except Exception as exc:  # any failure just means "no buffer for this track"
+                    # str() of a timeout is empty, so always name the exception type too.
+                    logger.warning(
+                        "Audio pre-buffer failed for %s (attempt %d of 2): %s: %s",
+                        video_id,
+                        attempt,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    self._unlink_quietly(part)
+                    if attempt == 2:
+                        return None
+                    await asyncio.sleep(RETRY_DELAY_S)
         self._evict()
         return dest
 
