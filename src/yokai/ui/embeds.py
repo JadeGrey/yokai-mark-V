@@ -1114,6 +1114,113 @@ Press **Play** to open a table.",
         )
 
     @classmethod
+    def poker_table(
+        cls,
+        hand_no: int,
+        max_hands: int,
+        street: str,
+        board: Sequence[str],
+        pot: int,
+        small_blind: int,
+        big_blind: int,
+        seats: Sequence[
+            tuple[int, int, int, str, bool]
+        ],  # (user, chips, street bet, status, button)
+        deadline_ts: Optional[int],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A poker hand in play: community cards, the pot and every seat. No hole cards."""
+        board_line = f"**Board** `{' '.join(board)}`" if board else "No community cards yet."
+        lines = [f"Hand {hand_no}/{max_hands} · {street.capitalize()}", board_line, ""]
+        for user_id, chips, bet, status, is_button in seats:
+            marker = " (D)" if is_button else ""
+            bet_part = f" · bet {bet:,}" if bet else ""
+            status_part = f" · {status}" if status else ""
+            lines.append(f"<@{user_id}>{marker} — **{chips:,}**{bet_part}{status_part}")
+        fields: list[FieldSpec] = [
+            ("Pot", f"**{pot:,}**", True),
+            ("Blinds", f"**{small_blind:,}/{big_blind:,}**", True),
+        ]
+        if deadline_ts is not None:
+            fields.append(("Turn ends", f"<t:{deadline_ts}:R>", True))
+        return cls._create_base(
+            title=f"{Emoji.DICE} Poker table",
+            description="\n".join(lines),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def poker_hand_result(
+        cls,
+        hand_no: int,
+        max_hands: int,
+        board: Sequence[str],
+        awards: Sequence[tuple[int, Sequence[int], bool]],  # (amount, winners, returned)
+        shown: Mapping[int, tuple[str, str]],  # user -> (hole cards, hand name) at a showdown
+        stacks: Mapping[int, int],
+        left: Sequence[tuple[int, int, str]],  # (user, chips paid out, bust/left/inactive)
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """How a hand ended: who took each pot, the cards shown, the stacks and who left."""
+        lines = [f"Hand {hand_no}/{max_hands} is over."]
+        if board:
+            lines.append(f"**Board** `{' '.join(board)}`")
+        for amount, winners, returned in awards:
+            names = ", ".join(f"<@{user_id}>" for user_id in winners)
+            if returned:
+                lines.append(f"{names} gets **{amount:,}** back (uncalled)")
+            elif len(winners) == 1:
+                lines.append(f"{names} wins **{amount:,}**")
+            else:
+                lines.append(f"{names} split **{amount:,}**")
+        for user_id, (cards_text, hand_name) in shown.items():
+            lines.append(f"<@{user_id}> `{cards_text}` — {hand_name}")
+        phrases = {"bust": "busted", "left": "left the table", "inactive": "sat out too long"}
+        for user_id, chips, reason in left:
+            lines.append(f"<@{user_id}> {phrases.get(reason, reason)} and was paid **{chips:,}**")
+        remaining = [f"<@{user_id}> **{chips:,}**" for user_id, chips in stacks.items() if chips]
+        if remaining:
+            lines.append("**Stacks** " + " · ".join(remaining))
+        return cls._create_base(
+            title=f"{Emoji.DICE} Poker table",
+            description="\n".join(lines),
+            color=COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def poker_final(
+        cls,
+        hands_played: int,
+        max_hands: int,
+        buy_in: int,
+        results: Sequence[tuple[int, int]],  # (user, Renown paid out)
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A closed poker table: what every player bought in for and left with."""
+        lines = [f"The table closed after **{hands_played}/{max_hands}** hands.", ""]
+        profit = False
+        for user_id, paid in results:
+            net = paid - buy_in
+            profit = profit or net > 0
+            change = f"+{net:,}" if net > 0 else (f"-{-net:,}" if net < 0 else "even")
+            lines.append(
+                f"<@{user_id}> — bought in **{buy_in:,}**, left with **{paid:,}** ({change})"
+            )
+        return cls._create_base(
+            title=f"{Emoji.DICE} Poker table",
+            description="\n".join(lines),
+            color=COLOR_SUCCESS if profit else COLOR_BRAND,
+            context="Gambling",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("game_win") if profit else None,
+        )
+
+    @classmethod
     def lottery_panel(
         cls,
         pot: int,
