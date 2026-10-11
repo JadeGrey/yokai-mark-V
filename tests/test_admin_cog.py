@@ -224,6 +224,7 @@ def test_the_game_dropdown_lists_every_planned_game() -> None:
         "jackpot",
         "crash",
         "bjtable",
+        "poker",
         "lottery",
     ]
     assert [choice.name for choice in GAME_CHOICES][:2] == ["Duel", "Jackpot"]

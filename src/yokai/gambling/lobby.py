@@ -73,6 +73,18 @@ GAME_SPECS: dict[str, GameSpec] = {
         window_factor=0.5,
         rules="Blackjack against one shared dealer. Every player plays their own hand.",
     ),
+    "poker": GameSpec(
+        name="poker",
+        label="Poker table",
+        min_players=2,
+        max_players=6,
+        equal_stakes=True,
+        available=False,  # until its table runner ships (phase P3)
+        rules=(
+            "Texas hold'em with chips. Everyone buys in for the same amount and plays hands "
+            "until the hand limit; leave or bust and your chips are paid out in Renown."
+        ),
+    ),
     # Not a table: it has its own channel panel and a weekly draw.
     "lottery": GameSpec(
         name="lottery",
@@ -108,6 +120,9 @@ class Lobby:
         self.closes_at = closes_at
         self.state = LobbyState.OPEN
         self.seats: dict[int, Seat] = {}
+        # Poker only: seats already paid out mid-game (user id -> Renown paid). Their stake is
+        # settled, so a later settle or refund must leave them alone.
+        self.paid_out: dict[int, int] = {}
         self.lock = asyncio.Lock()
         self.message_id: Optional[int] = None
 
@@ -126,6 +141,11 @@ class Lobby:
     @property
     def pot(self) -> int:
         return sum(seat.stake for seat in self.seats.values())
+
+    @property
+    def remaining_seats(self) -> dict[int, Seat]:
+        """Seats whose stake is still escrowed (everyone, unless poker has paid some out)."""
+        return {u: seat for u, seat in self.seats.items() if u not in self.paid_out}
 
     @property
     def host_seat(self) -> Seat:
@@ -155,6 +175,16 @@ class Lobby:
     def remove_seat(self, user_id: int) -> Seat:
         self.check_can_leave(user_id)
         return self.seats.pop(user_id)
+
+    def mark_paid_out(self, user_id: int, chips: int) -> None:
+        """Record that a seat's stake was settled mid-game for `chips` Renown."""
+        if user_id not in self.seats:
+            raise NotAtTableError()
+        if user_id in self.paid_out:
+            raise ValueError("this seat was already paid out")
+        if chips < 0:
+            raise ValueError("a payout cannot be negative")
+        self.paid_out[user_id] = chips
 
     def mark_running(self) -> None:
         if self.state is not LobbyState.OPEN:
