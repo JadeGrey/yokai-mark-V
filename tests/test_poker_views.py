@@ -417,3 +417,42 @@ async def test_buttons_do_nothing_once_the_hand_is_closed(tmp_path: Path) -> Non
         with patch("yokai.ui.table_common.send", new=AsyncMock()) as sent:
             await view.call_button.callback(make_interaction(1))
         assert sent.await_count == 1 and hand.current == 1
+
+
+@pytest.mark.asyncio
+async def test_a_raise_form_left_open_is_refused_once_the_hand_has_moved_on(
+    tmp_path: Path,
+) -> None:
+    async with poker_world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        view, table, hand = make_view(make_bot(db, manager), lobby)
+        stale = RaiseModal(view, 4, 100)  # user 1 opens the form before the flop...
+        await view.call_button.callback(make_interaction(1))
+        await view.call_button.callback(make_interaction(2))  # ...the flop comes, 2 checks...
+        await view.call_button.callback(make_interaction(2))
+        assert hand.current == 1 and hand.street.value == "flop"
+        stale.amount._value = "10"  # ...and now it is user 1's turn again, on a new street
+        with patch("yokai.ui.table_common.send", new=AsyncMock()) as sent:
+            await stale.on_submit(make_interaction(1))
+        assert "out of date" in sent.await_args.kwargs["embed"].description
+        assert hand.current == 1 and hand.bet[1] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_failed_message_edit_at_the_start_of_a_hand_does_not_cancel_the_table(
+    tmp_path: Path,
+) -> None:
+    async with poker_world(tmp_path) as (db, manager, _):
+        lobby = await _running(manager)
+        message = make_message()
+        failures = [discord.HTTPException(MagicMock(status=500, reason="oops"), "boom")]
+
+        async def flaky_edit(**kwargs):  # type: ignore[no-untyped-def]
+            if failures:
+                raise failures.pop()
+
+        message.edit = AsyncMock(side_effect=flaky_edit)
+        with fast_runner([FOLD], deck_for(A_WINS)):
+            await run_poker(make_bot(db, manager), lobby, message)
+        assert (await balance_of(db, 1), await balance_of(db, 2)) == (999, 1001)
+        assert lobby.state is LobbyState.SETTLED

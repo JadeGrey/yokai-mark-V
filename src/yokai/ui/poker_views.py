@@ -128,9 +128,26 @@ class PokerTableView(discord.ui.View):
             self.acted.set()
             await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
-    async def raise_to(self, interaction: discord.Interaction, amount: int) -> None:
-        """Raise so the player's total bet this round is `amount` (the Raise form calls this)."""
-        await self._act(interaction, lambda hand, user_id: hand.raise_to(user_id, amount))
+    def turn_token(self) -> tuple[object, ...]:
+        """Identifies the exact state of the hand a Raise form was opened in."""
+        hand = self.hand
+        return (hand.current, hand.street, hand.current_bet, hand.pot)
+
+    async def raise_to(
+        self, interaction: discord.Interaction, amount: int, token: tuple[object, ...] | None = None
+    ) -> None:
+        """Raise so the player's total bet this round is `amount` (the Raise form calls this).
+
+        A form carries the `token` of the hand it was opened in; if the hand has moved on since
+        (the turn passed, a new street), the raise is refused instead of applied to new facts.
+        """
+
+        def move(hand: PokerHand, user_id: int) -> None:
+            if token is not None and token != self.turn_token():
+                raise InvalidPokerActionError("That raise form is out of date. Press Raise again.")
+            hand.raise_to(user_id, amount)
+
+        await self._act(interaction, move)
 
     @discord.ui.button(label="Fold", style=discord.ButtonStyle.secondary)
     async def fold_button(
@@ -223,6 +240,7 @@ class RaiseModal(discord.ui.Modal):
     def __init__(self, table_view: PokerTableView, min_to: int, max_to: int) -> None:
         super().__init__(title="Raise", timeout=300)
         self.table_view = table_view
+        self.token = table_view.turn_token()
         self.amount = discord.ui.TextInput(
             label="Raise to (your total bet this round)",
             placeholder=f"{min_to:,} to {max_to:,}",
@@ -237,7 +255,7 @@ class RaiseModal(discord.ui.Modal):
         except YokaiError as err:
             await reply_error(self.table_view.bot, interaction, err)
             return
-        await self.table_view.raise_to(interaction, amount)
+        await self.table_view.raise_to(interaction, amount, self.token)
 
 
 async def _await_action(view: PokerTableView, seconds: float) -> bool:
@@ -340,7 +358,10 @@ async def run_poker(bot: YokaiBot, lobby: Lobby, message: discord.Message) -> No
             hand = table.start_hand()
             view = PokerTableView(bot, lobby, table, hand)
             view.message = message
-            await message.edit(embed=view.build_embed(), view=view)
+            # A failed edit is not worth cancelling the table over: the chips are consistent, and
+            # the next edit shows the board again.
+            with contextlib.suppress(discord.HTTPException):
+                await message.edit(embed=view.build_embed(), view=view)
             await _play_hand(bot, table, hand, view, message)
             result = hand.result()
             table.finish_hand(result)
