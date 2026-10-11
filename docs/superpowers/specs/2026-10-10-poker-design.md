@@ -37,6 +37,7 @@ Success criteria:
 
 ```
 gambling/engines/poker.py     pure: deck, evaluator, betting state machine, side pots
+gambling/engines/pokertable.py pure: stacks, blinds, button, busts, leavers, hand cap
 gambling/tables.py            + TableManager.cash_out(), + poker table settle
 storage/db.py                 + Database.cash_out_lobby() (lobby-level conservation check),
                                 capped poker refunds
@@ -105,14 +106,21 @@ Follows `bjtable_views.py`: one public message edited in place, a lock around st
 `acted` event, a deadline per decision, and `finish_table` so any failure refunds and tells players.
 
 - Buttons: **Fold**, **Check / Call N**, **Raise** (opens a modal; validated against min-raise and
-  stack, whole numbers only), **All-in**, **My cards** (ephemeral hole cards, any seated player), and
-  **Leave** (folds now, cashes out after the hand).
+  stack, whole numbers only), **All-in**, **My cards** (ephemeral hole cards and, from the flop, the
+  best hand the player has; any seated player, folded or not), and **Leave** (folds now if it is
+  their turn, otherwise when it comes round; cashed out after the hand). **Raise** and **All-in**
+  are disabled for a player who can only call or fold, so All-in never silently turns into a call.
 - Only the acting player can use action buttons; everyone else gets the standard not-your-turn error.
   `interaction_check` runs the moderation `screen` like the other tables.
 - Turn timer `GAMBLING_TURN_SECONDS` (45 s). On timeout: check if free, otherwise fold. Two
   consecutive timeouts remove the player (folded, cashed out after the hand).
-- Between hands: a short recap embed (winners, pots, shown hands), then the next hand. Busted players
-  (0 chips) are cashed out for 0 and removed.
+- Between hands: a recap embed for a few seconds (winners, pots, shown hands, stacks, who left),
+  then the next hand. Busted players (0 chips) are cashed out for 0 and removed. A later pot that
+  only one player is eligible for (uncalled chips) is shown as "gets N back", not as a win.
+- The pure `PokerTable` (`engines/pokertable.py`) keeps the table between hands: blinds are 1% / 2% of
+  the buy-in rounded up (minimum 1 and 2), the button moves to the next seated player each hand, and
+  the table ends at the hand cap or when fewer than two players are left. The runner only plays
+  hands and calls `TableManager.cash_out` / `settle_poker`.
 - Embeds go through `EmbedFactory`; errors ephemeral; `allowed_mentions` none; at most one emoji and
   one quip per embed; plain error text.
 - Hole cards are only ever sent in ephemeral replies; they are never put in the public embed except
@@ -120,10 +128,12 @@ Follows `bjtable_views.py`: one public message edited in place, a lock around st
 
 ### 3.4 Restart and failure handling
 
-No new persistence. The existing startup sweep refunds every open bet (poker bets capped to what is
-left of the table, see §3.2); `TablesCog.reconcile` already
-closes a table left marked active and reposts the Play embed. A player who leaves the server mid-hand
-is folded and cashed out after the hand.
+No new persistence. The existing startup sweep refunds every open bet (poker bets get their share of
+what is left of the table, see §3.2); `TablesCog.reconcile` already
+closes a table left marked active and reposts the Play embed. A player who leaves the server or goes
+quiet mid-game is removed by the two-missed-turns rule (folded each turn, cashed out after the hand);
+the bot does not watch server membership, because without the members intent its cache cannot tell
+"left" from "not cached".
 
 ## 4. Configuration
 

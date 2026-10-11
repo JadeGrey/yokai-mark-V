@@ -585,3 +585,31 @@ Plan: `docs/superpowers/plans/2026-10-10-poker-p2-money.md`.
 
 **STOP — owner review.** P3 (table UI) is planned after this review.
 
+### P3 — Table UI
+
+Plan: `docs/superpowers/plans/2026-10-10-poker-p3-table-ui.md`.
+
+- [x] P3.1 The multi-hand table (`PokerTable`): blinds, button, busts, leavers, hand cap.
+- [x] P3.2 Poker embeds (table, hand recap, final).
+- [x] P3.3 Views and runner: action buttons, My cards, Raise form, Leave, timers; poker playable.
+- [x] P3.4 Docs.
+
+**Acceptance criteria (P3)**
+- A poker table opens from the Play embed, fills with equal buy-ins, and plays hand after hand on one
+  message edited in place; only the acting player's buttons work.
+- Hole cards are only ever shown ephemerally to their owner, and publicly only at a showdown.
+- A missed turn checks when free and folds otherwise; two in a row remove the player; Leave folds and
+  pays out; a busted player is paid nothing and removed.
+- The table closes at the hand cap or when fewer than two players are left, and pays everyone their
+  chips: Renown in equals Renown out, nothing goes to the lottery pot.
+- A failure at any point refunds the seats still at the table and tells the channel.
+- Poker is playable (listed, openable, `/admin set_multiplayer game:Poker table` works).
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* Dedicate a channel to Poker; open a table with 3 members; play several
+  hands using Call, Raise (below the minimum, junk text, a valid raise), All-in and Fold; check My
+  cards is private and a stranger is refused; let a turn time out, then leave with Leave; bust a
+  player; restart the bot mid-hand and check balances and that a fresh Play embed returns; play to
+  the hand cap (`GAMBLING_POKER_MAX_HANDS=3` is handy) and check the final embed and `/balance`.
+
+**STOP — owner review.** P4 (docs and wrap-up) is planned after this review.
+
