@@ -88,11 +88,14 @@ runs in memory.
   rest. `_finish` and the refund path use `remaining_seats`, so a seat that left earlier is never
   refunded again and a new game that player started afterwards keeps its claim. `lobby.pot` stays the
   total of buy-ins.
-- **Refund cap (found while planning P2):** refunding a poker bet at its full buy-in after another
-  seat cashed out with winnings would pay out more than was bought in. So an open poker bet is
-  refunded `min(stake, (all buy-ins - already paid) * stake // open buy-ins)`. With nothing paid
-  yet this is the full buy-in. This applies on every refund path: `abort`, a failed settlement and
-  the startup sweep.
+- **Refund share (found while planning P2, corrected in review):** refunding a poker bet at its
+  full buy-in after another seat cashed out with winnings would pay out more than was bought in,
+  and capping it at the buy-in would destroy the buy-ins of busted seats. So an open poker bet is
+  refunded its share by buy-in of everything left: `(all buy-ins - already paid) * stake // open
+  buy-ins`. With nothing paid yet this is the full buy-in. This applies on every refund path:
+  `abort`, a failed settlement and the startup sweep. Chip counts are not persisted, so the split
+  is by buy-in, not by chips (accepted: a crash mid-game is rare and the table's Renown is
+  conserved).
 - Abort/error path: `abort` refunds every **still-open** bet (capped as above). A seat that was
   already cashed out stays paid.
 

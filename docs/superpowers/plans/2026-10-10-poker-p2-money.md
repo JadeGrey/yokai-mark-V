@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Post-review amendment (2026-10-10):** the final review found that the refund formula below, with
+> its `min(stake, ...)` cap, destroyed the buy-ins of busted seats on an abort or restart. The code
+> now refunds `(all buy-ins - already paid) * stake // open buy-ins` with no cap; see the spec's
+> "Refund share" bullet. Where this plan says "capped", read "shared out".
+
 **Goal:** Let a poker seat be paid its chips mid-game and let the table settle what is left, without ever creating or losing Renown, and add the poker game spec and hand-cap setting.
 
 **Architecture:** Poker reuses the existing escrow: each player's buy-in is an ordinary open bet in the table's lobby. A new `Database.cash_out_lobby` pays one or more of those bets with a table-wide limit (everything paid or refunded plus this call may not exceed the sum of all buy-ins) and no rake. `TableManager.cash_out` / `settle_poker` wrap it with the lobby lock and one-game claims. Refunds of poker bets are capped to what is left of the table, so an abort or restart after a cash-out cannot pay out more than was bought in.

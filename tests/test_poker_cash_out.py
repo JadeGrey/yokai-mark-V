@@ -177,3 +177,18 @@ async def test_the_startup_sweep_applies_the_same_cap(tmp_path: Path) -> None:
         assert await _balance(db, 1) == 1200
     finally:
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_a_busted_seats_buy_in_goes_to_the_seats_still_open_when_refunding(
+    tmp_path: Path,
+) -> None:
+    """B busted (paid nothing). If the table then aborts, A and C split all 300, not 100 each."""
+    db, a, b, c = await _world(tmp_path)
+    try:
+        await db.cash_out_lobby("L1", {b: 0})
+        assert await db.refund_bet(a) == 1050  # 300 * 100 // 200 = 150 back
+        assert await db.refund_bet(c) == 1050  # the other 150
+        assert sum([await _balance(db, u) for u in (1, 2, 3)]) == 3000
+    finally:
+        await db.close()

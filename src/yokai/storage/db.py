@@ -1270,10 +1270,12 @@ class Database:
         return row[0], row[1]
 
     async def _poker_refund_amount(self, lobby_id: str, stake: int) -> int:
-        """What an open poker bet is refunded: its buy-in, capped to its share of what is left.
+        """What an open poker bet is refunded: its share (by buy-in) of everything left.
 
-        When some seats were already paid (maybe more than their buy-in), the open seats can
-        only share the rest of the table, or a restart would pay out more than was bought in.
+        Seats already paid took their chips out, so the open seats split the rest of the table:
+        less than their buy-ins when someone left with winnings, more when someone busted. With
+        nothing paid yet this is exactly the buy-in. The shares never add up to more than what
+        is left, so a restart cannot create Renown, and nothing is lost to busted seats.
         """
         total, paid = await self._poker_table_totals(lobby_id)
         async with self.conn.execute(
@@ -1286,7 +1288,7 @@ class Database:
         open_stakes = row[0]
         if open_stakes <= 0:
             return 0
-        return max(0, min(stake, (total - paid) * stake // open_stakes))
+        return max(0, (total - paid) * stake // open_stakes)
 
     async def refund_bet(self, bet_id: int) -> int:
         """Return an open bet's stake to the wallet; returns the new balance."""

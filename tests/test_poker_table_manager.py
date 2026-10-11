@@ -181,3 +181,14 @@ async def test_poker_cannot_be_opened_until_its_table_ships_and_costs_nothing(
         with pytest.raises(InvalidGameChoiceError):
             await manager.open_table(CHANNEL, "poker", 1, 100, announce_ok)
         assert await balance_of(db, 1) == 1000 and not active.is_active(1)
+
+
+@pytest.mark.asyncio
+async def test_aborting_after_a_bust_hands_the_busted_buy_in_to_the_remaining_seats(
+    tmp_path: Path,
+) -> None:
+    async with _poker_world(tmp_path) as (db, manager, _):
+        lobby = await _running_poker(manager)
+        await manager.cash_out(lobby, 2, 0)  # player 2 busted
+        await manager.abort(lobby)
+        assert [await balance_of(db, u) for u in (1, 2, 3)] == [1050, 900, 1050]
