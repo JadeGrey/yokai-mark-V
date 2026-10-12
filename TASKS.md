@@ -611,5 +611,19 @@ Plan: `docs/superpowers/plans/2026-10-10-poker-p3-table-ui.md`.
   player; restart the bot mid-hand and check balances and that a fresh Play embed returns; play to
   the hand cap (`GAMBLING_POKER_MAX_HANDS=3` is handy) and check the final embed and `/balance`.
 
-**STOP — owner review.** P4 (docs and wrap-up) is planned after this review.
+Manual real-Discord checklist: run by the owner on 2026-10-12, passed.
+
+**STOP — owner review.** Approved 2026-10-12.
+
+### P4 — Docs and wrap-up
+
+- [x] P4.1 README, `.env.example` and `TASKS.md` describe poker (done within P3.4).
+- [x] P4.2 Manual real-Discord QA recorded as passed (see P3 acceptance).
+- [x] P4.3 Final checkpoint tag `checkpoint/poker-p4`.
+
+**Known minors (deferred, not blocking)**
+- Timeout refresh edits the table message outside the view lock.
+- Recap can label a whole later one-player pot "uncalled" when part was folded chips.
+- Leave pressed as a turn times out shows "not your turn" although the leave is recorded.
+- A failed reply edit leaves the public message stale until the next action.
 
