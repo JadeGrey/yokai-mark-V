@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+
+from yokai.challenges.periods import load_tz
 
 
 class ConfigError(Exception):
@@ -76,6 +79,12 @@ class Config:
     lottery_max_tickets_per_user: int = 10
     lottery_draw_interval_hours: int = 168
 
+    # Challenges
+    challenge_enabled: bool = True
+    challenge_tz: str = "UTC"
+    challenge_min_wager: int = 10
+    challenge_reward_scale: float = 1.0
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -97,6 +106,18 @@ def _parse_int(name: str, value: str | None, default: int | None = None) -> int:
         return int(value.strip())
     except ValueError as err:
         raise ConfigError(f"Invalid integer for {name}: {value!r}") from err
+
+
+def _parse_float(name: str, value: str | None, default: float) -> float:
+    if value is None or not value.strip():
+        return default
+    try:
+        parsed = float(value.strip())
+    except ValueError as err:
+        raise ConfigError(f"Invalid number for {name}: {value!r}") from err
+    if not math.isfinite(parsed):
+        raise ConfigError(f"Invalid number for {name}: {value!r}")
+    return parsed
 
 
 def _parse_optional_path(value: str | None) -> Optional[Path]:
@@ -236,6 +257,20 @@ def load_config(env_path: Path | str | None = None) -> Config:
         _parse_int("LOTTERY_DRAW_INTERVAL_HOURS", os.getenv("LOTTERY_DRAW_INTERVAL_HOURS"), 168),
     )
 
+    challenge_enabled = _parse_bool(os.getenv("CHALLENGE_ENABLED"), default=True)
+    challenge_tz = os.getenv("CHALLENGE_TZ", "UTC").strip() or "UTC"
+    try:
+        load_tz(challenge_tz)
+    except ValueError as err:
+        raise ConfigError(str(err)) from err
+    challenge_min_wager = max(
+        1, _parse_int("CHALLENGE_MIN_WAGER", os.getenv("CHALLENGE_MIN_WAGER"), 10)
+    )
+    challenge_reward_scale = min(
+        10.0,
+        max(0.1, _parse_float("CHALLENGE_REWARD_SCALE", os.getenv("CHALLENGE_REWARD_SCALE"), 1.0)),
+    )
+
     return Config(
         discord_token=token,
         guild_id=guild_id,
@@ -275,4 +310,8 @@ def load_config(env_path: Path | str | None = None) -> Config:
         lottery_number_range=lottery_number_range,
         lottery_max_tickets_per_user=lottery_max_tickets_per_user,
         lottery_draw_interval_hours=lottery_draw_interval_hours,
+        challenge_enabled=challenge_enabled,
+        challenge_tz=challenge_tz,
+        challenge_min_wager=challenge_min_wager,
+        challenge_reward_scale=challenge_reward_scale,
     )
