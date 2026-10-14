@@ -1,0 +1,21 @@
+# Level cap and the base stat curve. All numbers are placeholders that the pacing simulator
+# (phase 2) will tune. Stats at level N = [base] + [growth] * (N - 1). Crit is a percentage.
+cap = 60
+
+[base]
+hp = 100
+attack = 10
+magic = 10
+defense = 5
+resist = 5
+speed = 10
+crit = 5
+
+[growth]
+hp = 12
+attack = 2
+magic = 2
+defense = 1
+resist = 1
+speed = 1
+crit = 0

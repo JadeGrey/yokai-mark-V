@@ -1,0 +1,29 @@
+# Guild ranks in ascending order. `min_level` is the level at which promotion into that rank
+# opens (the first rank starts at level 1). Placeholders, tuned by the pacing simulator.
+[[rank]]
+id = "E"
+min_level = 1
+
+[[rank]]
+id = "D"
+min_level = 5
+
+[[rank]]
+id = "C"
+min_level = 12
+
+[[rank]]
+id = "B"
+min_level = 20
+
+[[rank]]
+id = "A"
+min_level = 30
+
+[[rank]]
+id = "SS"
+min_level = 45
+
+[[rank]]
+id = "SS+"
+min_level = 60

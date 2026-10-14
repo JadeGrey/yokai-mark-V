@@ -1,0 +1,57 @@
+# Gear tags, themed on Japanese folklore. `leans` lists the stats a tag's gear favours (a
+# tendency in the item stats, not a rule). Set bonuses and skills arrive with the gear phase.
+[[tag]]
+id = "oni"
+name = "Oni"
+role = "Bruiser"
+leans = ["attack", "hp"]
+description = "Ogres of folklore. They hit hard and shrug off hits."
+
+[[tag]]
+id = "kitsune"
+name = "Kitsune"
+role = "Trickster mage"
+leans = ["magic", "speed"]
+description = "Fox spirits of illusion and fire."
+
+[[tag]]
+id = "tengu"
+name = "Tengu"
+role = "Striker"
+leans = ["crit", "speed", "attack"]
+description = "Winged mountain swordsmen. Fast, precise and lethal."
+
+[[tag]]
+id = "kappa"
+name = "Kappa"
+role = "Healer"
+leans = ["hp", "resist", "magic"]
+description = "River spirits who mend what breaks."
+
+[[tag]]
+id = "yuki_onna"
+name = "Yuki-onna"
+role = "Controller"
+leans = ["magic", "resist"]
+description = "The snow woman. She slows and weakens everything near her."
+
+[[tag]]
+id = "tsukumogami"
+name = "Tsukumogami"
+role = "Tank"
+leans = ["defense", "resist", "hp"]
+description = "Old objects that woke up and refuse to break."
+
+[[tag]]
+id = "jorogumo"
+name = "Jorogumo"
+role = "Damage over time"
+leans = ["speed", "crit", "attack"]
+description = "Spider women. Patient poison and bleeding."
+
+[[tag]]
+id = "baku"
+name = "Baku"
+role = "Support"
+leans = ["resist", "speed", "magic"]
+description = "Dream eaters. They devour nightmares and cleanse what ails their allies."
