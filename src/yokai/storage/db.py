@@ -9,13 +9,13 @@ import random
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator, Mapping, Optional, Sequence
+from typing import AsyncIterator, Callable, Mapping, Optional, Sequence
 
 import aiosqlite
 
 from yokai.challenges.models import Advance
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
-from yokai.economy.models import DailyClaimResult, Wallet
+from yokai.economy.models import BetSettlement, DailyClaimResult, Wallet
 from yokai.errors import (
     BetNotOpenError,
     DailyOnCooldownError,
@@ -262,6 +262,7 @@ class Database:
         # between the read and the write of a wallet balance (see the concurrency
         # regression tests in tests/test_economy_storage.py for what that allows).
         self._write_lock = asyncio.Lock()
+        self.bet_listener: Optional[Callable[[BetSettlement], None]] = None
 
     async def initialize(self) -> None:
         """Open connection, enable WAL mode, and apply migrations."""
@@ -1263,14 +1264,14 @@ class Database:
         async with self._write_lock:
             try:
                 async with self.conn.execute(
-                    "SELECT user_id, game, stake, lobby_id FROM gambling_bets "
+                    "SELECT user_id, game, stake, lobby_id, group_id FROM gambling_bets "
                     "WHERE id = ? AND status = 'open';",
                     (bet_id,),
                 ) as cursor:
                     row = await cursor.fetchone()
                 if row is None:
                     raise BetNotOpenError(bet_id)
-                user_id, game, stake, lobby_id = row
+                user_id, game, stake, lobby_id, group_id = row
                 if not refund:
                     credit = payout
                 elif game == "poker" and lobby_id is not None:
@@ -1313,7 +1314,20 @@ class Database:
             except BaseException:
                 await self.conn.rollback()
                 raise
+        if not refund:
+            self._notify_settled([BetSettlement(bet_id, user_id, game, stake, credit, group_id)])
         return wallet.balance
+
+    def _notify_settled(self, settlements: Sequence[BetSettlement]) -> None:
+        """Tell the listener about settled bets. A listener error is logged, never raised."""
+        listener = self.bet_listener
+        if listener is None:
+            return
+        for settlement in settlements:
+            try:
+                listener(settlement)
+            except Exception:
+                logger.exception("Bet listener failed for bet %d", settlement.bet_id)
 
     async def settle_bet(self, bet_id: int, payout: int) -> int:
         """Settle an open bet with a total `payout` (0 = loss); returns the new balance."""
@@ -1395,6 +1409,12 @@ class Database:
                 )
             await self._credit_pot(game, lobby_house_take(game, stakes, amounts), now)
             await self.conn.commit()
+        self._notify_settled(
+            [
+                BetSettlement(bet_id, rows[bet_id][0], game, rows[bet_id][2], payout, None)
+                for bet_id, payout in payouts.items()
+            ]
+        )
         return balances
 
     async def cash_out_lobby(self, lobby_id: str, payouts: Mapping[int, int]) -> dict[int, int]:
@@ -1434,6 +1454,12 @@ class Database:
                     bet_id, user_id, "poker", stake, payout, now
                 )
             await self.conn.commit()
+        self._notify_settled(
+            [
+                BetSettlement(bet_id, rows[bet_id][0], "poker", rows[bet_id][1], payout, None)
+                for bet_id, payout in payouts.items()
+            ]
+        )
         return balances
 
     async def _poker_table_totals(self, lobby_id: str) -> tuple[int, int]:

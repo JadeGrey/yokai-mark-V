@@ -14,8 +14,12 @@ from discord import app_commands
 from discord.ext import commands
 
 from yokai import __version__
+from yokai.challenges.engine import ChallengeEngine
+from yokai.challenges.models import RoundPlayed
+from yokai.challenges.periods import load_tz
 from yokai.cogs.music import MUSIC_COMMAND_NAMES
 from yokai.config import Config
+from yokai.economy.models import BetSettlement
 from yokai.economy.ratelimit import CommandRewardLimiter
 from yokai.economy.voice_tracker import VoiceEarnTracker
 from yokai.errors import YokaiError
@@ -46,11 +50,33 @@ logger = logging.getLogger(__name__)
 class YokaiBot(commands.Bot):
     """Core Discord bot class for Yokai."""
 
+    def _on_bet_settled(self, settlement: BetSettlement) -> None:
+        """Forward a settled bet to the challenge engine as one finished round."""
+        self.challenges.emit(
+            RoundPlayed(
+                user_id=settlement.user_id,
+                game=settlement.game,
+                stake=settlement.stake,
+                payout=settlement.payout,
+                round_key=settlement.group_id or f"bet{settlement.bet_id}",
+            )
+        )
+
     def __init__(self, config: Config, health_report: Optional[HealthReport] = None) -> None:
         self.config = config
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
         self.moderation = ModerationStore(self.db, config.owner_id)
+        self.challenges = ChallengeEngine(
+            self.db,
+            self.moderation,
+            enabled=config.challenge_enabled,
+            tz=load_tz(config.challenge_tz),
+            min_wager=config.challenge_min_wager,
+            reward_scale=config.challenge_reward_scale,
+            welcome_bonus=config.economy_welcome_bonus,
+        )
+        self.db.bet_listener = self._on_bet_settled
         self.names = UserNameCache(self.db)
         self.heartbeat = HeartbeatWriter(self.db, __version__)
         self.loop_lag = LoopLagMonitor()
