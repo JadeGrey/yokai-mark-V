@@ -153,11 +153,15 @@ async def test_the_slate_survives_a_restart(db: Database) -> None:
         tpl("d_c", "tracks", 7, 10),
     )
     first = make_engine(db, *pool)
-    _, picked = await first.active_slate("daily")
-    # A new engine whose pool lists the options in another order must see the stored slate.
-    second = make_engine(db, *reversed(pool))
+    key, picked = await first.active_slate("daily")
+    # Store a slate that pick_slate would not choose, so only the stored row can explain it.
+    other = next(t.id for t in pool if t.id not in {p.id for p in picked})
+    await db.replace_challenge_slate("daily", key, [other])
+    # A new engine with a reordered, larger pool must return exactly the stored slate.
+    second = make_engine(db, tpl("d_z", "tracks", 9, 10), *reversed(pool))
     _, again = await second.active_slate("daily")
-    assert [t.id for t in again] == [t.id for t in picked]
+    assert [t.id for t in again] == [other]
+    assert other not in {t.id for t in picked}
 
 
 async def test_a_new_day_gets_a_fresh_slate_and_progress(db: Database) -> None:
@@ -172,19 +176,28 @@ async def test_a_new_day_gets_a_fresh_slate_and_progress(db: Database) -> None:
 
 async def test_unknown_template_ids_in_a_stored_slate_are_dropped(db: Database) -> None:
     clock = FakeClock()
-    engine = make_engine(db, tpl("d_voice", "voice_minutes", 10, 30), clock=clock)
-    key, _ = await engine.active_slate("daily")
-    await db.replace_challenge_slate("daily", key, ["d_voice", "removed_from_pool"])
-    fresh = make_engine(db, tpl("d_voice", "voice_minutes", 10, 30), clock=clock)
+    pool = (tpl("d_a", "tracks", 5, 10), tpl("d_b", "tracks", 6, 10))
+    engine = make_engine(db, *pool, clock=clock)
+    key, picked = await engine.active_slate("daily")
+    kept = next(t.id for t in pool if t.id not in {p.id for p in picked})
+    await db.replace_challenge_slate("daily", key, [kept, "removed_from_pool"])
+    fresh = make_engine(db, *pool, clock=clock)
     _, templates = await fresh.active_slate("daily")
-    assert [t.id for t in templates] == ["d_voice"]
+    assert [t.id for t in templates] == [kept]
 
 
-async def test_emit_never_raises_even_when_the_database_fails(db: Database) -> None:
+async def test_emit_never_raises_even_when_the_database_fails(
+    db: Database, caplog: pytest.LogCaptureFixture
+) -> None:
     engine = make_engine(db, tpl("d_voice", "voice_minutes", 5, 30))
     db.advance_challenge = AsyncMock(side_effect=RuntimeError("disk on fire"))  # type: ignore[method-assign]
-    engine.emit(VoiceMinutes(1, 5))
-    await engine.close()  # swallowed and logged; nothing escapes
+    with caplog.at_level("ERROR"):
+        engine.emit(VoiceMinutes(1, 5))
+        tasks = list(engine._tasks)
+        assert tasks
+        await asyncio.gather(*tasks)  # a leaked exception would raise here
+        await engine.close()
+    assert any("Challenge engine failed" in r.getMessage() for r in caplog.records)
 
 
 async def test_set_slate_validates_everything_and_changes_nothing_on_error(db: Database) -> None:
