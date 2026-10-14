@@ -76,8 +76,18 @@ async def test_the_tabs_switch_the_period_and_edit_the_message() -> None:
 
 async def test_only_the_owner_of_the_view_may_use_it() -> None:
     view = ChallengesView(_bot_with_rows(), user_id=1)
-    assert view.allowed_user_ids == {1}
     assert view.timeout is not None and view.timeout <= 180
+    with patch("yokai.moderation.gate.screen", new=AsyncMock(return_value=False)):
+        stranger = _interaction(user_id=2)
+        stranger.response.send_message = AsyncMock()
+        assert await view.interaction_check(stranger) is False
+        stranger.response.send_message.assert_awaited_once()
+        assert stranger.response.send_message.await_args.kwargs["ephemeral"] is True
+
+        owner = _interaction(user_id=1)
+        owner.response.send_message = AsyncMock()
+        assert await view.interaction_check(owner) is True
+        owner.response.send_message.assert_not_awaited()
 
 
 async def test_timeout_disables_the_buttons() -> None:
