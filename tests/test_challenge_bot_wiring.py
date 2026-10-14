@@ -25,3 +25,10 @@ async def test_a_settled_bet_becomes_a_round_event_keyed_by_group_or_bet() -> No
     first, second = (call.args[0] for call in bot.challenges.emit.call_args_list)
     assert first == RoundPlayed(1, "slots", 50, 0, "bet9")
     assert second == RoundPlayed(1, "blackjack", 50, 100, "g7")
+
+
+async def test_the_bot_owns_a_challenge_scheduler() -> None:
+    from yokai.challenges.scheduler import ChallengeScheduler
+
+    bot = make_bot()
+    assert isinstance(bot.challenge_scheduler, ChallengeScheduler)

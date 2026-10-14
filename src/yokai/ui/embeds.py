@@ -609,6 +609,53 @@ class EmbedFactory:
         )
 
     @classmethod
+    def challenge_board(
+        cls,
+        *,
+        period: str,
+        rows: Sequence[tuple[str, int, int, int, bool]],
+        resets_ts: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A user's daily or weekly challenges: title, progress bar, count and reward."""
+        lines = [f"Resets <t:{resets_ts}:R>", ""]
+        if not rows:
+            lines.append("There are no challenges right now.")
+        for title, progress, target, reward, completed in rows:
+            filled = 10 if completed else min(10, (progress * 10) // max(1, target))
+            bar = PROGRESS_FILLED * filled + PROGRESS_EMPTY * (10 - filled)
+            status = " · done" if completed else ""
+            lines.append(f"**{escape_md(clamp(title, 120))}**")
+            lines.append(f"`{bar}` {progress}/{target}{status} · +{reward:,} Renown")
+        return cls._create_base(
+            title=f"{Emoji.COIN} {period.capitalize()} challenges",
+            description="\n".join(lines),
+            color=COLOR_BRAND,
+            context="Challenges",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def challenge_notice(
+        cls,
+        *,
+        lines: Sequence[str],
+        extra: int = 0,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A short, batched 'challenge complete' announcement."""
+        body = list(lines)
+        if extra > 0:
+            body.append(f"...and {extra} more.")
+        return cls._create_base(
+            title="Challenge complete" if len(lines) + extra == 1 else "Challenges complete",
+            description="\n".join(body),
+            color=COLOR_SUCCESS,
+            context="Challenges",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
     def balance(
         cls,
         user_mention: str,

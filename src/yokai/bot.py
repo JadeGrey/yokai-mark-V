@@ -17,6 +17,7 @@ from yokai import __version__
 from yokai.challenges.engine import ChallengeEngine
 from yokai.challenges.models import RoundPlayed
 from yokai.challenges.periods import load_tz
+from yokai.challenges.scheduler import ChallengeScheduler
 from yokai.cogs.music import MUSIC_COMMAND_NAMES
 from yokai.config import Config
 from yokai.economy.models import BetSettlement
@@ -76,6 +77,7 @@ class YokaiBot(commands.Bot):
             reward_scale=config.challenge_reward_scale,
             welcome_bonus=config.economy_welcome_bonus,
         )
+        self.challenge_scheduler = ChallengeScheduler(self)
         self.db.bet_listener = self._on_bet_settled
         self.names = UserNameCache(self.db)
         self.heartbeat = HeartbeatWriter(self.db, __version__)
@@ -199,6 +201,7 @@ class YokaiBot(commands.Bot):
             logger.error("Failed to sync commands to guild %d: %s", self.config.guild_id, exc)
 
         self.voice_earn_tracker.start()
+        self.challenge_scheduler.start()
 
     async def on_ready(self) -> None:
         """Log startup status once connected to Discord gateway."""
@@ -332,6 +335,8 @@ class YokaiBot(commands.Bot):
             except Exception as exc:
                 logger.debug("Error stopping player during shutdown: %s", exc)
         await self.voice_earn_tracker.stop()
+        await self.challenge_scheduler.stop()
+        await self.challenges.close()
         await self.heartbeat.stop()
         await self.loop_lag.stop()
         await self.names.close()
