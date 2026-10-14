@@ -173,10 +173,10 @@ It opens your browser through a **single-use link** (also printed in the console
 Every day and every week Yokai picks a small slate of challenges (three daily, three weekly: one music, one games, one voice) from a template pool, for example "Listen to 5 tracks in a call" or "Play 20 gambling rounds". Finishing one pays Renown straight into your wallet; a full daily slate is worth roughly one `/daily`, a weekly slate about three to four. Run `/challenges` to see your progress and the time until the next reset (the Daily and Weekly buttons switch tabs; they work for you only and expire after about two minutes).
 
 Rules worth knowing:
-- **Music** counts for everyone in the voice channel when a track finishes, or is skipped after at least half of it has played. It needs two or more humans in the call (the AFK channel never counts), and each distinct track counts once per person per period, so looping one song does not farm progress.
+- **Music** counts for everyone in the voice channel when a track finishes, or is skipped after at least half of it has played. It needs two or more humans in the call (the AFK channel never counts), unmatched Spotify placeholder tracks never count, and each distinct track counts once per person per period, so looping one song does not farm progress.
 - **Games** count when a round settles, only if the stake is at least `CHALLENGE_MIN_WAGER` (default 10). A win means the payout beat the stake. Poker counts as one round when you cash out. Lottery tickets do not count as rounds. Game completions have no channel notice; check `/challenges`.
 - **Voice** minutes accumulate on each voice-earn tick while you are in a call with another human.
-- **Rewards pay automatically**, once per challenge per period, and show in `/balance` as "Challenge (...)". Music completions post one batched notice in the music text channel.
+- **Rewards pay automatically**, once per challenge per period, and are added to your wallet (`/balance` shows the new total; the ledger entry appears in the admin panel as "Challenge (template id)"). Music completions post one batched notice in the music text channel.
 
 Admins (the owner and the adminlist) get `/admin challenges period:<daily|weekly> action:<list|reroll|set>`; `set` takes comma-separated template ids (use `list` to see them). Settings in `.env`:
 
