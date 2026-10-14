@@ -834,8 +834,9 @@ class Database:
             progress = row[0] if row is not None else 0
             seen: list[str] = json.loads(row[1]) if row is not None and row[1] else []
             if item is not None:
-                if item not in seen:
-                    seen.append(item[:100])
+                key = item[:100]
+                if key not in seen:
+                    seen.append(key)
                 progress = len(seen)
             else:
                 progress += delta

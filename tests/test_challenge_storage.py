@@ -15,9 +15,11 @@ WELCOME = 200
 @pytest.fixture
 async def db(tmp_path: Path):
     database = Database(tmp_path / "t.db")
-    await database.initialize()
-    yield database
-    await database.close()
+    try:
+        await database.initialize()
+        yield database
+    finally:
+        await database.close()
 
 
 async def _challenge_rows(db: Database, user_id: int) -> int:
@@ -41,20 +43,24 @@ async def test_schema_is_at_least_v8_with_the_challenge_tables(db: Database) -> 
 async def test_a_v7_database_upgrades_and_keeps_wallets(tmp_path: Path) -> None:
     path = tmp_path / "old.db"
     first = Database(path)
-    await first.initialize()
-    await first.credit_wallet(1, 50, "admin", WELCOME)
-    await first.conn.execute("DROP TABLE challenge_slates;")
-    await first.conn.execute("DROP TABLE challenge_progress;")
-    await first.conn.execute("PRAGMA user_version = 7;")
-    await first.conn.commit()
-    await first.close()
+    try:
+        await first.initialize()
+        await first.credit_wallet(1, 50, "admin", WELCOME)
+        await first.conn.execute("DROP TABLE challenge_slates;")
+        await first.conn.execute("DROP TABLE challenge_progress;")
+        await first.conn.execute("PRAGMA user_version = 7;")
+        await first.conn.commit()
+    finally:
+        await first.close()
 
     upgraded = Database(path)
-    await upgraded.initialize()
-    wallet = await upgraded.get_wallet(1)
-    assert wallet is not None and wallet.balance == WELCOME + 50
-    assert await upgraded.get_challenge_slate("daily", "2026-10-13") is None
-    await upgraded.close()
+    try:
+        await upgraded.initialize()
+        wallet = await upgraded.get_wallet(1)
+        assert wallet is not None and wallet.balance == WELCOME + 50
+        assert await upgraded.get_challenge_slate("daily", "2026-10-13") is None
+    finally:
+        await upgraded.close()
 
 
 async def test_first_slate_wins_and_empty_slates_are_allowed(db: Database) -> None:
@@ -93,6 +99,16 @@ async def test_distinct_items_count_once(db: Database) -> None:
         1, "weekly", "k", "t", target=3, reward=10, welcome_bonus=WELCOME, item="c"
     )
     assert result.completed_now
+
+
+async def test_long_distinct_items_are_deduplicated(db: Database) -> None:
+    long_item = "x" * 150
+    for _ in range(4):
+        result = await db.advance_challenge(
+            1, "weekly", "k", "t", target=3, reward=10, welcome_bonus=WELCOME, item=long_item
+        )
+    assert result.progress == 1
+    assert not result.completed_now
 
 
 async def test_payout_is_exactly_once_under_concurrency(db: Database) -> None:
