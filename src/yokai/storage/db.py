@@ -13,6 +13,7 @@ from typing import AsyncIterator, Mapping, Optional, Sequence
 
 import aiosqlite
 
+from yokai.challenges.models import Advance
 from yokai.economy.daily import cooldown_remaining_s, next_streak, roll_daily_payout
 from yokai.economy.models import DailyClaimResult, Wallet
 from yokai.errors import (
@@ -34,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -225,6 +226,30 @@ CREATE TABLE IF NOT EXISTS lottery_draws (
 # lottery_state gains two columns; they are added in _migrate only when missing, because
 # ALTER TABLE ... ADD COLUMN cannot be repeated and a crash mid-upgrade replays the step.
 
+MIGRATION_V8 = """
+CREATE TABLE IF NOT EXISTS challenge_slates (
+  period TEXT NOT NULL,
+  period_key TEXT NOT NULL,
+  template_ids TEXT NOT NULL,
+  created_ts INTEGER NOT NULL,
+  overridden INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (period, period_key)
+);
+
+CREATE TABLE IF NOT EXISTS challenge_progress (
+  user_id INTEGER NOT NULL,
+  period TEXT NOT NULL,
+  period_key TEXT NOT NULL,
+  template_id TEXT NOT NULL,
+  progress INTEGER NOT NULL DEFAULT 0,
+  seen TEXT,
+  completed_ts INTEGER,
+  rewarded INTEGER NOT NULL DEFAULT 0,
+  updated_ts INTEGER NOT NULL,
+  PRIMARY KEY (user_id, period, period_key, template_id)
+);
+"""
+
 
 class Database:
     """Async SQLite database manager."""
@@ -324,6 +349,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 7;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 7.")
+
+        if version < 8:
+            logger.info("Applying SQLite migration v8...")
+            await self.conn.executescript(MIGRATION_V8)
+            await self.conn.execute("PRAGMA user_version = 8;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 8.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
@@ -720,6 +752,152 @@ class Database:
             await self._insert_transaction(user_id, applied, "admin", None, new_balance, now)
             await self.conn.commit()
         return applied, new_balance
+
+    # ------------------------------------------------------------------ challenges
+
+    async def get_challenge_slate(self, period: str, period_key: str) -> Optional[list[str]]:
+        """The stored template ids for a period, or None when no slate exists yet."""
+        async with self.conn.execute(
+            "SELECT template_ids FROM challenge_slates WHERE period = ? AND period_key = ?;",
+            (period, period_key),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return None if row is None else list(json.loads(row[0]))
+
+    async def create_challenge_slate(
+        self, period: str, period_key: str, template_ids: Sequence[str]
+    ) -> list[str]:
+        """Store a slate unless one exists (first writer wins); returns what is stored."""
+        async with self._write_lock:
+            await self.conn.execute(
+                "INSERT OR IGNORE INTO challenge_slates "
+                "(period, period_key, template_ids, created_ts, overridden) "
+                "VALUES (?, ?, ?, ?, 0);",
+                (period, period_key, json.dumps(list(template_ids)), int(time.time())),
+            )
+            await self.conn.commit()
+        stored = await self.get_challenge_slate(period, period_key)
+        assert stored is not None
+        return stored
+
+    async def replace_challenge_slate(
+        self, period: str, period_key: str, template_ids: Sequence[str]
+    ) -> list[str]:
+        """Override a slate. Incomplete progress on removed templates is dropped; completed
+        rows stay, so a paid template re-added later cannot be earned twice."""
+        ids = list(template_ids)
+        if not ids:
+            raise ValueError("a challenge slate needs at least one template")
+        async with self._write_tx():
+            await self.conn.execute(
+                "INSERT INTO challenge_slates "
+                "(period, period_key, template_ids, created_ts, overridden) VALUES (?, ?, ?, ?, 1) "
+                "ON CONFLICT(period, period_key) DO UPDATE SET "
+                "template_ids = excluded.template_ids, overridden = 1;",
+                (period, period_key, json.dumps(ids), int(time.time())),
+            )
+            marks = ",".join("?" for _ in ids)
+            await self.conn.execute(
+                "DELETE FROM challenge_progress WHERE period = ? AND period_key = ? "
+                f"AND completed_ts IS NULL AND template_id NOT IN ({marks});",
+                (period, period_key, *ids),
+            )
+            await self.conn.commit()
+        return ids
+
+    async def advance_challenge(
+        self,
+        user_id: int,
+        period: str,
+        period_key: str,
+        template_id: str,
+        *,
+        target: int,
+        reward: int,
+        welcome_bonus: int,
+        delta: int = 0,
+        item: Optional[str] = None,
+    ) -> Advance:
+        """Advance one progress row and, on reaching `target`, pay `reward` in the same
+        transaction. `item` makes the metric distinct-count; otherwise `delta` is added."""
+        now = int(time.time())
+        async with self._write_tx():
+            async with self.conn.execute(
+                "SELECT progress, seen, completed_ts FROM challenge_progress "
+                "WHERE user_id = ? AND period = ? AND period_key = ? AND template_id = ?;",
+                (user_id, period, period_key, template_id),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row is not None and row[2] is not None:
+                await self.conn.commit()
+                return Advance(progress=row[0], completed_now=False)
+            progress = row[0] if row is not None else 0
+            seen: list[str] = json.loads(row[1]) if row is not None and row[1] else []
+            if item is not None:
+                if item not in seen:
+                    seen.append(item[:100])
+                progress = len(seen)
+            else:
+                progress += delta
+            progress = min(progress, target)
+            done = progress >= target
+            await self.conn.execute(
+                "INSERT INTO challenge_progress "
+                "(user_id, period, period_key, template_id, progress, seen, completed_ts, "
+                "rewarded, updated_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, period, period_key, template_id) DO UPDATE SET "
+                "progress = excluded.progress, seen = excluded.seen, "
+                "completed_ts = excluded.completed_ts, rewarded = excluded.rewarded, "
+                "updated_ts = excluded.updated_ts;",
+                (
+                    user_id,
+                    period,
+                    period_key,
+                    template_id,
+                    progress,
+                    json.dumps(seen) if seen else None,
+                    now if done else None,
+                    1 if done else 0,
+                    now,
+                ),
+            )
+            if done:
+                await self._ensure_wallet(user_id, welcome_bonus, now)
+                await self.conn.execute(
+                    "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;",
+                    (reward, user_id),
+                )
+                wallet = await self.get_wallet(user_id)
+                assert wallet is not None
+                await self._insert_transaction(
+                    user_id, reward, f"challenge:{template_id}", None, wallet.balance, now
+                )
+            await self.conn.commit()
+        return Advance(progress=progress, completed_now=done)
+
+    async def get_challenge_progress(
+        self, user_id: int, period: str, period_key: str
+    ) -> dict[str, tuple[int, bool]]:
+        """{template_id: (progress, completed)} for one user and period."""
+        async with self.conn.execute(
+            "SELECT template_id, progress, completed_ts FROM challenge_progress "
+            "WHERE user_id = ? AND period = ? AND period_key = ?;",
+            (user_id, period, period_key),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return {row[0]: (row[1], row[2] is not None) for row in rows}
+
+    async def purge_challenges(self, older_than_ts: int) -> int:
+        """Delete slates and progress last touched before `older_than_ts`; returns row count."""
+        async with self._write_lock:
+            first = await self.conn.execute(
+                "DELETE FROM challenge_progress WHERE updated_ts < ?;", (older_than_ts,)
+            )
+            second = await self.conn.execute(
+                "DELETE FROM challenge_slates WHERE created_ts < ?;", (older_than_ts,)
+            )
+            await self.conn.commit()
+        return first.rowcount + second.rowcount
 
     async def place_bet(
         self,

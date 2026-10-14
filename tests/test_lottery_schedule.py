@@ -36,7 +36,7 @@ async def _tables(db: Database) -> set[str]:
 async def test_migration_v7_creates_the_lottery_tables_and_state_columns(tmp_path: Path) -> None:
     db = await _db(tmp_path)
     try:
-        assert CURRENT_SCHEMA_VERSION == 7
+        assert CURRENT_SCHEMA_VERSION >= 7
         assert {"lottery_tickets", "lottery_draws"} <= await _tables(db)
         state = await db.get_lottery_state()
         assert (state.pot, state.draw_no, state.next_draw_ts) == (0, 1, None)

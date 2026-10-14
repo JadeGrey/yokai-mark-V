@@ -29,6 +29,7 @@ _GAME_LABELS = {
     "push": "Push (stake returned)",
     "payout": "Payout",
     "refund": "Refund",
+    "challenge": "Challenge",
 }
 
 
