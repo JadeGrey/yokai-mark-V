@@ -24,6 +24,7 @@ Yokai is a private, single-server Discord bot (~10 users) hosted locally on the 
   - `/admin unset_multiplayer`: Admin-only. Stops using the current channel as a table channel.
 - **Multiplayer tables:** dedicated channels with an always-on Play button. A finished game stays on screen until the next table is requested. Games: Jackpot (a stake-weighted draw takes the pot), Crash (cash out before the multiplier crashes), Blackjack table (shared dealer, up to five players), Poker table (Texas hold'em for two to six; everyone buys in for the host's stake, play hands until the hand limit, and chips are paid back out in Renown when you leave or bust) and Duel (pick a number 1 to 10; the pick closest to a hidden number wins the pot, a tie refunds both). Everything the house keeps feeds a lottery pot.
 - **Lottery:** a weekly draw in its own channel. Buy numbered tickets with a button (hand-picked numbers, quick picks, or both), one number from 1 to 20 is drawn, everyone holding it splits the pot, and an unclaimed pot rolls over and grows. Everything the house wins in any game feeds the pot.
+- **Daily and weekly challenges:** three daily and three weekly challenges (one each for music, games and voice) pay Renown automatically. See [Challenges](#challenges).
 - **Operational Hardening:** Auto-disconnects when idle or left alone in voice channels, graceful process supervision (`run.ps1`), and zero privileged intents.
 
 ---
@@ -166,6 +167,25 @@ python -m yokai_admin   # the same thing, by hand
 ```
 
 It opens your browser through a **single-use link** (also printed in the console). If you close the tab, restart the panel to get a new link. Settings in `.env`: `ADMIN_PORT` (default `8765`), `DB_PATH`, `LOG_DIR`, `BACKUP_DIR` (default: a `backups` folder beside the database). The panel never needs the Discord token. Set `OWNER_ID` in `.env` to enable editing the blacklist and admin list (the owner can never be added to either); without it the pages are read-only. Run the bot once after updating so it can upgrade the database.
+
+## Challenges
+
+Every day and every week Yokai picks a small slate of challenges (three daily, three weekly: one music, one games, one voice) from a template pool, for example "Listen to 5 tracks in a call" or "Play 20 gambling rounds". Finishing one pays Renown straight into your wallet; a full daily slate is worth roughly one `/daily`, a weekly slate about three to four. Run `/challenges` to see your progress and the time until the next reset (the Daily and Weekly buttons switch tabs; they work for you only and expire after about two minutes).
+
+Rules worth knowing:
+- **Music** counts for everyone in the voice channel when a track finishes, or is skipped after at least half of it has played. It needs two or more humans in the call (the AFK channel never counts), and each distinct track counts once per person per period, so looping one song does not farm progress.
+- **Games** count when a round settles, only if the stake is at least `CHALLENGE_MIN_WAGER` (default 10). A win means the payout beat the stake. Poker counts as one round when you cash out. Lottery tickets do not count as rounds. Game completions have no channel notice; check `/challenges`.
+- **Voice** minutes accumulate on each voice-earn tick while you are in a call with another human.
+- **Rewards pay automatically**, once per challenge per period, and show in `/balance` as "Challenge (...)". Music completions post one batched notice in the music text channel.
+
+Admins (the owner and the adminlist) get `/admin challenges period:<daily|weekly> action:<list|reroll|set>`; `set` takes comma-separated template ids (use `list` to see them). Settings in `.env`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CHALLENGE_ENABLED` | `true` | Master switch. When false nothing advances and `/challenges` says they are off. |
+| `CHALLENGE_TZ` | `UTC` | Timezone for resets (midnight daily, Monday midnight weekly). `UTC` needs nothing extra; named zones such as `America/New_York` need the `tzdata` package on Windows, which is not installed by default (`pip install tzdata` to enable). |
+| `CHALLENGE_MIN_WAGER` | `10` | Minimum stake for a game round to count. |
+| `CHALLENGE_REWARD_SCALE` | `1.0` | Multiplier on every challenge reward (0.1 to 10). |
 
 ## Updating yt-dlp
 

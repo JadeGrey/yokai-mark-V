@@ -627,3 +627,47 @@ Manual real-Discord checklist: run by the owner on 2026-10-12, passed.
 - Leave pressed as a turn times out shows "not your turn" although the leave is recorded.
 - A failed reply edit leaves the public message stale until the next action.
 
+
+---
+
+## Phase 12 — Challenges
+
+**Goal:** Daily and weekly challenges that pay Renown automatically and push people toward the music
+bot and the gamemodes. Spec: `docs/superpowers/specs/2026-10-13-challenges-design.md`. Plan:
+`docs/superpowers/plans/2026-10-13-challenges.md`.
+
+- [x] 1 Configuration (`CHALLENGE_*`) and period math.
+- [x] 2 Models, template pool and slate picker.
+- [x] 3 Migration v8 and atomic challenge progress storage.
+- [x] 4 The challenge engine.
+- [x] 5 Settled bets reported to the engine.
+- [x] 6 Listened tracks and voice time reported to the engine.
+- [x] 7 Challenge embeds and the notice scheduler.
+- [x] 8 The `/challenges` command and its Daily/Weekly view.
+- [x] 9 `/admin challenges` list, reroll and set.
+- [x] 10 Docs, spec sync and manual QA checklist.
+
+**Acceptance criteria**
+- Three daily and three weekly challenges are active at all times, one per category, and the stored
+  slate survives a restart.
+- Music, game and voice progress is recorded without changing how those features behave; an engine
+  failure never breaks playback, a settlement or voice crediting.
+- Each challenge pays exactly once per user per period, in the same transaction that marks it done.
+- `/challenges` shows progress and the reset time; `/admin challenges list|reroll|set` works for the
+  owner and the adminlist and refuses everyone else.
+- `pytest`, `ruff check` and `ruff format --check` are clean.
+- *(manual, real Discord)* The checklist in `QA.md` (rows 26 to 33).
+
+**STOP — owner review.** Manual QA is pending the owner's run.
+
+**Known minors (deferred, not blocking)**
+- `periods.next_reset_ts` at a nonexistent DST midnight is untested, and only the literal `UTC` avoids needing `tzdata`.
+- The named-zone DST test is skipped without `tzdata`, so that path is unverified.
+- The engine's round-dedupe cache is marked before the DB write, so a failed write suppresses that round's retry.
+- An override racing an in-flight event can pay a template that was just removed.
+- `reroll` can repeat the same slate.
+- `ChallengeScheduler.flush_notices` only catches `discord.HTTPException`, so a non-HTTP send error drops the remaining channels' notices; send failures log at debug.
+- The scheduler's `_last_purge=0.0` vs `time.monotonic()` delays the first purge on a freshly booted PC.
+- `/admin challenges` only catches `ValueError` after deferring, so a DB error leaves the deferred reply hanging.
+- Some UI and admin tests could assert more (timeout edit, tab styling, confirmation embed content).
+- Lottery tickets are not counted as rounds (by design).
