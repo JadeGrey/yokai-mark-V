@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from yokai.errors import InvalidGameChoiceError, InvalidPaymentError, YokaiError
 from yokai.gambling.lobby import GAME_SPECS
+from yokai.textutil import escape_md
 from yokai.ui.embeds import EmbedFactory, send
 from yokai.ui.views import DiagView
 
@@ -85,6 +86,67 @@ class AdminCog(commands.Cog, name="Admin"):
             target_mention=f"<@{user.id}>",
             delta_applied=applied,
             new_balance=new_balance,
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    @admin.command(name="challenges", description="List, reroll or set the current challenges.")
+    @app_commands.describe(
+        period="Which slate",
+        action="list shows the active ids, reroll draws a new slate, set chooses the ids",
+        templates="For 'set': template ids separated by commas (see 'list')",
+    )
+    @app_commands.choices(
+        period=[
+            app_commands.Choice(name="daily", value="daily"),
+            app_commands.Choice(name="weekly", value="weekly"),
+        ],
+        action=[
+            app_commands.Choice(name="list", value="list"),
+            app_commands.Choice(name="reroll", value="reroll"),
+            app_commands.Choice(name="set", value="set"),
+        ],
+    )
+    async def challenges(
+        self,
+        interaction: discord.Interaction,
+        period: app_commands.Choice[str],
+        action: app_commands.Choice[str],
+        templates: Optional[str] = None,
+    ) -> None:
+        """Admin tools for the challenge slates; changes are visible to everyone."""
+        if await self._deny_unless_admin(interaction, "Ask the owner to add you to the adminlist."):
+            return
+        engine = self.bot.challenges
+        ids: list[str] = []
+        if action.value == "set":
+            ids = [part.strip()[:40] for part in (templates or "").split(",") if part.strip()][:12]
+            if not ids:
+                await self._send_domain_error(
+                    interaction, ValueError("Give at least one template id, separated by commas.")
+                )
+                return
+        await interaction.response.defer(ephemeral=True)
+        try:
+            if action.value == "list":
+                _, current = await engine.active_slate(period.value)
+                title = f"Active {period.value} challenges"
+            elif action.value == "reroll":
+                current = await engine.reroll(period.value)
+                title = f"Rerolled the {period.value} challenges"
+            else:
+                current = await engine.set_slate(period.value, ids)
+                title = f"Set the {period.value} challenges"
+        except ValueError as err:
+            # The engine echoes admin-supplied ids, so neutralise any markdown in them.
+            await self._send_domain_error(interaction, ValueError(escape_md(str(err))))
+            return
+        lines = [f"`{t.id}` · {escape_md(t.title)} ({t.target}, +{t.reward} base)" for t in current]
+        build = EmbedFactory.info if action.value == "list" else EmbedFactory.success
+        embed = build(
+            title=title,
+            description="\n".join(lines) or "No challenges.",
+            context="Admin",
             bot_avatar_url=self._avatar_url(),
         )
         await send(interaction, embed=embed, ephemeral=True)

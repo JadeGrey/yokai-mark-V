@@ -28,6 +28,7 @@ async def test_admin_commands_live_under_the_admin_group() -> None:
         "diag",
         "set_multiplayer",
         "unset_multiplayer",
+        "challenges",
     }
 
 
