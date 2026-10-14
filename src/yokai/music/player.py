@@ -332,11 +332,23 @@ class GuildPlayer:
             self._prefetched = None
             expires_at = prefetched[1].expires_at
             if expires_at is None or expires_at > time.time():
+                await self._wait_until_available(track, prefetched[1])
                 return prefetched[1].url, False
         info = await asyncio.wait_for(
             self.resolver.get_stream(track), timeout=STREAM_ATTEMPT_TIMEOUT_S
         )
+        await self._wait_until_available(track, info)
         return info.url, False
+
+    @staticmethod
+    async def _wait_until_available(track: Track, info: StreamInfo) -> None:
+        """Hold off FFmpeg until YouTube will serve the URL (it answers 403 before that)."""
+        delay = info.wait_seconds()
+        if delay > 0:
+            logger.info(
+                "Waiting %.1fs for the stream of %s to become available", delay, track.video_id
+            )
+            await asyncio.sleep(delay)
 
     def _build_source(
         self, target: str, is_file: bool, start_s: int

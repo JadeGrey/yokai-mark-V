@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import math
 import random
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, Sequence
 
@@ -12,6 +13,8 @@ from yokai.theme import LIST_PAGE_SIZE
 
 if TYPE_CHECKING:
     from yokai.music.spotify.models import SpotifyTrackMeta
+
+MAX_AVAILABLE_WAIT_S = 30.0  # never hold a track longer than this for a URL to become valid
 
 
 class LoopMode(enum.Enum):
@@ -70,6 +73,15 @@ class StreamInfo:
     url: str
     http_headers: dict[str, str] = field(default_factory=dict)
     expires_at: Optional[float] = None
+    # Epoch seconds before which YouTube answers 403 (set when the client was served an ad).
+    available_at: Optional[float] = None
+
+    def wait_seconds(self, now: Optional[float] = None, cap: float = MAX_AVAILABLE_WAIT_S) -> float:
+        """How long to wait before the URL can be fetched (0 when ready), never more than `cap`."""
+        if self.available_at is None:
+            return 0.0
+        current = time.time() if now is None else now
+        return min(max(self.available_at - current, 0.0), cap)
 
 
 class MusicQueue:

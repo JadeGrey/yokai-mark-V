@@ -179,15 +179,24 @@ class AudioBuffer:
             return
         if self.get(video_id) is not None:
             return
-        task = asyncio.get_running_loop().create_task(self._download(video_id, stream.url))
+        task = asyncio.get_running_loop().create_task(
+            self._download(video_id, stream.url, stream.available_at)
+        )
         self._inflight[video_id] = task
         task.add_done_callback(lambda _t, vid=video_id: self._inflight.pop(vid, None))
 
-    async def _download(self, video_id: str, url: str) -> Optional[Path]:
+    async def _download(
+        self, video_id: str, url: str, available_at: Optional[float] = None
+    ) -> Optional[Path]:
         dest = self.path_for(video_id)
         if dest is None:
             return None
         part = dest.with_suffix(".part")
+        # Before `available_at` YouTube answers 403; wait outside the semaphore so other
+        # downloads are not held up.
+        delay = StreamInfo(url=url, available_at=available_at).wait_seconds()
+        if delay > 0:
+            await asyncio.sleep(delay)
         async with self._semaphore:
             for attempt in (1, 2):
                 try:

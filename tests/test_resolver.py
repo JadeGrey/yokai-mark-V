@@ -391,3 +391,12 @@ def test_unmapped_errors_do_not_carry_terminal_colour_codes() -> None:
 
     assert "" not in mapped.message
     assert "ERROR: [youtube] vid: something odd" in mapped.message
+
+
+def test_stream_info_keeps_available_at_from_ytdlp() -> None:
+    from yokai.music.resolvers.ytdlp import _stream_info
+
+    info = _stream_info({"url": "http://s/1", "available_at": 1_800_000_014})
+    assert info.available_at == 1_800_000_014
+    assert _stream_info({"url": "http://s/1"}).available_at is None
+    assert _stream_info({"url": "http://s/1", "available_at": 0}).available_at is None

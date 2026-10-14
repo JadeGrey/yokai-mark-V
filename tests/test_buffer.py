@@ -588,3 +588,25 @@ async def test_failure_log_names_the_exception_type(
         buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1"))
         await buffer.wait_idle()
     assert any("TimeoutError" in r.getMessage() for r in caplog.records)
+
+
+async def test_download_waits_until_the_stream_is_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    slept: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay: float, *args: object) -> None:
+        slept.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    calls: list[str] = []
+    buffer = AudioBuffer(tmp_path, 10_000, downloader=make_downloader(calls=calls))
+    buffer.schedule(track("aaaaaaaa"), StreamInfo(url="http://s/1", available_at=time.time() + 14))
+    for _ in range(50):
+        await real_sleep(0.01)
+    assert any(12 <= d <= 14 for d in slept), slept
+    assert calls == ["http://s/1"]

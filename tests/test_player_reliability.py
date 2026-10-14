@@ -1008,3 +1008,52 @@ def test_live_stream_reconnects_quickly_and_the_stall_grace_is_short() -> None:
     assert opts[opts.index("-reconnect_delay_max") + 1] == "1"
     assert "-reconnect_on_network_error" in opts
     assert player_module.STALL_GRACE_S <= 10
+
+
+class AdGatedResolver(FakeResolver):
+    """YouTube served an ad: the stream URL answers 403 until `available_at`."""
+
+    def __init__(self, delay_s: float) -> None:
+        super().__init__()
+        self.delay_s = delay_s
+
+    async def get_stream(self, track: Track, *, background: bool = False) -> StreamInfo:
+        self.stream_call_count += 1
+        return StreamInfo(url="http://s/ad", available_at=time.time() + self.delay_s)
+
+
+async def test_ffmpeg_waits_until_an_ad_gated_stream_is_available(
+    ffmpeg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: FFmpeg started right after extraction got 403 and every resume failed."""
+    slept: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay: float, *args: object) -> None:
+        slept.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(player_module.asyncio, "sleep", fake_sleep)
+    player, _vc, _bot = make_player(AdGatedResolver(delay_s=14))
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+    assert len(ffmpeg.created) == 1
+    assert any(12 <= d <= 14 for d in slept), slept
+
+
+async def test_ready_streams_start_ffmpeg_without_waiting(
+    ffmpeg, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    slept: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay: float, *args: object) -> None:
+        slept.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(player_module.asyncio, "sleep", fake_sleep)
+    player, _vc, _bot = make_player()
+    player.queue.add(make_track("t1"))
+    await player.play_next()
+    assert len(ffmpeg.created) == 1
+    assert not any(d >= 1 for d in slept), slept

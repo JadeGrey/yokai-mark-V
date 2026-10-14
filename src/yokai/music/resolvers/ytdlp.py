@@ -51,6 +51,21 @@ def stream_expiry(url: str, now: Optional[float] = None) -> float:
     return current + DEFAULT_STREAM_TTL_S
 
 
+def _stream_info(data: dict[str, Any]) -> StreamInfo:
+    """Build a StreamInfo from a yt-dlp result, keeping the moment the URL becomes valid.
+
+    When YouTube serves an ad to the client (e.g. `web_embedded`), yt-dlp reports `available_at`
+    and its own downloader sleeps until then; fetching earlier is answered with 403.
+    """
+    raw = data.get("available_at")
+    available_at = float(raw) if isinstance(raw, (int, float)) and raw > 0 else None
+    return StreamInfo(
+        url=data["url"],
+        http_headers=data.get("http_headers") or {},
+        available_at=available_at,
+    )
+
+
 def pick_thumbnail(entry: dict[str, Any]) -> Optional[str]:
     """Best thumbnail URL of a yt-dlp entry: `thumbnail`, else the last of `thumbnails`."""
     thumb = entry.get("thumbnail")
@@ -349,9 +364,7 @@ class YtDlpResolver(Resolver):
             # player does not extract the same video a second time.
             stream_url = data.get("url")
             if stream_url:
-                self._remember_stream(
-                    vid, StreamInfo(url=stream_url, http_headers=data.get("http_headers") or {})
-                )
+                self._remember_stream(vid, _stream_info(data))
 
             self._record_success()
             self.resolve_latencies.append((time.perf_counter() - start_time) * 1000.0)
@@ -458,7 +471,7 @@ class YtDlpResolver(Resolver):
                 raise mapped from failure
 
             self._record_success()
-            info = StreamInfo(url=data["url"], http_headers=data.get("http_headers") or {})
+            info = _stream_info(data)
             return self._remember_stream(track.video_id, info)
 
     def get_average_latency(self) -> Optional[float]:
