@@ -190,6 +190,7 @@ class YokaiBot(commands.Bot):
         await self.load_extension("yokai.cogs.owner")
         await self.load_extension("yokai.cogs.tables")
         await self.load_extension("yokai.cogs.lottery")
+        await self.load_extension("yokai.cogs.challenges")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)
