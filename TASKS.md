@@ -666,8 +666,11 @@ bot and the gamemodes. Spec: `docs/superpowers/specs/2026-10-13-challenges-desig
 - The engine's round-dedupe cache is marked before the DB write, so a failed write suppresses that round's retry.
 - An override racing an in-flight event can pay a template that was just removed.
 - `reroll` can repeat the same slate.
-- `ChallengeScheduler.flush_notices` only catches `discord.HTTPException`, so a non-HTTP send error drops the remaining channels' notices; send failures log at debug.
 - The scheduler's `_last_purge=0.0` vs `time.monotonic()` delays the first purge on a freshly booted PC.
-- `/admin challenges` only catches `ValueError` after deferring, so a DB error leaves the deferred reply hanging.
+- Voice minutes use `max(1, interval // 60)` per tick, so non-default `ECONOMY_VOICE_INTERVAL_SECONDS` values are counted imprecisely.
+- A near-certain win (for example cashing out of crash at ~1.01x) counts as a won round.
+- Very short videos have no minimum duration for music challenges.
+- `/admin challenges` gives no hint when challenges are disabled.
+- No tests assert that `setup_hook` starts the scheduler or the `close()` call order.
 - Some UI and admin tests could assert more (timeout edit, tab styling, confirmation embed content).
 - Lottery tickets are not counted as rounds (by design).

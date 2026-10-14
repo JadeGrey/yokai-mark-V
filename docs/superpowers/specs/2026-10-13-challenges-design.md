@@ -56,7 +56,7 @@ New package `src/yokai/challenges/`:
 
 New `cogs/challenges.py` (the `/challenges` command and view) and `ui` embed helpers in
 `ui/embeds.py`. Every integration point is behind the engine; features depend on
-`bot.challenges.record(event)` only.
+`bot.challenges.emit(event)` only (fire-and-forget; it never raises).
 
 ## 5. Data model (migration v8)
 
@@ -85,8 +85,8 @@ CREATE TABLE challenge_progress (
 ```
 
 The slate is stored when first created, so editing the pool mid-period never changes active
-challenges. Rows older than 30 days are purged by the scheduler. Rewards are credited with
-`credit_wallet(..., reason="challenge:<template_id>")`.
+challenges. Rows older than 30 days are purged by the scheduler. Rewards are an inline wallet
+UPDATE plus ledger insert inside `advance_challenge`, with reason `challenge:<template_id>`.
 
 ## 6. Templates and rewards
 
@@ -107,7 +107,8 @@ Starter pool (numbers are tunable in review):
 
 Metrics: `rounds_played`, `rounds_won`, `voice_minutes`, and the distinct-count metrics `tracks`
 (distinct `video_id`, so a looped track cannot farm progress), `artists` and `games` (progress is
-`len(seen)`). A template may filter by game.
+`len(seen)`). A template may filter by game: `Template.game` is a set of game names (slots;
+blackjack and the blackjack table `bjtable`).
 
 ## 7. Events and hooks
 
@@ -117,7 +118,8 @@ own exceptions.
 1. **Music.** Emit `TrackListened(user_ids, video_id, artist, channel_id)` from the track-end path in
    `music/player.py`, beside `_record_event`. Fire only for outcome `completed`, or `skipped` with
    `listened_s >= 50%` of `duration_s`. `user_ids` is the humans in the bot's voice channel at that
-   moment, excluding bots, blacklisted users and the AFK channel; fewer than 2 humans emits nothing.
+   moment, excluding bots and the AFK channel; fewer than 2 humans emits nothing. Blacklisted users count
+   toward the 2-human minimum and the engine then drops their progress (as the voice tracker does).
    Each user counts a given `video_id` once per period for the track metric.
 2. **Games.** Emit `RoundPlayed(user_id, game, stake, payout)` from the settlement path every game
    uses (`Database.settle_bet`, covering slots, solo games, tables and poker), through a thin
@@ -139,7 +141,7 @@ own exceptions.
 
 ## 9. Scheduler and recovery
 
-The scheduler computes the current period keys from `CHALLENGE_TZ` on every tick (every ~30 s). The
+The scheduler computes the current period keys from `CHALLENGE_TZ` on every tick (every 10 s). The
 first tick after startup creates any missing slate, so a bot that was off at midnight recovers
 without special handling. It also purges rows older than 30 days and flushes queued notices.
 

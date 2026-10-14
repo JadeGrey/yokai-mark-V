@@ -90,5 +90,5 @@ class ChallengeScheduler:
             )
             try:
                 await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            except discord.HTTPException as exc:
-                logger.debug("Could not send challenge notice to %d: %s", channel_id, exc)
+            except Exception as exc:  # one bad channel must not drop the others' notices
+                logger.warning("Could not send challenge notice to %d: %s", channel_id, exc)

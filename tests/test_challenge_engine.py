@@ -16,9 +16,11 @@ from yokai.storage.db import Database
 @pytest.fixture
 async def db(tmp_path: Path):
     database = Database(tmp_path / "t.db")
-    await database.initialize()
-    yield database
-    await database.close()
+    try:
+        await database.initialize()
+        yield database
+    finally:
+        await database.close()
 
 
 async def balance(db: Database, user_id: int) -> int:
@@ -93,12 +95,30 @@ async def test_a_blackjack_double_is_one_round_and_one_win(db: Database) -> None
 
 async def test_a_push_is_not_a_win_and_the_game_filter_applies(db: Database) -> None:
     engine = make_engine(
-        db, tpl("d_win_slots", "rounds_won", 1, 35, category="games", game="slots")
+        db, tpl("d_win_slots", "rounds_won", 1, 35, category="games", game=frozenset({"slots"}))
     )
     await engine.record(round_(1, game="slots", stake=50, payout=50, key="push"))
     await engine.record(round_(1, game="blackjack", stake=50, payout=100, key="bj"))
     assert (await engine.view(1, "daily"))[0].progress == 0
     await engine.record(round_(1, game="slots", stake=50, payout=100, key="win"))
+    assert (await engine.view(1, "daily"))[0].completed
+
+
+async def test_the_blackjack_win_template_counts_the_table_but_not_slots(db: Database) -> None:
+    engine = make_engine(
+        db,
+        tpl(
+            "d_win_blackjack",
+            "rounds_won",
+            1,
+            35,
+            category="games",
+            game=frozenset({"blackjack", "bjtable"}),
+        ),
+    )
+    await engine.record(round_(1, game="slots", stake=50, payout=100, key="s"))
+    assert (await engine.view(1, "daily"))[0].progress == 0
+    await engine.record(round_(1, game="bjtable", stake=50, payout=100, key="t"))
     assert (await engine.view(1, "daily"))[0].completed
 
 
@@ -241,3 +261,12 @@ async def test_next_reset_matches_the_period(db: Database) -> None:
     engine = make_engine(db, tpl("d_a", "tracks", 5, 10))
     assert engine.next_reset("daily") - 0 > 0
     assert engine.next_reset("weekly") > engine.next_reset("daily")
+
+
+async def test_after_close_emit_and_record_do_nothing(db: Database) -> None:
+    engine = make_engine(db, tpl("d_tracks", "tracks", 1, 40))
+    await engine.close()
+    engine.emit(listened(1))
+    assert not engine._tasks
+    await engine.record(listened(1))
+    assert await balance(db, 1) == 0

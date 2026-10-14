@@ -21,7 +21,8 @@ class Template:
     target: int
     reward: int  # base Renown, before CHALLENGE_REWARD_SCALE
     title: str
-    game: Optional[str] = None  # only count this game (rounds_played / rounds_won)
+    # only count these game names (rounds_played / rounds_won)
+    game: Optional[frozenset[str]] = None
 
 
 @dataclass(frozen=True, slots=True)

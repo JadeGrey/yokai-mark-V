@@ -14,7 +14,14 @@ POOL: tuple[Template, ...] = (
     Template("d_games_3", DAILY, "games", "rounds_played", 3, 30, "Play 3 gambling rounds"),
     Template("d_games_5", DAILY, "games", "rounds_played", 5, 40, "Play 5 gambling rounds"),
     Template(
-        "d_win_slots", DAILY, "games", "rounds_won", 1, 35, "Win a round of slots", game="slots"
+        "d_win_slots",
+        DAILY,
+        "games",
+        "rounds_won",
+        1,
+        35,
+        "Win a round of slots",
+        game=frozenset({"slots"}),
     ),
     Template(
         "d_win_blackjack",
@@ -24,7 +31,7 @@ POOL: tuple[Template, ...] = (
         1,
         35,
         "Win a hand of blackjack",
-        game="blackjack",
+        game=frozenset({"blackjack", "bjtable"}),
     ),
     # Daily: voice
     Template(

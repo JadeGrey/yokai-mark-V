@@ -30,7 +30,7 @@ def tpl(
     *,
     period: str = "daily",
     category: str = "music",
-    game: Optional[str] = None,
+    game: Optional[frozenset[str]] = None,
 ) -> Template:
     return Template(id, period, category, metric, target, reward, f"title {id}", game)
 

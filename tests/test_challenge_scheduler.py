@@ -70,6 +70,16 @@ async def test_a_failed_send_is_swallowed() -> None:
     await ChallengeScheduler(bot).flush_notices()  # must not raise
 
 
+async def test_an_unexpected_send_error_does_not_stop_other_channels(caplog) -> None:
+    a, b = _text_channel(), _text_channel()
+    a.send.side_effect = RuntimeError("boom")
+    bot, _ = _setup([_completion(1, 5), _completion(2, 6)], {5: a, 6: b})
+    with caplog.at_level("WARNING"):
+        await ChallengeScheduler(bot).flush_notices()
+    b.send.assert_awaited_once()
+    assert any(r.levelname == "WARNING" and "5" in r.getMessage() for r in caplog.records)
+
+
 async def test_tick_creates_both_slates_and_a_broken_tick_does_not_kill_the_loop() -> None:
     bot, engine = _setup([], {})
     scheduler = ChallengeScheduler(bot)

@@ -174,7 +174,8 @@ class ChallengeEngine:
             logger.exception("Challenge engine failed on %s", type(event).__name__)
 
     async def close(self) -> None:
-        """Let in-flight emitted events finish (used at shutdown and in tests)."""
+        """Stop accepting events, then let in-flight ones finish (shutdown and tests)."""
+        self.enabled = False
         if self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
 
@@ -230,7 +231,7 @@ class ChallengeEngine:
                 for effect in effects:
                     if effect.metric != template.metric:
                         continue
-                    if template.game is not None and template.game != effect.game:
+                    if template.game is not None and effect.game not in template.game:
                         continue
                     await self._advance(user_id, period, key, template, effect, channel_id)
 

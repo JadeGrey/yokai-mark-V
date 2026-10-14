@@ -39,6 +39,26 @@ async def test_a_completed_track_credits_every_human_with_company() -> None:
     )
 
 
+async def test_spotify_derived_tracks_never_pass_their_artist() -> None:
+    player, _, bot = make_player()
+    _connect(player, [_member(1), _member(2)])
+    by_id = make_track("vid1")
+    by_id.artist = "Spotify Artist"
+    by_id.spotify_id = "sp1"
+    by_origin = make_track("vid2")
+    by_origin.artist = "Spotify Artist"
+    by_origin.origin = "import"
+
+    player._emit_challenge(by_id, "completed", 180)
+    player._emit_challenge(by_origin, "completed", 180)
+
+    emitted = [call.args[0] for call in bot.challenges.emit.call_args_list]
+    assert emitted == [
+        TrackListened(user_ids=(1, 2), video_id="vid1", artist=None, channel_id=555),
+        TrackListened(user_ids=(1, 2), video_id="vid2", artist=None, channel_id=555),
+    ]
+
+
 async def test_skip_counts_only_past_half() -> None:
     player, _, bot = make_player()
     _connect(player, [_member(1), _member(2)])

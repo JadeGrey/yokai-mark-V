@@ -587,11 +587,13 @@ class GuildPlayer:
             humans = tuple(member.id for member in channel.members if not member.bot)
             if len(humans) < 2:
                 return
+            # Spotify-matched tracks may carry Spotify's artist text; never persist that.
+            from_spotify = track.spotify_id is not None or track.origin == "import"
             self.bot.challenges.emit(
                 TrackListened(
                     user_ids=humans,
                     video_id=track.video_id,
-                    artist=track.artist,
+                    artist=None if from_spotify else track.artist,
                     channel_id=getattr(self.text_channel, "id", None),
                 )
             )
