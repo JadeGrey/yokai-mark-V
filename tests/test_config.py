@@ -177,3 +177,32 @@ def test_log_dir_defaults_and_overrides() -> None:
 
     with patch.dict(os.environ, {**base, "LOG_DIR": "elsewhere/logs"}, clear=True):
         assert load_config(env_path=Path("non_existent_env")).log_dir == Path("elsewhere/logs")
+
+
+RPG_BASE_ENV = {
+    "DISCORD_TOKEN": "mock.token.123",
+    "GUILD_ID": "123456789",
+    "OWNER_ID": "999",
+}
+
+
+def test_rpg_settings_default_to_enabled_and_the_repo_content_folder() -> None:
+    with patch.dict(os.environ, RPG_BASE_ENV, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert config.rpg_enabled is True
+    assert config.rpg_content_dir == Path("content/rpg")
+
+
+def test_rpg_settings_can_be_overridden() -> None:
+    env = {**RPG_BASE_ENV, "RPG_ENABLED": "false", "RPG_CONTENT_DIR": "elsewhere/rpg"}
+    with patch.dict(os.environ, env, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert config.rpg_enabled is False
+    assert config.rpg_content_dir == Path("elsewhere/rpg")
+
+
+def test_blank_rpg_content_dir_falls_back_to_the_default() -> None:
+    env = {**RPG_BASE_ENV, "RPG_CONTENT_DIR": "   "}
+    with patch.dict(os.environ, env, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert config.rpg_content_dir == Path("content/rpg")

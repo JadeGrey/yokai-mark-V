@@ -85,6 +85,10 @@ class Config:
     challenge_min_wager: int = 10
     challenge_reward_scale: float = 1.0
 
+    # Guild RPG
+    rpg_enabled: bool = True
+    rpg_content_dir: Path = Path("content/rpg")
+
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
     if value is None:
@@ -271,6 +275,9 @@ def load_config(env_path: Path | str | None = None) -> Config:
         max(0.1, _parse_float("CHALLENGE_REWARD_SCALE", os.getenv("CHALLENGE_REWARD_SCALE"), 1.0)),
     )
 
+    rpg_enabled = _parse_bool(os.getenv("RPG_ENABLED"), default=True)
+    rpg_content_dir = Path(os.getenv("RPG_CONTENT_DIR", "content/rpg").strip() or "content/rpg")
+
     return Config(
         discord_token=token,
         guild_id=guild_id,
@@ -314,4 +321,6 @@ def load_config(env_path: Path | str | None = None) -> Config:
         challenge_tz=challenge_tz,
         challenge_min_wager=challenge_min_wager,
         challenge_reward_scale=challenge_reward_scale,
+        rpg_enabled=rpg_enabled,
+        rpg_content_dir=rpg_content_dir,
     )
