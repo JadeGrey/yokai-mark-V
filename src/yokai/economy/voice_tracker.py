@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from yokai.challenges.models import VoiceMinutes
+
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
 
@@ -50,10 +52,9 @@ class VoiceEarnTracker:
         The guild's AFK channel is skipped so idle members parked there can't farm Renown.
         A single member's credit failure is caught and logged so it doesn't abort crediting
         the rest of that tick. Blacklisted members still count toward the 2-human minimum but
-        are never credited.
+        are never credited. Each such human's minutes are reported to the challenge engine even
+        when voice pay is off (reward 0) or the credit fails.
         """
-        if self.reward <= 0:
-            return
         guild = self.bot.get_guild(self.bot.config.guild_id)
         if guild is None:
             return
@@ -67,12 +68,14 @@ class VoiceEarnTracker:
             for member in humans:
                 if await self.bot.moderation.is_blacklisted(member.id):
                     continue
-                try:
-                    await self.bot.db.credit_wallet(
-                        member.id,
-                        self.reward,
-                        reason="voice",
-                        welcome_bonus=self.bot.config.economy_welcome_bonus,
-                    )
-                except Exception as exc:
-                    logger.error("Voice-earn credit failed for user %d: %s", member.id, exc)
+                if self.reward > 0:
+                    try:
+                        await self.bot.db.credit_wallet(
+                            member.id,
+                            self.reward,
+                            reason="voice",
+                            welcome_bonus=self.bot.config.economy_welcome_bonus,
+                        )
+                    except Exception as exc:
+                        logger.error("Voice-earn credit failed for user %d: %s", member.id, exc)
+                self.bot.challenges.emit(VoiceMinutes(member.id, max(1, self.interval_s // 60)))

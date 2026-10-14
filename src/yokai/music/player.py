@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Coroutine, Optional
 
 import discord
 
+from yokai.challenges.models import TrackListened, counts_as_listened
 from yokai.errors import (
     LoginRequiredError,
     NotFoundError,
@@ -453,6 +454,7 @@ class GuildPlayer:
         self.current_track = None
         self._current_source = None
         self._spawn(self._record_event(track, outcome=outcome, listened_s=listened))
+        self._emit_challenge(track, outcome, listened)
         self.queue.record_history(track)
 
         mode = self.queue.loop_mode
@@ -567,6 +569,34 @@ class GuildPlayer:
             await self.text_channel.send(embed=embed)
         except discord.HTTPException as send_err:
             logger.debug("Could not send failure notice: %s", send_err)
+
+    def _emit_challenge(self, track: Track, outcome: str, listened_s: int) -> None:
+        """Tell the challenge engine which humans heard this track. Never raises."""
+        try:
+            if track.is_pending_match or track.video_id.startswith("sp:"):
+                return
+            if not counts_as_listened(outcome, listened_s, track.duration_s):
+                return
+            vc = self.voice_client
+            if vc is None or not vc.is_connected():
+                return
+            channel = vc.channel
+            afk = getattr(getattr(channel, "guild", None), "afk_channel", None)
+            if afk is not None and afk.id == channel.id:
+                return
+            humans = tuple(member.id for member in channel.members if not member.bot)
+            if len(humans) < 2:
+                return
+            self.bot.challenges.emit(
+                TrackListened(
+                    user_ids=humans,
+                    video_id=track.video_id,
+                    artist=track.artist,
+                    channel_id=getattr(self.text_channel, "id", None),
+                )
+            )
+        except Exception:
+            logger.exception("Could not report track %s to challenges", track.video_id)
 
     async def _record_event(self, track: Track, outcome: str, listened_s: int) -> None:
         """Log playback event to SQLite play_events table (YouTube-derived fields only)."""
