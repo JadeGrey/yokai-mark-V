@@ -371,6 +371,12 @@ class InvalidPokerActionError(YokaiError):
     title = "Can't do that"
 
 
+class InvalidCombatActionError(YokaiError):
+    """Raised when a fight action is not allowed right now (cooldown, bad target, fight over)."""
+
+    title = "Can't do that"
+
+
 class NoCharacterError(YokaiError):
     """Raised when someone looks up a guild character that does not exist."""
 
