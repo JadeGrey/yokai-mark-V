@@ -120,7 +120,7 @@ async def test_the_board_is_the_same_for_everyone_and_stored(tmp_path: Path) -> 
         today, _ = cog._day()
         assert await runtime.store.get_board(today) == [m.id for m in first]
         assert [m.id for m in await todays_missions(cog, runtime)] == [m.id for m in first]
-        assert len(first) == 21
+        assert len(first) == 26  # 3 regular missions per rank plus a raid for ranks C and up
     finally:
         await db.close()
 

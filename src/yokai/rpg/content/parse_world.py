@@ -17,6 +17,7 @@ from yokai.rpg.content.common import (
 from yokai.rpg.models import (
     BASIC_ACTIONS,
     ENEMY_TARGET_RULES,
+    MAX_PARTY,
     MISSION_KINDS,
     MODIFIABLE_STATS,
     RARITIES,
@@ -283,6 +284,12 @@ def parse_missions(
         kind = entry.get("kind", "mission")
         if kind not in MISSION_KINDS:
             raise ContentError(f"{where} kind must be one of: {', '.join(MISSION_KINDS)}")
+        default_party = 2 if kind == "raid" else 1
+        min_party = int_value(
+            entry.get("min_party", default_party), f"{where} min_party", 1, MAX_PARTY
+        )
+        if kind == "raid" and min_party < 2:
+            raise ContentError(f"{where} is a raid, so min_party must be at least 2")
         missions[mission_id] = Mission(
             id=mission_id,
             name=text_value(entry.get("name"), f"{where} name"),
@@ -292,6 +299,7 @@ def parse_missions(
             stages=parse_stages(entry.get("stages"), where, enemies, cap),
             description=str(entry.get("description", "")).strip(),
             power=int_value(entry.get("power", 100), f"{where} power", 10, 1000),
+            min_party=min_party,
         )
     return missions
 

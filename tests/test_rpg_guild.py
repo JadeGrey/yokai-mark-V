@@ -244,13 +244,24 @@ def test_the_board_is_stable_for_a_day_and_changes_between_days(content: Content
     assert len(boards) > 1
 
 
-def test_the_board_has_three_regular_missions_per_rank(content: Content) -> None:
+def test_the_board_has_three_regular_missions_per_rank_and_a_raid_from_c_up(
+    content: Content,
+) -> None:
     ids = guild.draw_board(content, "2026-10-14")
     missions = guild.board_missions(content, ids)
     for rank in content.ranks:
         in_rank = [m for m in missions if m.rank == rank.id]
-        assert len(in_rank) == 3 and all(m.kind == "mission" for m in in_rank)
-    assert len(set(ids)) == len(ids) == 21
+        regular = [m for m in in_rank if m.kind == "mission"]
+        raids = [m for m in in_rank if m.kind == "raid"]
+        assert len(regular) == 3
+        assert len(raids) == (0 if content.rank_index(rank.id) < content.rank_index("C") else 1)
+        assert in_rank == regular + raids  # regular missions first, then the raid
+    assert len(set(ids)) == len(ids) == 26
+
+
+def test_the_board_can_leave_raids_out(content: Content) -> None:
+    ids = guild.draw_board(content, "2026-10-14", raids_per_rank=0)
+    assert len(ids) == 21 and all(content.missions[i].kind == "mission" for i in ids)
 
 
 def test_the_board_is_ordered_by_rank_then_file_order(content: Content) -> None:
@@ -260,7 +271,7 @@ def test_the_board_is_ordered_by_rank_then_file_order(content: Content) -> None:
 
 
 def test_a_larger_per_rank_than_the_pool_returns_the_whole_pool(content: Content) -> None:
-    ids = guild.draw_board(content, "2026-10-14", per_rank=99)
+    ids = guild.draw_board(content, "2026-10-14", per_rank=99, raids_per_rank=99)
     assert len(ids) == len(content.missions)
 
 

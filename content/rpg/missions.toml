@@ -312,3 +312,148 @@ stages = [
   { enemies = ["gashadokuro"], level = 60 },
   { enemies = ["tamamo"], level = 60 },
 ]
+
+# ------------------------------------------------------------------------------ Raids
+# Raids are multi-stage boss missions for a party of 2 to 4 (`min_party`). The board offers one
+# per rank from C upward each day. They cost more attempts and pay the same per-attempt formula,
+# and they count as boss missions for drops. `power` is calibrated for a party of three.
+
+[[mission]]
+id = "raid_c_bandit_fortress"
+name = "Bandit Fortress"
+rank = "C"
+kind = "raid"
+attempt_cost = 3
+power = 100
+description = "A mountain fort held by oni-touched bandits."
+stages = [
+  { enemies = ["karakasa", "karakasa", "kamaitachi"], level = 15 },
+  { enemies = ["rokurokubi", "nopperabo"], level = 17 },
+  { enemies = ["ushi_oni"], level = 19 },
+]
+
+[[mission]]
+id = "raid_c_the_long_night"
+name = "The Long Night"
+rank = "C"
+kind = "raid"
+attempt_cost = 3
+power = 100
+description = "Something has been taking whole caravans after dark."
+stages = [
+  { enemies = ["gaki", "gaki", "gaki"], level = 15 },
+  { enemies = ["hannya"], level = 17 },
+  { enemies = ["tsuchigumo", "tsuchigumo"], level = 19 },
+]
+
+[[mission]]
+id = "raid_b_sunken_temple"
+name = "Sunken Temple"
+rank = "B"
+kind = "raid"
+attempt_cost = 3
+power = 100
+description = "A drowned shrine where the dead walk the flooded halls."
+stages = [
+  { enemies = ["nopperabo", "nopperabo", "rokurokubi"], level = 24 },
+  { enemies = ["hannya", "hannya"], level = 26 },
+  { enemies = ["gashadokuro"], level = 28 },
+]
+
+[[mission]]
+id = "raid_b_thunder_ridge"
+name = "Thunder Ridge"
+rank = "B"
+kind = "raid"
+attempt_cost = 3
+power = 100
+description = "Chimeras nest on the storm-wracked ridge above the pass."
+stages = [
+  { enemies = ["kamaitachi", "kamaitachi", "kamaitachi"], level = 24 },
+  { enemies = ["nue"], level = 26 },
+  { enemies = ["nue", "ushi_oni"], level = 28 },
+]
+
+[[mission]]
+id = "raid_a_spider_warren"
+name = "Spider Warren"
+rank = "A"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "A web-choked warren beneath a ruined castle."
+stages = [
+  { enemies = ["tsuchigumo", "tsuchigumo", "tsuchigumo"], level = 36 },
+  { enemies = ["hannya", "hannya"], level = 39 },
+  { enemies = ["tsuchigumo", "gashadokuro"], level = 42 },
+]
+
+[[mission]]
+id = "raid_a_castle_of_bones"
+name = "Castle of Bones"
+rank = "A"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "The hungry skeleton lord has taken a whole castle."
+stages = [
+  { enemies = ["nue", "nue"], level = 36 },
+  { enemies = ["gashadokuro"], level = 39 },
+  { enemies = ["gashadokuro", "hannya"], level = 42 },
+]
+
+[[mission]]
+id = "raid_ss_ogre_stronghold"
+name = "Ogre Stronghold"
+rank = "SS"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "The demon lord's mountain keep, guarded to the last gate."
+stages = [
+  { enemies = ["ushi_oni", "ushi_oni", "ushi_oni"], level = 50 },
+  { enemies = ["gashadokuro"], level = 53 },
+  { enemies = ["shuten_doji"], level = 56 },
+]
+
+[[mission]]
+id = "raid_ss_eight_headed_serpent"
+name = "The Eight-Headed Serpent"
+rank = "SS"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "A flooded valley and the serpent that rules it."
+stages = [
+  { enemies = ["nue", "nue", "hannya"], level = 50 },
+  { enemies = ["nurarihyon"], level = 53 },
+  { enemies = ["yamata_orochi"], level = 56 },
+]
+
+[[mission]]
+id = "raid_sp_court_of_nine_tails"
+name = "Court of the Nine Tails"
+rank = "SS+"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "The fox queen holds court and her guests do not leave."
+stages = [
+  { enemies = ["hannya", "hannya", "nue"], level = 60 },
+  { enemies = ["nurarihyon"], level = 60 },
+  { enemies = ["tamamo"], level = 60 },
+]
+
+[[mission]]
+id = "raid_sp_calamity"
+name = "Calamity"
+rank = "SS+"
+kind = "raid"
+attempt_cost = 4
+power = 100
+description = "Every great yokai at once. Bring everyone."
+stages = [
+  { enemies = ["gashadokuro", "shuten_doji"], level = 60 },
+  { enemies = ["yamata_orochi"], level = 60 },
+  { enemies = ["tamamo", "nurarihyon"], level = 60 },
+]

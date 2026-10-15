@@ -88,12 +88,12 @@ def test_missions_within_a_rank_are_comparably_hard(content: Content) -> None:
     rng = random.Random(5)
     for rank_id, (level, tier) in entry.items():
         stats = typical_loadout(content, level, rarity="uncommon", gear_level=tier).stats
-        for mission in content.missions_for_rank(rank_id):
+        for mission in (m for m in content.missions_for_rank(rank_id) if m.kind == "mission"):
             wins = sum(fight_once(content, mission, stats, rng)[0] for _ in range(60))
             assert 0.55 <= wins / 60 <= 1.0, f"{mission.id}: {wins / 60:.0%}"
     for rank_id, level in (("E", 2), ("D", 6)):
         stats = stats_at_level(content.levels, level)
-        for mission in content.missions_for_rank(rank_id):
+        for mission in (m for m in content.missions_for_rank(rank_id) if m.kind == "mission"):
             wins = sum(fight_once(content, mission, stats, rng)[0] for _ in range(60))
             assert 0.55 <= wins / 60 <= 1.0, f"{mission.id}: {wins / 60:.0%}"
 

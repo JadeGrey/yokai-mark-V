@@ -251,7 +251,7 @@ def is_boss_mission(content: Content, mission: Mission) -> bool:
 def roll_drop(content: Content, mission: Mission, rng: random.Random) -> Optional[ItemDef]:
     """What a won mission drops for one member, if anything."""
     loot = content.balance.loot
-    boss = is_boss_mission(content, mission)
+    boss = mission.kind == "raid" or is_boss_mission(content, mission)
     chance = loot.boss_drop_chance_percent if boss else loot.drop_chance_percent
     if rng.random() * 100 >= chance:
         return None

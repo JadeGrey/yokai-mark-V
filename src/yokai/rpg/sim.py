@@ -215,7 +215,11 @@ def simulate(
                         owned_tier, owned_rarity = top_tier, rarity
                         break
         losses_here: dict[str, int] = {}
-        board = guild.board_missions(content, guild.draw_board(content, day_key))
+        board = [
+            m
+            for m in guild.board_missions(content, guild.draw_board(content, day_key))
+            if m.kind == "mission"
+        ]
         promo_blocked = False
         attempt_promotion()
 

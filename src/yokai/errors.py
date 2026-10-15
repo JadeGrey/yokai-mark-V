@@ -615,3 +615,57 @@ class NoCharacterError(YokaiError):
                 "That member hasn't joined the adventurers' guild yet.",
                 user_hint="They can run /guild join to create a character.",
             )
+
+
+class PartyFullError(YokaiError):
+    """Raised when someone tries to join a party that already has the most members."""
+
+    title = "Party is full"
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(
+            f"This party already has {limit} members.",
+            user_hint="Wait for the next lobby or ask the leader to open another.",
+        )
+
+
+class AlreadyInPartyError(YokaiError):
+    """Raised when a member who is already in a lobby tries to join it again."""
+
+    title = "Already in the party"
+
+    def __init__(self) -> None:
+        super().__init__("You're already in this party.", user_hint="Wait for the leader to start.")
+
+
+class NotInPartyError(YokaiError):
+    """Raised when someone who is not in a lobby tries to leave it."""
+
+    title = "Not in the party"
+
+    def __init__(self) -> None:
+        super().__init__("You're not in this party.", user_hint="Press Join to take a seat.")
+
+
+class NotPartyLeaderError(YokaiError):
+    """Raised when someone other than the leader tries to start or cancel a lobby."""
+
+    title = "Leader only"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Only the party leader can do that.",
+            user_hint="Ask the leader, or open your own lobby with /guild mission.",
+        )
+
+
+class PartyTooSmallError(YokaiError):
+    """Raised when a lobby is started with fewer members than the mission needs."""
+
+    title = "Not enough members"
+
+    def __init__(self, needed: int, have: int) -> None:
+        super().__init__(
+            f"This mission needs a party of at least {needed} and you have {have}.",
+            user_hint="Wait for others to join, then press Start.",
+        )

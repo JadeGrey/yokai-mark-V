@@ -25,6 +25,7 @@ SKILL_TARGETS: tuple[str, ...] = ("foe", "all_foes", "ally", "all_allies", "self
 ENEMY_TARGET_RULES: tuple[str, ...] = ("random", "lowest_hp")
 BASIC_ACTIONS: tuple[str, ...] = ("attack", "magic")
 MISSION_KINDS: tuple[str, ...] = ("mission", "raid")
+MAX_PARTY = 4
 PROMOTION_KIND = "promotion"
 SLOTS: tuple[str, ...] = ("weapon", "head", "body", "boots", "accessory")
 RARITIES: tuple[str, ...] = ("common", "uncommon", "rare", "epic")
@@ -166,6 +167,7 @@ class Mission:
     stages: tuple[Stage, ...]
     description: str = ""
     power: int = 100  # percent on top of the rank's enemy power, to even out difficulty
+    min_party: int = 1  # raids need a party; regular missions can be run solo
 
     @property
     def top_level(self) -> int:

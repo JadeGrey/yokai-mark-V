@@ -13,6 +13,7 @@ from yokai.rpg.content import Content
 from yokai.rpg.models import Character, Mission, Rank, StreakRules, XpCurve
 
 MISSIONS_PER_RANK = 3
+RAIDS_PER_RANK = 1
 
 
 # ------------------------------------------------------------------------------------- days
@@ -167,14 +168,28 @@ def mission_reward(content: Content, mission: Mission, player_rank: str) -> Rewa
 # ------------------------------------------------------------------------------- the board
 
 
-def draw_board(content: Content, day: str, per_rank: int = MISSIONS_PER_RANK) -> list[str]:
-    """Pick the day's missions: `per_rank` regular missions from each rank, seeded by the day."""
-    rng = random.Random(f"rpg-board:{day}")
+def draw_board(
+    content: Content,
+    day: str,
+    per_rank: int = MISSIONS_PER_RANK,
+    raids_per_rank: int = RAIDS_PER_RANK,
+) -> list[str]:
+    """Pick the day's board: regular missions and raids from each rank, seeded by the day.
+
+    Within a rank the regular missions come first, then the raids. Ranks without raids simply
+    have none. Raids use their own seed so adding or removing them never reshuffles the regular
+    missions.
+    """
+    rngs = {
+        "mission": random.Random(f"rpg-board:{day}"),
+        "raid": random.Random(f"rpg-raids:{day}"),
+    }
     ids: list[str] = []
     for rank in content.ranks:
-        pool = [m.id for m in content.missions_for_rank(rank.id) if m.kind == "mission"]
-        chosen = set(rng.sample(pool, min(per_rank, len(pool))))
-        ids.extend(mission_id for mission_id in pool if mission_id in chosen)
+        for kind, count in (("mission", per_rank), ("raid", raids_per_rank)):
+            pool = [m.id for m in content.missions_for_rank(rank.id) if m.kind == kind]
+            chosen = set(rngs[kind].sample(pool, min(count, len(pool))))
+            ids.extend(mission_id for mission_id in pool if mission_id in chosen)
     return ids
 
 
