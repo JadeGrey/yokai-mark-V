@@ -377,6 +377,71 @@ class InvalidCombatActionError(YokaiError):
     title = "Can't do that"
 
 
+class NoAttemptsError(YokaiError):
+    """Raised when a member does not have enough daily attempts for a mission."""
+
+    title = "Out of attempts"
+
+    def __init__(self, remaining: int, cost: int, resets_ts: Optional[int] = None) -> None:
+        hint = "Attempts refresh every day."
+        if resets_ts is not None:
+            hint = f"Your attempts refresh <t:{resets_ts}:R>."
+        super().__init__(
+            f"That mission costs {cost} attempt(s) and you have {remaining} left today.",
+            user_hint=hint,
+        )
+        self.remaining = remaining
+        self.cost = cost
+
+
+class MissionNotAvailableError(YokaiError):
+    """Raised when a mission is not on today's guild board."""
+
+    title = "Not on the board"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That mission isn't on today's board.",
+            user_hint="Run /guild board to see today's missions.",
+        )
+
+
+class MissionRankError(YokaiError):
+    """Raised when a mission is above the member's rank."""
+
+    title = "Rank too low"
+
+    def __init__(self, mission_rank: str, your_rank: str) -> None:
+        super().__init__(
+            f"That mission needs rank {mission_rank} and you are rank {your_rank}.",
+            user_hint="Missions at your rank or below are open to you.",
+        )
+
+
+class AlreadyFightingError(YokaiError):
+    """Raised when a member who is already in a guild fight tries to start another."""
+
+    title = "Already in a fight"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You're already in a guild fight.",
+            user_hint="Finish it in its thread first.",
+        )
+
+
+class ThreadUnavailableError(YokaiError):
+    """Raised when a fight thread cannot be opened where the command was used."""
+
+    title = "Can't open a thread"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "I couldn't open a fight thread here.",
+            user_hint="Run the command in a normal text channel where I can create threads.",
+        )
+
+
 class NoCharacterError(YokaiError):
     """Raised when someone looks up a guild character that does not exist."""
 
