@@ -291,6 +291,7 @@ def parse_missions(
             attempt_cost=int_value(entry.get("attempt_cost"), f"{where} attempt_cost", 1, 10),
             stages=_parse_stages(entry.get("stages"), where, enemies, cap),
             description=str(entry.get("description", "")).strip(),
+            power=int_value(entry.get("power", 100), f"{where} power", 10, 1000),
         )
     return missions
 

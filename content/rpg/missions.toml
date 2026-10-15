@@ -1,7 +1,9 @@
 # The mission pool. Each day the guild board draws a few missions per rank from this pool.
 # `stages` run in order; HP carries over between stages. `level` is the enemy level for the
 # stage. `attempt_cost` is the daily attempts it uses. Rewards are formulas (see balance.toml
-# and ranks.toml), not per-mission numbers. Ids are permanent.
+# and ranks.toml), not per-mission numbers. `power` is a percent on top of the rank's enemy
+# power that evens out difficulty between missions (calibrated by simulation; 100 is the rank's
+# typical mission). Ids are permanent.
 
 # ---------------------------------------------------------------- Rank E (levels 1-4)
 [[mission]]
@@ -9,6 +11,7 @@ id = "e_pest_control"
 name = "Pest Control"
 rank = "E"
 attempt_cost = 1
+power = 142
 description = "Hungry ghosts are raiding a village granary."
 stages = [{ enemies = ["gaki", "gaki"], level = 1 }]
 
@@ -17,6 +20,7 @@ id = "e_lost_umbrellas"
 name = "Lost Umbrellas"
 rank = "E"
 attempt_cost = 1
+power = 100
 description = "Umbrella spirits are hopping through the market."
 stages = [{ enemies = ["karakasa", "karakasa"], level = 2 }]
 
@@ -25,6 +29,7 @@ id = "e_trickster_hunt"
 name = "Trickster Hunt"
 rank = "E"
 attempt_cost = 1
+power = 100
 description = "A tanuki has been stealing from travellers."
 stages = [
   { enemies = ["tanuki"], level = 2 },
@@ -36,6 +41,7 @@ id = "e_midnight_gate"
 name = "Midnight Gate"
 rank = "E"
 attempt_cost = 1
+power = 74
 description = "Something prowls the old gate after dark."
 stages = [
   { enemies = ["gaki", "gaki", "gaki"], level = 3 },
@@ -48,6 +54,7 @@ id = "d_alley_cats"
 name = "Alley Cats"
 rank = "D"
 attempt_cost = 1
+power = 128
 description = "Shapeshifting cats have taken over the lantern district."
 stages = [{ enemies = ["bakeneko", "bakeneko"], level = 6 }]
 
@@ -56,6 +63,7 @@ id = "d_wind_blades"
 name = "Wind Blades"
 rank = "D"
 attempt_cost = 1
+power = 106
 description = "A whirlwind of sickle weasels is cutting travellers on the road."
 stages = [{ enemies = ["kamaitachi", "kamaitachi"], level = 8 }]
 
@@ -64,6 +72,7 @@ id = "d_long_necks"
 name = "Long Necks"
 rank = "D"
 attempt_cost = 1
+power = 88
 description = "Long-necked spirits drift through the inn at night."
 stages = [
   { enemies = ["rokurokubi"], level = 7 },
@@ -75,6 +84,7 @@ id = "d_faceless"
 name = "The Faceless"
 rank = "D"
 attempt_cost = 1
+power = 96
 description = "Travellers meet a smooth, faceless figure on the mountain path."
 stages = [{ enemies = ["nopperabo", "nopperabo"], level = 10 }]
 
@@ -84,6 +94,7 @@ id = "c_ox_pasture"
 name = "Ox Demon Pasture"
 rank = "C"
 attempt_cost = 1
+power = 143
 description = "An ox-headed demon has taken over a mountain pasture."
 stages = [{ enemies = ["ushi_oni"], level = 14 }]
 
@@ -92,6 +103,7 @@ id = "c_web_cellar"
 name = "Web Cellar"
 rank = "C"
 attempt_cost = 1
+power = 98
 description = "Earth spiders nest beneath the old brewery."
 stages = [
   { enemies = ["tsuchigumo", "tsuchigumo"], level = 15 },
@@ -103,6 +115,7 @@ id = "c_haunted_road"
 name = "Haunted Road"
 rank = "C"
 attempt_cost = 1
+power = 103
 description = "A road where lanterns go out one by one."
 stages = [
   { enemies = ["karakasa", "karakasa"], level = 13 },
@@ -115,6 +128,7 @@ id = "c_masked_maidens"
 name = "Masked Maidens"
 rank = "C"
 attempt_cost = 1
+power = 92
 description = "Two jealous spirits haunt a theatre."
 stages = [{ enemies = ["hannya", "hannya"], level = 17 }]
 
@@ -124,6 +138,7 @@ id = "b_hungry_giant"
 name = "The Hungry Giant"
 rank = "B"
 attempt_cost = 2
+power = 110
 description = "A skeleton as tall as a temple walks the valley."
 stages = [{ enemies = ["gashadokuro"], level = 24 }]
 
@@ -132,6 +147,7 @@ id = "b_chimera_roost"
 name = "Chimera Roost"
 rank = "B"
 attempt_cost = 2
+power = 125
 description = "A monkey-faced, tiger-limbed horror circles the capital."
 stages = [
   { enemies = ["nue"], level = 22 },
@@ -143,6 +159,7 @@ id = "b_mountain_pass"
 name = "Mountain Pass"
 rank = "B"
 attempt_cost = 2
+power = 83
 description = "Demons and wind blades guard the only pass north."
 stages = [
   { enemies = ["ushi_oni", "ushi_oni"], level = 23 },
@@ -154,6 +171,7 @@ id = "b_night_parade"
 name = "Night Parade"
 rank = "B"
 attempt_cost = 2
+power = 92
 description = "A parade of spirits marches through the streets."
 stages = [
   { enemies = ["gaki", "gaki", "gaki"], level = 21 },
@@ -167,6 +185,7 @@ id = "a_chimera_hunt"
 name = "Chimera Hunt"
 rank = "A"
 attempt_cost = 2
+power = 162
 description = "The great chimera has taken a fortress."
 stages = [{ enemies = ["nue"], level = 34 }]
 
@@ -175,6 +194,7 @@ id = "a_spider_queen"
 name = "The Spider Queen's Court"
 rank = "A"
 attempt_cost = 2
+power = 79
 description = "A hive of earth spiders threatens a mining town."
 stages = [
   { enemies = ["tsuchigumo", "tsuchigumo", "tsuchigumo"], level = 32 },
@@ -186,6 +206,7 @@ id = "a_bone_hall"
 name = "Hall of Bones"
 rank = "A"
 attempt_cost = 2
+power = 102
 description = "Skeletons of the battlefield gather in one hall."
 stages = [{ enemies = ["gashadokuro"], level = 38 }]
 
@@ -194,6 +215,7 @@ id = "a_veiled_court"
 name = "The Veiled Court"
 rank = "A"
 attempt_cost = 2
+power = 98
 description = "Masked spirits hold court in a ruined palace."
 stages = [
   { enemies = ["hannya", "hannya"], level = 36 },
@@ -206,6 +228,7 @@ id = "ss_demon_gate"
 name = "The Demon's Gate"
 rank = "SS"
 attempt_cost = 2
+power = 83
 description = "An ogre king guards the gate to his mountain."
 stages = [
   { enemies = ["ushi_oni", "ushi_oni"], level = 47 },
@@ -217,6 +240,7 @@ id = "ss_serpent_cave"
 name = "Eight-Headed Serpent"
 rank = "SS"
 attempt_cost = 2
+power = 109
 description = "A serpent with eight heads sleeps in a flooded cave."
 stages = [{ enemies = ["yamata_orochi"], level = 54 }]
 
@@ -225,6 +249,7 @@ id = "ss_goblin_lord"
 name = "The Goblin Lord"
 rank = "SS"
 attempt_cost = 2
+power = 119
 description = "The master of a hundred spirits walks into the guild hall."
 stages = [{ enemies = ["nurarihyon"], level = 56 }]
 
@@ -233,6 +258,7 @@ id = "ss_hundred_demons"
 name = "A Hundred Demons"
 rank = "SS"
 attempt_cost = 2
+power = 91
 description = "The great night march of the demons."
 stages = [
   { enemies = ["nue", "nue"], level = 48 },
@@ -246,6 +272,7 @@ id = "sp_nine_tails"
 name = "The Nine-Tailed Empress"
 rank = "SS+"
 attempt_cost = 2
+power = 120
 description = "A fox who has ruled empires wants the guild's throne."
 stages = [{ enemies = ["tamamo"], level = 60 }]
 
@@ -254,6 +281,7 @@ id = "sp_serpent_return"
 name = "Serpent's Return"
 rank = "SS+"
 attempt_cost = 2
+power = 104
 description = "The eight-headed serpent has grown new heads."
 stages = [
   { enemies = ["nue", "nue"], level = 60 },
@@ -265,6 +293,7 @@ id = "sp_demon_lords"
 name = "Demon Lords"
 rank = "SS+"
 attempt_cost = 2
+power = 95
 description = "Two demon lords have allied against the guild."
 stages = [
   { enemies = ["shuten_doji"], level = 60 },
@@ -276,6 +305,7 @@ id = "sp_endless_night"
 name = "The Endless Night"
 rank = "SS+"
 attempt_cost = 2
+power = 91
 description = "The night does not end, and something walks in it."
 stages = [
   { enemies = ["nue", "nue"], level = 60 },

@@ -43,10 +43,17 @@ def main() -> int:
         print(f"{rank.id:>4}  {label}")
     first = runs[0]
     print(f"\nwin rate (seed 1): {first.win_rate():.0%} overall")
+    print("rank   win rate in the first 3 days after promotion (mean over seeds)")
+    for rank in content.ranks[1:]:
+        rates = [r.win_rate_after_promotion(rank.id) for r in runs]
+        print(f"{rank.id:>4}   {statistics.mean(rates):.0%}")
+    print("\nRenown per day (seed 1): earned, spent on gear and repairs, net")
     for low, high in ((1, 30), (31, 60), (61, 90), (91, args.days)):
+        spent = sum(r.spent for r in first.records if low <= r.day <= high) / (high - low + 1)
         print(
-            f"  days {low:>3}-{high:<3} win rate {first.win_rate(low, high):.0%}, "
-            f"Renown/day {first.renown_per_day(low, high):,.0f}"
+            f"  days {low:>3}-{high:<3} win {first.win_rate(low, high):.0%}, "
+            f"earned {first.renown_per_day(low, high):>5,.0f}, spent {spent:>4,.0f}, "
+            f"net {first.net_per_day(low, high):>5,.0f}"
         )
     return 0
 

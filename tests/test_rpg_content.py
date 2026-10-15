@@ -298,3 +298,20 @@ def test_enemy_power_defaults_to_one_hundred_and_is_validated(tmp_path: Path) ->
 def test_the_shipped_enemy_power_is_a_sane_discount_on_player_equivalent_enemies() -> None:
     content = load_content(Path("content/rpg"))
     assert all(20 <= rank.enemy_power <= 120 for rank in content.ranks)
+
+
+def test_mission_power_defaults_to_one_hundred_and_is_validated(tmp_path: Path) -> None:
+    content = load_content(write_content_dir(tmp_path))
+    assert all(m.power == 100 for m in content.missions.values())
+    text = mutate(MISSIONS, "attempt_cost = 2", "attempt_cost = 2\npower = 140")
+    assert load_content(write_content_dir(tmp_path, missions=text)).missions["d_cats"].power == 140
+    for bad in ("power = 5", "power = 1001", 'power = "hard"'):
+        broken = mutate(MISSIONS, "attempt_cost = 2", f"attempt_cost = 2\n{bad}")
+        with pytest.raises(ContentError, match="power"):
+            load_content(write_content_dir(tmp_path, missions=broken))
+
+
+def test_every_shipped_mission_has_a_sane_calibrated_power() -> None:
+    content = load_content(Path("content/rpg"))
+    for mission in content.missions.values():
+        assert 40 <= mission.power <= 250, mission.id

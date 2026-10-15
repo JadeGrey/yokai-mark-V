@@ -652,8 +652,22 @@ def test_mission_stages_use_the_missions_rank_power(shipped) -> None:  # type: i
     from yokai.rpg.combat.builders import build_mission_stages
 
     mission = shipped.missions["e_pest_control"]
-    power = shipped.rank(mission.rank).enemy_power
+    power = round(shipped.rank(mission.rank).enemy_power * mission.power / 100)
     foes = build_mission_stages(shipped, mission, 1)[0]
     base = stats_at_level(shipped.levels, mission.stages[0].level)
     assert foes[0].stats == enemy_stats(base, shipped.enemies["gaki"].mult, power)
-    assert power < 100  # E rank enemies are softer than player-equivalent
+
+
+def test_mission_power_scales_on_top_of_the_rank_power(shipped) -> None:  # type: ignore[no-untyped-def]
+    from dataclasses import replace
+
+    from yokai.rpg.combat.builders import build_mission_stages
+
+    mission = replace(shipped.missions["e_pest_control"], power=100)
+    harder = replace(mission, power=200)
+    softer = replace(mission, power=50)
+    normal_hp = build_mission_stages(shipped, mission, 1)[0][0].max_hp
+    assert build_mission_stages(shipped, harder, 1)[0][0].max_hp > normal_hp
+    assert build_mission_stages(shipped, softer, 1)[0][0].max_hp < normal_hp
+    tiny = replace(mission, power=10)
+    assert build_mission_stages(shipped, tiny, 1)[0][0].max_hp >= 1

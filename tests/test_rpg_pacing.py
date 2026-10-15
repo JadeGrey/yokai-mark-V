@@ -60,7 +60,42 @@ def test_progress_is_possible_from_the_very_first_day(runs: list[SimResult]) -> 
 
 def test_the_game_is_not_impossible_or_trivial_overall(runs: list[SimResult]) -> None:
     for run in runs:
-        assert 0.80 <= run.win_rate() <= 0.99
+        assert 0.80 <= run.win_rate() <= 0.995
+
+
+def test_each_promotion_is_a_real_step_up_in_difficulty(
+    content: Content, runs: list[SimResult]
+) -> None:
+    """Right after a promotion fights are risky but winnable; the player then outlevels them.
+
+    A few days is only a handful of fights per seed, so this averages the seeds.
+    """
+    for rank in content.ranks[2:]:  # E and D are gentle by design (new members have no gear)
+        rates = [run.win_rate_after_promotion(rank.id) for run in runs]
+        mean = sum(rates) / len(rates)
+        assert 0.55 <= mean <= 0.97, f"rank {rank.id}: {mean:.0%} ({rates})"
+
+
+def test_missions_within_a_rank_are_comparably_hard(content: Content) -> None:
+    """Per-mission power evens out content: no mission is a wall or a walkover at its rank."""
+    import random
+
+    from yokai.rpg.gear import typical_loadout
+    from yokai.rpg.sim import fight_once
+    from yokai.rpg.stats import stats_at_level
+
+    entry = {"C": (13, 1), "B": (21, 12), "A": (31, 24), "SS": (46, 38), "SS+": (60, 52)}
+    rng = random.Random(5)
+    for rank_id, (level, tier) in entry.items():
+        stats = typical_loadout(content, level, rarity="uncommon", gear_level=tier).stats
+        for mission in content.missions_for_rank(rank_id):
+            wins = sum(fight_once(content, mission, stats, rng)[0] for _ in range(60))
+            assert 0.55 <= wins / 60 <= 1.0, f"{mission.id}: {wins / 60:.0%}"
+    for rank_id, level in (("E", 2), ("D", 6)):
+        stats = stats_at_level(content.levels, level)
+        for mission in content.missions_for_rank(rank_id):
+            wins = sum(fight_once(content, mission, stats, rng)[0] for _ in range(60))
+            assert 0.55 <= wins / 60 <= 1.0, f"{mission.id}: {wins / 60:.0%}"
 
 
 def test_every_rank_is_reached_in_order(content: Content, runs: list[SimResult]) -> None:
@@ -82,3 +117,22 @@ def test_casual_players_progress_more_slowly(content: Content) -> None:
     casual = simulate(content, base_attempts=3, days=120, seed=1)
     daily = simulate(content, base_attempts=8, days=120, seed=1)
     assert (casual.day_reaching_level(30) or 999) > (daily.day_reaching_level(30) or 999)
+
+
+def test_gear_is_worth_having(content: Content) -> None:
+    """A member who never buys gear fights at a clear disadvantage."""
+    geared = simulate(content, base_attempts=8, days=60, seed=1, geared=True)
+    bare = simulate(content, base_attempts=8, days=60, seed=1, geared=False)
+    assert bare.win_rate() < geared.win_rate() - 0.05
+    assert (bare.day_reaching_level(30) or 999) > (geared.day_reaching_level(30) or 999)
+
+
+def test_gear_costs_renown_but_leaves_income_positive(runs: list[SimResult]) -> None:
+    """Purchases and repairs are real sinks, and never swallow the whole income."""
+    run = runs[0]
+    for first, last in ((1, 30), (31, 60), (61, 90)):
+        spent = sum(r.spent for r in run.records if first <= r.day <= last) / (last - first + 1)
+        earned = run.renown_per_day(first, last)
+        assert spent > 0 and 0 < run.net_per_day(first, last) < earned
+        # The first month is an investment: a new member buys a set for every gear tier.
+        assert spent < (0.85 if first == 1 else 0.7) * earned

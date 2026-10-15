@@ -108,8 +108,8 @@ def build_mission_stages(
     content: Content, mission: Mission, party_size: int
 ) -> list[list[Combatant]]:
     """A mission's stages, with its rank's enemy power applied."""
-    power = content.rank(mission.rank).enemy_power
-    return build_stages(content, mission.stages, party_size, power)
+    power = round(content.rank(mission.rank).enemy_power * mission.power / 100)
+    return build_stages(content, mission.stages, party_size, max(1, power))
 
 
 def default_player_name(user_id: int, name: Optional[str]) -> str:

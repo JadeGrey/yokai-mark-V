@@ -193,23 +193,40 @@ def compute_loadout(content: Content, level: int, equipped: Sequence[ItemInstanc
     )
 
 
-def typical_loadout(
-    content: Content, level: int, tag_id: str = "oni", rarity: str = "uncommon"
-) -> Loadout:
-    """A full set of the best gear a level allows, at full durability and unrolled stats.
-
-    Used by the pacing simulator and tests as a model of a reasonably geared member.
-    """
-    instances: list[ItemInstance] = []
+def typical_items(
+    content: Content, gear_level: int, tag_id: str = "oni", rarity: str = "uncommon"
+) -> list[ItemDef]:
+    """One item per slot: the best of a tag and rarity whose requirement is within `gear_level`."""
+    chosen: list[ItemDef] = []
     for slot in SLOTS:
         candidates = [
             i
             for i in content.items.values()
-            if i.tag == tag_id and i.slot == slot and i.rarity == rarity and i.req_level <= level
+            if i.tag == tag_id
+            and i.slot == slot
+            and i.rarity == rarity
+            and i.req_level <= gear_level
         ]
-        if not candidates:
-            continue
-        best = max(candidates, key=lambda i: i.req_level)
+        if candidates:
+            chosen.append(max(candidates, key=lambda i: i.req_level))
+    return chosen
+
+
+def typical_loadout(
+    content: Content,
+    level: int,
+    tag_id: str = "oni",
+    rarity: str = "uncommon",
+    gear_level: Optional[int] = None,
+) -> Loadout:
+    """A full set of the best gear a level allows, at full durability and unrolled stats.
+
+    Used by the pacing simulator and tests as a model of a reasonably geared member.
+    `gear_level` lets the gear lag behind the character's level (default: no lag).
+    """
+    instances: list[ItemInstance] = []
+    for best in typical_items(content, level if gear_level is None else gear_level, tag_id, rarity):
+        slot = best.slot
         instances.append(
             ItemInstance(
                 id=len(instances) + 1,

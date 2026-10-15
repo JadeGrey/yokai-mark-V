@@ -151,6 +151,7 @@ class Mission:
     attempt_cost: int
     stages: tuple[Stage, ...]
     description: str = ""
+    power: int = 100  # percent on top of the rank's enemy power, to even out difficulty
 
     @property
     def top_level(self) -> int:
