@@ -662,6 +662,11 @@ class RpgCog(commands.Cog, name="Guild"):
             gear=self._gear_rows(content, equipped),
             bonus_lines=loadout.bonus_lines,
             promotion_note=note,
+            xp=(
+                (character.xp, content.balance.xp.xp_to_next(character.level))
+                if character.level < content.levels.cap
+                else None
+            ),
         )
         await send(interaction, embed=embed)
 

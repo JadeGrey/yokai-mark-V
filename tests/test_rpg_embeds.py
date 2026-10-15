@@ -199,3 +199,31 @@ def test_fight_result_loss_has_no_rewards_field() -> None:
 
 def test_fight_quips_exist() -> None:
     assert len(QUIP_VARIANTS["fight_win"]) >= 3 and len(QUIP_VARIANTS["fight_loss"]) >= 3
+
+
+def card_with(xp: tuple[int, int] | None, level: int = 14) -> discord.Embed:
+    return EmbedFactory.player_card(
+        "<@42>", "C", level, 60, STATS, 1, 0, 1_700_000_000, next_rank=("B", 20), xp=xp
+    )
+
+
+def test_player_card_shows_xp_progress_right_after_the_promotion_field() -> None:
+    embed = card_with((412, 1000))
+    names = [field.name for field in embed.fields]
+    assert names.index("Experience") == names.index("Next promotion") + 1
+    text = field_map(embed)["Experience"]
+    assert "**412** / 1,000 XP" in text and "41% to level 15" in text
+    assert "━" in text  # a bar (filled and empty segments)
+    assert emoji_count(embed) == 1 and total_embed_length(embed) <= 6000
+
+
+def test_xp_bar_edges_empty_just_started_and_almost_there() -> None:
+    assert "0% to level 15" in field_map(card_with((0, 500)))["Experience"]
+    assert "99% to level 15" in field_map(card_with((499, 500)))["Experience"]
+    assert "100% to level 15" in field_map(card_with((500, 500)))["Experience"]
+
+
+def test_player_card_at_the_level_cap_says_max_level() -> None:
+    embed = card_with(None, level=60)
+    assert field_map(embed)["Experience"] == "Max level reached."
+    assert "Experience" not in field_map(card_with(None, level=14))

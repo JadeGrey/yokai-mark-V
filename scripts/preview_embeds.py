@@ -916,6 +916,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 1_700_000_000,
                 next_rank=("B", 20),
                 promotion_note="recovering, try again <t:1900000000:R>",
+                xp=(412, 1183),
                 bot_avatar_url=av,
             ),
         ),

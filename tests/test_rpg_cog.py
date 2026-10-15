@@ -209,3 +209,28 @@ async def test_the_cog_registers_guild_join_and_card(tmp_path: Path) -> None:
     finally:
         await bot.close()
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_card_shows_the_members_xp_progress_and_max_level(tmp_path: Path) -> None:
+    db, runtime = await make_runtime(tmp_path)
+    try:
+        await runtime.store.create_character(222, "E", now=1_700_000_000)
+        await runtime.store.create_character(333, "SS+", now=1_700_000_000)
+        async with db.transaction() as conn:
+            await conn.execute("UPDATE rpg_characters SET level = 3, xp = 40 WHERE user_id = 222;")
+            await conn.execute("UPDATE rpg_characters SET level = 60, xp = 0 WHERE user_id = 333;")
+        cog = RpgCog(make_bot(runtime))
+        needed = runtime.content.balance.xp.xp_to_next(3)
+
+        async def card_fields(user_id: int) -> dict[str, str]:
+            with patch("yokai.cogs.rpg.send", new=AsyncMock()) as sent:
+                await cog.card.callback(cog, make_interaction(111), member=make_member(user_id))
+            return {f.name: f.value for f in sent.await_args.kwargs["embed"].fields}
+
+        fields = await card_fields(222)
+        assert f"**40** / {needed:,} XP" in fields["Experience"]
+        assert "to level 4" in fields["Experience"]
+        assert (await card_fields(333))["Experience"] == "Max level reached."
+    finally:
+        await db.close()

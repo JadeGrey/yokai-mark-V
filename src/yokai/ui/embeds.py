@@ -788,6 +788,7 @@ class EmbedFactory:
         gear: Sequence[tuple[str, str]] = (),  # (slot label, "item name · 80%" or "empty")
         bonus_lines: Sequence[str] = (),
         promotion_note: Optional[str] = None,
+        xp: Optional[tuple[int, int]] = None,  # (XP now, XP needed for the next level); None at cap
     ) -> discord.Embed:
         fields: list[FieldSpec] = [
             ("Rank", f"**{escape_md(rank)}**", True),
@@ -803,6 +804,19 @@ class EmbedFactory:
             fields.append(("Next promotion", promotion, False))
         elif top_rank:
             fields.append(("Next promotion", "Top rank reached.", False))
+        if xp is not None:
+            have, needed = xp
+            percent = min(100, int(100 * have / needed)) if needed > 0 else 100
+            fields.append(
+                (
+                    "Experience",
+                    f"{_hp_bar(have, needed)} **{have:,}** / {needed:,} XP{SEP}{percent}% "
+                    f"to level {level + 1}",
+                    False,
+                )
+            )
+        elif level >= level_cap:
+            fields.append(("Experience", "Max level reached.", False))
         if gear:
             gear_text = "\n".join(f"**{label}**{SEP}{escape_md(value)}" for label, value in gear)
             fields.append(("Gear", clamp(gear_text, 1000), False))
