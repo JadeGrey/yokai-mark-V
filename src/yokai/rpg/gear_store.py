@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Sequence
 
@@ -14,8 +15,14 @@ from yokai.errors import (
     GearNotFoundError,
     InventoryFullError,
     ItemEquippedError,
+    NoCharacterError,
     NothingToRepairError,
     ShopLimitError,
+    TradeFightingError,
+    TradeFundsError,
+    TradeItemsGoneError,
+    TradeNothingError,
+    TradeRoomError,
 )
 from yokai.rpg import gear
 from yokai.rpg.audit import record_admin_action
@@ -31,6 +38,16 @@ _ITEM_SELECT = (
 
 
 # --------------------------------------------------------------------------- result types
+
+
+@dataclass(frozen=True, slots=True)
+class TradeResult:
+    """What a committed trade moved: items that went to each side, and the ledger reason."""
+
+    trade_id: int
+    to_a: list[ItemInstance]
+    to_b: list[ItemInstance]
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,3 +432,109 @@ class GearStore:
             await conn.execute("DELETE FROM rpg_items WHERE id = ?;", (item_id,))
             await self._db.credit_within_transaction(user_id, value, "rpg_sale", welcome_bonus)
         return value
+
+    async def commit_trade(
+        self,
+        *,
+        user_a: int,
+        user_b: int,
+        items_a: Sequence[int],
+        items_b: Sequence[int],
+        renown_a: int,
+        renown_b: int,
+        inventory_cap: int,
+        welcome_bonus: int,
+        fighting: Collection[int] = (),
+        now: Optional[int] = None,
+    ) -> TradeResult:
+        """Swap the offers of two members, all or nothing.
+
+        `items_a` / `renown_a` are what A gives to B, and the reverse. Everything is re-checked
+        inside one transaction: neither side in a fight, both have characters, every item still
+        belongs to its giver and is unequipped, both can afford their Renown and neither ends up
+        over the inventory cap. Any failure raises a typed error and changes nothing.
+        """
+        if user_a == user_b:
+            raise ValueError("A trade needs two different members.")
+        ids = list(items_a) + list(items_b)
+        if len(set(ids)) != len(ids):
+            raise ValueError("An item can only appear once in a trade.")
+        if not ids and renown_a <= 0 and renown_b <= 0:
+            raise TradeNothingError()
+        ts = int(time.time()) if now is None else now
+        async with self._db.transaction() as conn:
+            for user in (user_a, user_b):
+                if user in fighting or await _in_open_fight(conn, user):
+                    raise TradeFightingError(user)
+                async with conn.execute(
+                    "SELECT 1 FROM rpg_characters WHERE user_id = ?;", (user,)
+                ) as cursor:
+                    if await cursor.fetchone() is None:
+                        raise NoCharacterError(own=False)
+            gone: list[int] = []
+            moved: dict[int, ItemInstance] = {}
+            for giver, item_ids in ((user_a, items_a), (user_b, items_b)):
+                for item_id in item_ids:
+                    item = await fetch_item(conn, item_id)
+                    if item is None or item.owner_id != giver or item.equipped_slot is not None:
+                        gone.append(item_id)
+                    else:
+                        moved[item_id] = item
+            if gone:
+                raise TradeItemsGoneError(gone)
+            count_a, count_b = await count_items(conn, user_a), await count_items(conn, user_b)
+            if count_a - len(items_a) + len(items_b) > inventory_cap:
+                raise TradeRoomError(user_a, inventory_cap)
+            if count_b - len(items_b) + len(items_a) > inventory_cap:
+                raise TradeRoomError(user_b, inventory_cap)
+            for payer, amount in ((user_a, renown_a), (user_b, renown_b)):
+                if amount > 0:
+                    wallet = await self._db.get_wallet(payer)
+                    balance = wallet.balance if wallet else 0
+                    if balance < amount:
+                        raise TradeFundsError(payer, amount, balance)
+            gift = (not items_a and renown_a <= 0) != (not items_b and renown_b <= 0)
+            reason = "rpg_gift" if gift else "rpg_trade"
+            if renown_a > 0:
+                await self._db.debit_within_transaction(
+                    user_a, renown_a, reason, welcome_bonus, action="trade"
+                )
+            if renown_b > 0:
+                await self._db.debit_within_transaction(
+                    user_b, renown_b, reason, welcome_bonus, action="trade"
+                )
+            if renown_a > 0:
+                await self._db.credit_within_transaction(user_b, renown_a, reason, welcome_bonus)
+            if renown_b > 0:
+                await self._db.credit_within_transaction(user_a, renown_b, reason, welcome_bonus)
+            for giver, receiver, item_ids in ((user_a, user_b, items_a), (user_b, user_a, items_b)):
+                for item_id in item_ids:
+                    cursor = await conn.execute(
+                        "UPDATE rpg_items SET owner_id = ? WHERE id = ? AND owner_id = ?;",
+                        (receiver, item_id, giver),
+                    )
+                    if cursor.rowcount != 1:
+                        raise TradeItemsGoneError([item_id])
+            detail = {
+                "kind": reason,
+                "a": {"items": list(items_a), "renown": max(0, renown_a)},
+                "b": {"items": list(items_b), "renown": max(0, renown_b)},
+            }
+            cursor = await conn.execute(
+                "INSERT INTO rpg_trades (ts, user_a, user_b, detail) VALUES (?, ?, ?, ?);",
+                (ts, user_a, user_b, json.dumps(detail)),
+            )
+            trade_id = cursor.lastrowid
+            assert trade_id is not None
+            moved_items = {i: await fetch_item(conn, i) for i in moved}
+        to_b = [moved_items[i] for i in items_a if moved_items[i] is not None]
+        to_a = [moved_items[i] for i in items_b if moved_items[i] is not None]
+        return TradeResult(trade_id, to_a, to_b, reason)  # type: ignore[arg-type]
+
+
+async def _in_open_fight(conn: aiosqlite.Connection, user_id: int) -> bool:
+    async with conn.execute("SELECT participants FROM rpg_fights WHERE status = 'open';") as cursor:
+        for (raw,) in await cursor.fetchall():
+            if str(user_id) in json.loads(raw):
+                return True
+    return False

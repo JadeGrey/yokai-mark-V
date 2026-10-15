@@ -35,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 12
+CURRENT_SCHEMA_VERSION = 13
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -284,6 +284,19 @@ CREATE TABLE IF NOT EXISTS rpg_fights (
 CREATE INDEX IF NOT EXISTS idx_rpg_fights_status ON rpg_fights(status);
 """
 
+MIGRATION_V13 = """
+CREATE TABLE IF NOT EXISTS rpg_trades (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  user_a INTEGER NOT NULL,
+  user_b INTEGER NOT NULL,
+  detail TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rpg_trades_a ON rpg_trades(user_a);
+CREATE INDEX IF NOT EXISTS idx_rpg_trades_b ON rpg_trades(user_b);
+"""
+
 MIGRATION_V11 = """
 CREATE TABLE IF NOT EXISTS rpg_items (
   id INTEGER PRIMARY KEY,
@@ -461,6 +474,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 12;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 12.")
+
+        if version < 13:
+            logger.info("Applying SQLite migration v13...")
+            await self.conn.executescript(MIGRATION_V13)
+            await self.conn.execute("PRAGMA user_version = 13;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 13.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
