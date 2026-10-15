@@ -1,0 +1,38 @@
+# Yokai Discord bot as a systemd service (the Linux equivalent of run.ps1).
+# Install: copy to /etc/systemd/system/yokai.service, then `sudo systemctl enable --now yokai`.
+# Adjust User, WorkingDirectory and ExecStart if you install somewhere other than /opt/yokai.
+
+[Unit]
+Description=Yokai Discord bot
+Wants=network-online.target
+After=network-online.target
+# Never give up restarting, like run.ps1 (the RestartSec below is the gap between tries).
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=yokai
+Group=yokai
+WorkingDirectory=/opt/yokai
+ExecStart=/opt/yokai/.venv/bin/python -m yokai
+Environment=PYTHONUNBUFFERED=1
+
+# discord.py shuts down cleanly on SIGINT (Ctrl+C) but a plain SIGTERM kills it on the spot, so
+# ask for the clean path when stopping. A clean stop exits 0, which is not restarted.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# Restart after a crash or a non-zero exit, like run.ps1; a deliberate stop stays stopped.
+Restart=on-failure
+RestartSec=10
+
+# Light hardening that cannot get in the bot's way (it only writes under WorkingDirectory).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

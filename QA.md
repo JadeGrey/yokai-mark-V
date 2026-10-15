@@ -70,6 +70,7 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **60** | **Trade Completion** | • When both confirm, gear and Renown swap at once; the result lists what each side received. Durability travels with the gear.<br>• A gift (one side empty) needs the receiver to press Confirm too.<br>• Cancel, or five idle minutes, closes the trade with nothing moved and frees both members to start another. | 1. Do a gear-for-gear, a gear-for-Renown and a gift trade.<br>2. Check `/gear inventory` and Renown on both accounts.<br>3. Cancel one and let another expire. | `Pending Owner Run` |
 | **61** | **Trade Safety** | • Equipping, selling or giving away an offered item before the second Confirm removes it from the offer with a clear message and nothing moves.<br>• Offering more Renown than you hold at the moment of confirming, or a trade that would exceed the 60-item inventory, is refused and names who is short.<br>• Starting a guild fight blocks trading until it ends. | 1. Offer an item, then equip or sell it in another window before confirming.<br>2. Spend your Renown after setting an offer.<br>3. Start a mission while a trade is open. | `Pending Owner Run` |
 | **62** | **Guild Wiki** | • `/guild wiki` is private and opens on a contents page listing every section with its page number; `section:` jumps straight to one.<br>• The menu jumps to any section; Prev/Next/Contents turn pages and disable at the ends; only you can use your copy and it disables itself after five minutes.<br>• Numbers (attempts, rank levels, drop odds, set bonuses, mission and raid lists) match the game, including after you change `RPG_BASE_ATTEMPTS` or the content files. | 1. Run `/guild wiki` and page through every section on desktop and phone.<br>2. Try `section:Commands`.<br>3. Change an env value, restart and check the page. | `Pending Owner Run` |
+| **63** | **Linux Hosting** | • On the Pi, `systemctl status yokai` shows it running, `journalctl -u yokai` shows a normal start, and killing the process (`sudo kill -9 <pid>`) brings it back within ~10 seconds.<br>• `systemctl stop yokai` stops it cleanly (no restart) and `restart` brings it back with no fight left stuck open.<br>• `yokai-backup.service` makes a backup in `data/backups` and the timer is listed in `systemctl list-timers`; restoring that file on a spare machine opens with all balances.<br>• `/admin diag` reports ffmpeg, deno and YouTube healthy, and several different `/play` requests work from the Pi's network. | 1. Follow `deploy/linux/README.md` on the Pi.<br>2. Try the stop, kill and backup checks.<br>3. Play 5+ different videos and a Spotify link. | `Pending Owner Run` |
 
 ---
 
@@ -83,5 +84,5 @@ python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 339 files already formatted
+# Result: 342 files already formatted
 ```

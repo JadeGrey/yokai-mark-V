@@ -226,6 +226,10 @@ The owner and admins also get `/admin rpg grant`, `level`, `rank` and `reset` (r
 
 Fights run in threads, so the bot needs permission to create public threads and send messages in them; `/admin diag` shows a "Guild RPG" line that reports whether it has them.
 
+## Hosting on Linux (Raspberry Pi)
+
+To run Yokai 24/7 on a Raspberry Pi or a small Linux PC, see [deploy/linux/README.md](deploy/linux/README.md): a `systemd` service that restarts the bot, a nightly verified database backup (`scripts/backup_db.py`), and a checklist for moving over from the Windows PC. CI (`.github/workflows/ci.yml`) runs lint and the tests on Linux.
+
 ## Updating yt-dlp
 
 YouTube frequently updates player algorithms and cipher signatures. Keeping `yt-dlp` up to date ensures uninterrupted streaming:

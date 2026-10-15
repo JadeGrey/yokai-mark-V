@@ -1,0 +1,16 @@
+# One database backup (run by yokai-backup.timer). Keeps the newest 14 in BACKUP_DIR.
+# To also copy each backup somewhere else (a USB drive, a mounted share), run
+# `sudo systemctl edit yokai-backup.service` and add:
+#   [Service]
+#   ExecStart=
+#   ExecStart=/opt/yokai/.venv/bin/python scripts/backup_db.py --keep 14 --copy-to /mnt/usb/yokai
+
+[Unit]
+Description=Back up the Yokai database
+
+[Service]
+Type=oneshot
+User=yokai
+Group=yokai
+WorkingDirectory=/opt/yokai
+ExecStart=/opt/yokai/.venv/bin/python scripts/backup_db.py --keep 14
