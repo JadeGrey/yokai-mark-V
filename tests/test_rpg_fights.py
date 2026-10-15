@@ -39,6 +39,18 @@ id = "sponge"
 name = "Sponge"
 mult = { hp = 100000, attack = 1, magic = 1, defense = 100, resist = 100, speed = 1, crit = 1 }
 actions = [{ do = "attack", weight = 1 }]
+
+[[enemy]]
+id = "cat"
+name = "Bakeneko"
+mult = { hp = 85, attack = 110, magic = 80, defense = 80, resist = 80, speed = 130, crit = 150 }
+actions = [{ do = "attack", weight = 1 }]
+
+[[enemy]]
+id = "gaki"
+name = "Gaki"
+mult = { hp = 70, attack = 85, magic = 50, defense = 70, resist = 70, speed = 85, crit = 80 }
+actions = [{ do = "attack", weight = 1 }]
 """
 
 MISSIONS = """\

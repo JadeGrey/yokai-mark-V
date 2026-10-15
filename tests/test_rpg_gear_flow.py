@@ -266,7 +266,11 @@ async def glass_runner(
 
     content_dir = tmp_path / "content"
     shutil.copytree("content/rpg", content_dir)
-    (content_dir / "enemies.toml").write_text(GLASS_ENEMIES, encoding="utf-8")
+    shipped_enemies = (content_dir / "enemies.toml").read_text(encoding="utf-8")
+    # Keep the shipped enemies: the ranks' promotion trials refer to them.
+    (content_dir / "enemies.toml").write_text(
+        shipped_enemies + "\n" + GLASS_ENEMIES, encoding="utf-8"
+    )
     (content_dir / "missions.toml").write_text(GLASS_MISSIONS, encoding="utf-8")
     text = (content_dir / "balance.toml").read_text(encoding="utf-8")
     text = text.replace("drop_chance_percent = 35", f"drop_chance_percent = {loot_chance}")
