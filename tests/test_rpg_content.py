@@ -278,3 +278,19 @@ def test_a_mission_with_no_stages_is_rejected(tmp_path: Path) -> None:
     text = mutate(MISSIONS, 'stages = [{ enemies = ["cat", "cat"], level = 6 }]', "stages = []")
     with pytest.raises(ContentError, match="stages must be a list of 1 to 5 stages"):
         load_content(write_content_dir(tmp_path, missions=text))
+
+
+def test_enemy_power_defaults_to_one_hundred_and_is_validated(tmp_path: Path) -> None:
+    content = load_content(write_content_dir(tmp_path))
+    assert all(rank.enemy_power == 100 for rank in content.ranks)
+    powered = mutate(RANKS, "xp_share = 0.1", "xp_share = 0.1\nenemy_power = 45")
+    assert load_content(write_content_dir(tmp_path, ranks=powered)).ranks[0].enemy_power == 45
+    for bad in ("enemy_power = 5", "enemy_power = 401", 'enemy_power = "hard"'):
+        text = mutate(RANKS, "xp_share = 0.1", f"xp_share = 0.1\n{bad}")
+        with pytest.raises(ContentError, match="enemy_power"):
+            load_content(write_content_dir(tmp_path, ranks=text))
+
+
+def test_the_shipped_enemy_power_is_a_sane_discount_on_player_equivalent_enemies() -> None:
+    content = load_content(Path("content/rpg"))
+    assert all(20 <= rank.enemy_power <= 120 for rank in content.ranks)

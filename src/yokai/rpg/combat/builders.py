@@ -8,7 +8,7 @@ from typing import Optional
 
 from yokai.rpg.combat.models import SIDE_FOES, SIDE_PLAYERS, Combatant
 from yokai.rpg.content import Content
-from yokai.rpg.models import STAT_NAMES, Stage, Stats
+from yokai.rpg.models import STAT_NAMES, Mission, Stage, Stats
 from yokai.rpg.stats import stats_at_level
 
 MAX_FOES = 6
@@ -29,15 +29,22 @@ def player_combatant(
     )
 
 
-def enemy_stats(base: Stats, mult: Stats) -> Stats:
-    """The stats of an enemy: a level's base stats times its percentage multipliers."""
+def enemy_stats(base: Stats, mult: Stats, power_percent: int = 100) -> Stats:
+    """The stats of an enemy: a level's base stats times its archetype and rank power (percent)."""
     return Stats(
-        *(max(1, round(getattr(base, name) * getattr(mult, name) / 100)) for name in STAT_NAMES)
+        *(
+            max(1, round(getattr(base, name) * getattr(mult, name) / 100 * power_percent / 100))
+            for name in STAT_NAMES
+        )
     )
 
 
 def build_stage_foes(
-    content: Content, stage: Stage, stage_number: int, party_size: int
+    content: Content,
+    stage: Stage,
+    stage_number: int,
+    party_size: int,
+    power_percent: int = 100,
 ) -> list[Combatant]:
     """The foes of one stage, scaled for the party size (spec section 8).
 
@@ -59,7 +66,7 @@ def build_stage_foes(
     foes: list[Combatant] = []
     for position, enemy_id in enumerate(foe_ids):
         definition = content.enemies[enemy_id]
-        stats = enemy_stats(base, definition.mult)
+        stats = enemy_stats(base, definition.mult, power_percent)
         max_hp = max(1, round(stats.hp * hp_percent / 100))
         stats = Stats(
             max_hp, stats.attack, stats.magic, stats.defense, stats.resist, stats.speed, stats.crit
@@ -88,13 +95,21 @@ def _letter(index: int) -> str:
 
 
 def build_stages(
-    content: Content, stages: tuple[Stage, ...], party_size: int
+    content: Content, stages: tuple[Stage, ...], party_size: int, power_percent: int = 100
 ) -> list[list[Combatant]]:
     """All stages of a mission, ready to hand to `Fight`."""
     return [
-        build_stage_foes(content, stage, number, party_size)
+        build_stage_foes(content, stage, number, party_size, power_percent)
         for number, stage in enumerate(stages, start=1)
     ]
+
+
+def build_mission_stages(
+    content: Content, mission: Mission, party_size: int
+) -> list[list[Combatant]]:
+    """A mission's stages, with its rank's enemy power applied."""
+    power = content.rank(mission.rank).enemy_power
+    return build_stages(content, mission.stages, party_size, power)
 
 
 def default_player_name(user_id: int, name: Optional[str]) -> str:

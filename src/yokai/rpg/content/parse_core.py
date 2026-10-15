@@ -37,7 +37,10 @@ def parse_ranks(raw: dict[str, Any], cap: int) -> tuple[Rank, ...]:
         if ranks and min_level <= ranks[-1].min_level:
             raise ContentError(f"{where} min_level must be higher than the previous rank's")
         xp_share = number_value(entry.get("xp_share"), f"{where} xp_share", 0.001, 1.0)
-        ranks.append(Rank(id=rank_id, min_level=min_level, xp_share=xp_share))
+        enemy_power = int_value(entry.get("enemy_power", 100), f"{where} enemy_power", 10, 400)
+        ranks.append(
+            Rank(id=rank_id, min_level=min_level, xp_share=xp_share, enemy_power=enemy_power)
+        )
     if ranks[0].min_level != 1:
         raise ContentError("ranks.toml: the first rank must start at level 1")
     if ranks[-1].min_level > cap:

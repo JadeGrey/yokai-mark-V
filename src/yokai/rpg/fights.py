@@ -14,7 +14,7 @@ import discord
 
 from yokai.errors import AlreadyFightingError, ThreadUnavailableError
 from yokai.rpg import guild
-from yokai.rpg.combat.builders import build_stages, player_combatant
+from yokai.rpg.combat.builders import build_mission_stages, player_combatant
 from yokai.rpg.combat.describe import describe_all
 from yokai.rpg.combat.engine import Fight
 from yokai.rpg.combat.models import OUTCOME_WON
@@ -78,7 +78,7 @@ class FightRunner:
             player_combatant(p.user_id, p.name, stats_at_level(content.levels, p.character.level))
             for p in participants
         ]
-        stages = build_stages(content, mission.stages, len(participants))
+        stages = build_mission_stages(content, mission, len(participants))
         self.fight = Fight(combatants, stages, content.skills, content.balance.combat, self.rng)
         self.missed: dict[int, int] = {p.user_id: 0 for p in participants}
         self.last_log: list[str] = []

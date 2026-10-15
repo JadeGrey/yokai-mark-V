@@ -638,3 +638,22 @@ def test_random_fights_over_the_shipped_missions_never_raise_and_always_finish(s
                 assert all(v > 0 for v in fighter_.cooldowns.values())
                 assert all(s.remaining > 0 for s in fighter_.statuses)
         assert fight.outcome in (OUTCOME_WON, OUTCOME_LOST)
+
+
+def test_enemy_power_scales_every_stat_by_a_percentage() -> None:
+    base = Stats(100, 20, 20, 10, 10, 10, 4)
+    even = Stats(100, 100, 100, 100, 100, 100, 100)
+    assert enemy_stats(base, even, 50) == Stats(50, 10, 10, 5, 5, 5, 2)
+    assert enemy_stats(base, even) == base
+    assert enemy_stats(base, even, 1) == Stats(1, 1, 1, 1, 1, 1, 1)
+
+
+def test_mission_stages_use_the_missions_rank_power(shipped) -> None:  # type: ignore[no-untyped-def]
+    from yokai.rpg.combat.builders import build_mission_stages
+
+    mission = shipped.missions["e_pest_control"]
+    power = shipped.rank(mission.rank).enemy_power
+    foes = build_mission_stages(shipped, mission, 1)[0]
+    base = stats_at_level(shipped.levels, mission.stages[0].level)
+    assert foes[0].stats == enemy_stats(base, shipped.enemies["gaki"].mult, power)
+    assert power < 100  # E rank enemies are softer than player-equivalent

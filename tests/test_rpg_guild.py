@@ -207,7 +207,7 @@ def test_a_mission_at_your_rank_pays_the_formula(content: Content) -> None:
     mission = content.missions["e_pest_control"]  # top level 1, cost 1, rank E share 0.1
     reward = guild.mission_reward(content, mission, "E")
     assert reward.xp == max(1, round(CURVE.xp_to_next(1) * 0.1))
-    assert reward.renown == 4 * 1 * 1
+    assert reward.renown == content.balance.rewards.renown_per_level * 1 * 1
 
 
 def test_attempt_cost_scales_the_reward(content: Content) -> None:

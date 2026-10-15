@@ -64,6 +64,7 @@ class Rank:
     id: str
     min_level: int
     xp_share: float = 0.1
+    enemy_power: int = 100  # percent applied to every stat of the enemies in this rank's missions
 
 
 @dataclass(frozen=True, slots=True)

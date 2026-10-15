@@ -20,7 +20,7 @@ base = 30
 exponent = 1.5
 
 [rewards]
-renown_per_level = 4
+renown_per_level = 2
 # Missions below the player's rank pay step ^ ranks_below of the reward, never less than floor.
 below_rank_step = 0.6
 below_rank_floor = 0.1

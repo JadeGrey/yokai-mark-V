@@ -1,38 +1,49 @@
 # Guild ranks in ascending order. `min_level` is the level at which promotion into that rank
-# opens (the first rank starts at level 1). `xp_share` is the fraction of one level that a
-# single attempt's worth of mission pays at that mission rank. All numbers are placeholders
-# tuned by the pacing simulator (tests/test_rpg_pacing.py, scripts/rpg_sim.py).
+# opens (the first rank starts at level 1).
+#   xp_share     the fraction of one level that one attempt's worth of mission pays at this rank.
+#   enemy_power  percent applied to every stat of the enemies in this rank's missions.
+# Calibrated with the pacing simulator (python scripts/rpg_sim.py) for a player without gear:
+# enemy_power gives about an 80% win rate right after promotion, and xp_share hits the pacing
+# targets (rank A, level 30, in about 30 days; the level cap in about 90). Phase 3 adds gear, so
+# enemy_power will be raised then. tests/test_rpg_pacing.py fails if these drift.
 [[rank]]
 id = "E"
 min_level = 1
 xp_share = 0.10
+enemy_power = 53
 
 [[rank]]
 id = "D"
 min_level = 5
 xp_share = 0.10
+enemy_power = 50
 
 [[rank]]
 id = "C"
 min_level = 12
 xp_share = 0.10
+enemy_power = 50
 
 [[rank]]
 id = "B"
 min_level = 20
 xp_share = 0.09
+enemy_power = 41
 
 [[rank]]
 id = "A"
 min_level = 30
-xp_share = 0.07
+xp_share = 0.055
+enemy_power = 40
 
 [[rank]]
 id = "SS"
 min_level = 45
-xp_share = 0.05
+xp_share = 0.035
+enemy_power = 35
 
 [[rank]]
 id = "SS+"
 min_level = 60
 xp_share = 0.04
+enemy_power = 38
