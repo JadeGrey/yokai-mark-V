@@ -427,3 +427,125 @@ class InventoryPaginator(BaseView):
     ) -> None:
         self.page += 1
         await interaction.response.edit_message(embed=await self.build_embed(), view=self)
+
+
+class PromotionView(discord.ui.View):
+    """The Challenge button on the rank screen. Only the member it was shown to may press it."""
+
+    def __init__(
+        self,
+        bot: YokaiBot,
+        owner_id: int,
+        next_rank: str,
+        on_challenge: Callable[[discord.Interaction], Awaitable[None]],
+    ) -> None:
+        super().__init__(timeout=120.0)
+        self.bot = bot
+        self.owner_id = owner_id
+        self.on_challenge = on_challenge
+        self._used = False
+        self.challenge_button.label = f"Challenge for Rank {next_rank}"[:80]
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if await screen(interaction):
+            return False
+        return interaction.user.id == self.owner_id
+
+    @discord.ui.button(label="Challenge", style=discord.ButtonStyle.success)
+    async def challenge_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if self._used:
+            await interaction.response.defer()
+            return
+        self._used = True
+        self.stop()
+        await self.on_challenge(interaction)
+
+
+class GuildSortSelect(discord.ui.Select):  # type: ignore[type-arg]
+    """Switch what the guild standings are sorted by."""
+
+    def __init__(self, view: "GuildLeaderboardView") -> None:
+        super().__init__(
+            placeholder="Sort by",
+            options=[
+                discord.SelectOption(label=label.title(), value=key, default=key == view.sort)
+                for key, label in GuildLeaderboardView.SORT_LABELS.items()
+            ],
+        )
+        self.board = view
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        self.board.sort = self.values[0]
+        self.board.page = 1
+        embed = await self.board.build_embed()
+        await interaction.response.edit_message(embed=embed, view=self.board)
+
+
+class GuildLeaderboardView(BaseView):
+    """The guild standings, a page at a time. Open to everyone, like the Renown leaderboard."""
+
+    PAGE_SIZE = 10
+    SORT_LABELS = {"rank": "rank", "level": "level", "wins": "battles won"}
+
+    def __init__(
+        self,
+        bot: YokaiBot,
+        runtime: RpgRuntime,
+        sort: str = "rank",
+        page: int = 1,
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(allowed_user_ids=None, timeout=timeout)
+        self.bot = bot
+        self.runtime = runtime
+        self.sort = sort if sort in self.SORT_LABELS else "rank"
+        self.page = max(1, page)
+        self.total_pages = 1
+        self.add_item(GuildSortSelect(self))
+
+    async def build_embed(self) -> discord.Embed:
+        order = [rank.id for rank in self.runtime.content.ranks]
+        offset = (self.page - 1) * self.PAGE_SIZE
+        characters, total = await self.runtime.store.top_characters(
+            self.sort, order, self.PAGE_SIZE, offset
+        )
+        self.total_pages = max(1, math.ceil(total / self.PAGE_SIZE))
+        if self.page > self.total_pages:
+            self.page = self.total_pages
+            offset = (self.page - 1) * self.PAGE_SIZE
+            characters, total = await self.runtime.store.top_characters(
+                self.sort, order, self.PAGE_SIZE, offset
+            )
+        self.prev_button.disabled = self.page <= 1
+        self.next_button.disabled = self.page >= self.total_pages
+        for item in self.children:
+            if isinstance(item, GuildSortSelect):
+                for option in item.options:
+                    option.default = option.value == self.sort
+        rows = [
+            (offset + i + 1, c.user_id, c.rank, c.level, c.battles_won)
+            for i, c in enumerate(characters)
+        ]
+        return EmbedFactory.guild_leaderboard(
+            rows,
+            self.SORT_LABELS[self.sort],
+            self.page,
+            self.total_pages,
+            bot_avatar_url=avatar_url(self.bot),
+        )
+
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        self.page -= 1
+        await interaction.response.edit_message(embed=await self.build_embed(), view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        self.page += 1
+        await interaction.response.edit_message(embed=await self.build_embed(), view=self)

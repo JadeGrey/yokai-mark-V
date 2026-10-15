@@ -787,6 +787,7 @@ class EmbedFactory:
         bot_avatar_url: Optional[str] = None,
         gear: Sequence[tuple[str, str]] = (),  # (slot label, "item name · 80%" or "empty")
         bonus_lines: Sequence[str] = (),
+        promotion_note: Optional[str] = None,
     ) -> discord.Embed:
         fields: list[FieldSpec] = [
             ("Rank", f"**{escape_md(rank)}**", True),
@@ -797,6 +798,8 @@ class EmbedFactory:
         if next_rank is not None:
             next_id, next_level = next_rank
             promotion = f"Rank **{escape_md(next_id)}** at level **{next_level}**"
+            if promotion_note:
+                promotion += f"{SEP}{promotion_note}"
             fields.append(("Next promotion", promotion, False))
         elif top_rank:
             fields.append(("Next promotion", "Top rank reached.", False))
@@ -849,6 +852,49 @@ class EmbedFactory:
             context="Guild",
             bot_avatar_url=bot_avatar_url,
             fields=fields,
+        )
+
+    @classmethod
+    def rank_status(
+        cls,
+        rank: str,
+        level: int,
+        lines: Sequence[str],
+        ready: bool,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The rank screen: where the member stands and what the next trial involves."""
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Guild rank",
+            description=(
+                f"Rank **{escape_md(rank)}**{SEP}level **{level}**\n\n" + "\n".join(lines)
+            ),
+            color=COLOR_SUCCESS if ready else COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def guild_leaderboard(
+        cls,
+        rows: Sequence[tuple[int, int, str, int, int]],
+        sort_label: str,
+        page: int,
+        total_pages: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """A page of the guild standings. Rows are (position, user id, rank, level, battles won)."""
+        lines = [
+            f"`#{position}` <@{user_id}>{SEP}rank **{escape_md(rank)}**{SEP}lvl {level}"
+            f"{SEP}{wins:,} win(s)"
+            for position, user_id, rank, level, wins in rows
+        ]
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Guild standings",
+            description="\n".join(lines) if lines else "Nobody has joined the guild yet.",
+            color=COLOR_BRAND,
+            context=f"By {sort_label}{SEP}page {page}/{max(total_pages, 1)}",
+            bot_avatar_url=bot_avatar_url,
         )
 
     @classmethod
@@ -985,8 +1031,14 @@ class EmbedFactory:
         loot_lines: Sequence[str] = (),
         gear_lines: Sequence[str] = (),
         bot_avatar_url: Optional[str] = None,
+        promotion_to: Optional[str] = None,
+        cooldown_ts: Optional[int] = None,
     ) -> discord.Embed:
-        """The end of a fight. Rewards are (mention, XP, Renown, levels gained)."""
+        """The end of a fight. Rewards are (mention, XP, Renown, levels gained).
+
+        For a promotion trial pass `promotion_to` (the rank sought) and, after a loss, the time the
+        cooldown ends.
+        """
         lines = []
         for mention, xp, renown, levels in rewards:
             parts = [f"+{xp:,} XP", f"+{renown:,} Renown"]
@@ -995,20 +1047,32 @@ class EmbedFactory:
             lines.append(f"{mention}{SEP}{SEP.join(parts)}")
         fields: list[FieldSpec] = []
         if won and lines:
-            fields.append(("Rewards", clamp("\n".join(lines), 1000), False))
+            heading = "Reward" if promotion_to else "Rewards"
+            fields.append((heading, clamp("\n".join(lines), 1000), False))
         if loot_lines:
             fields.append(("Loot", clamp("\n".join(loot_lines), 1000), False))
         if gear_lines:
             fields.append(("Gear", clamp("\n".join(gear_lines), 1000), False))
         if log_lines:
             fields.append(("Final round", clamp("\n".join(log_lines), 900), False))
-        verdict = "Mission complete" if won else "Mission failed"
-        body = (
-            f"**{escape_md(clamp(mission_name, 60))}** cleared in {rounds} round(s)."
-            if won
-            else f"**{escape_md(clamp(mission_name, 60))}** was lost after {rounds} round(s). "
-            "No rewards this time."
-        )
+        name = escape_md(clamp(mission_name, 60))
+        if promotion_to is not None:
+            verdict = "Promotion passed" if won else "Promotion failed"
+            if won:
+                body = (
+                    f"**{name}** cleared in {rounds} round(s). "
+                    f"You are now rank **{escape_md(promotion_to)}**."
+                )
+            else:
+                retry = f" You can try again <t:{cooldown_ts}:R>." if cooldown_ts else ""
+                body = f"**{name}** was lost after {rounds} round(s).{retry}"
+        else:
+            verdict = "Mission complete" if won else "Mission failed"
+            body = (
+                f"**{name}** cleared in {rounds} round(s)."
+                if won
+                else f"**{name}** was lost after {rounds} round(s). No rewards this time."
+            )
         return cls._create_base(
             title=f"{Emoji.SWORDS} {verdict}",
             description=body,

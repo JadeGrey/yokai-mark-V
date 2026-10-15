@@ -17,7 +17,11 @@ from yokai.errors import (
     MissionRankError,
     NoAttemptsError,
     NoCharacterError,
+    PromotionCooldownError,
+    PromotionNotReadyError,
+    PromotionStaleError,
     ThreadUnavailableError,
+    TopRankError,
     YokaiError,
 )
 from yokai.rpg import guild
@@ -27,9 +31,11 @@ from yokai.rpg.gear import compute_loadout, durability_percent
 from yokai.rpg.models import SLOTS, Character, ItemInstance, Mission
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import format_stats, stats_at_level
+from yokai.rpg.store import PromotionRequest
+from yokai.textutil import escape_md
 from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory, send
-from yokai.ui.rpg_views import ConfirmView
+from yokai.ui.rpg_views import ConfirmView, GuildLeaderboardView, PromotionView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -37,6 +43,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_AUTOCOMPLETE = 25
+SORT_CHOICES = [
+    app_commands.Choice(name="Rank", value="rank"),
+    app_commands.Choice(name="Level", value="level"),
+    app_commands.Choice(name="Battles won", value="wins"),
+]
 
 
 def _avatar_of(member: discord.abc.User) -> Optional[str]:
@@ -288,6 +299,7 @@ class RpgCog(commands.Cog, name="Guild"):
         character: Character,
         today: str,
         resets_ts: int,
+        promotion: Optional[PromotionRequest] = None,
     ) -> None:
         """Spend the attempts and start the fight. Defers first unless the click already did."""
         if not interaction.response.is_done():
@@ -305,13 +317,18 @@ class RpgCog(commands.Cog, name="Guild"):
                 resets_ts=resets_ts,
                 base_attempts=self.bot.config.rpg_base_attempts,
                 turn_seconds=self.bot.config.rpg_turn_seconds,
+                promotion=promotion,
+                promotion_cooldown_s=self.bot.config.rpg_promotion_cooldown_hours * 3600,
             )
         except YokaiError as err:
             await self._send_domain_error(interaction, err)
             return
         embed = EmbedFactory.info(
-            title="Mission started",
-            description=f"Your fight against **{mission.name}** is under way in {thread.mention}.",
+            title="Promotion trial started" if promotion else "Mission started",
+            description=(
+                f"Your fight against **{escape_md(mission.name)}** is under way in "
+                f"{thread.mention}."
+            ),
             context="Guild",
             bot_avatar_url=self._avatar_url(),
         )
@@ -340,6 +357,137 @@ class RpgCog(commands.Cog, name="Guild"):
             choices.append(app_commands.Choice(name=label[:100], value=mission.id))
         return choices[:MAX_AUTOCOMPLETE]
 
+    # ------------------------------------------------------------------ /guild rank
+
+    def _rank_lines(
+        self, content: Content, character: Character, status: guild.PromotionStatus
+    ) -> list[str]:
+        if not status.known_rank:
+            return ["Your rank is no longer in the guild's records. Ask an admin to set it."]
+        if status.next_rank is None:
+            return ["You hold the highest rank in the guild."]
+        upcoming = status.next_rank
+        trial = content.promotion_mission(upcoming.id)
+        lines = [
+            f"Next: **Rank {escape_md(upcoming.id)}**, which opens at level {upcoming.min_level}."
+        ]
+        if trial is not None:
+            lines.append(
+                f"Trial: *{escape_md(trial.name)}* ({trial.attempt_cost} attempts, "
+                f"{len(trial.stages)} stage(s))."
+            )
+        if not status.level_ok:
+            lines.append(f"You need {upcoming.min_level - character.level} more level(s).")
+        elif status.cooldown_until is not None:
+            lines.append(
+                "You are recovering from your last trial. "
+                f"You can try again <t:{status.cooldown_until}:R>."
+            )
+        else:
+            hours = self.bot.config.rpg_promotion_cooldown_hours
+            lines.append(
+                f"You can challenge now. A win promotes you; a loss starts a {hours}-hour cooldown."
+            )
+        return lines
+
+    @guild_group.command(name="rank", description="See your rank and challenge for the next one.")
+    async def rank(self, interaction: discord.Interaction) -> None:
+        """The rank screen is private; a Challenge button appears when you can promote."""
+        runtime = self._runtime()
+        character = await runtime.store.get_character(interaction.user.id)
+        if character is None:
+            await self._send_domain_error(interaction, NoCharacterError(own=True))
+            return
+        content = runtime.content
+        status = guild.promotion_status(content, character, int(time.time()))
+        embed = EmbedFactory.rank_status(
+            character.rank,
+            character.level,
+            self._rank_lines(content, character, status),
+            status.ready,
+            bot_avatar_url=self._avatar_url(),
+        )
+        view: Optional[PromotionView] = None
+        if status.ready and status.next_rank is not None:
+            view = PromotionView(
+                self.bot, interaction.user.id, status.next_rank.id, self._start_promotion
+            )
+        if view is None:
+            await send(interaction, embed=embed, ephemeral=True)
+        else:
+            await send(interaction, embed=embed, view=view, ephemeral=True)
+
+    async def _start_promotion(self, interaction: discord.Interaction) -> None:
+        """The Challenge button: re-check everything with fresh data, then start the trial."""
+        runtime = self._runtime()
+        content = runtime.content
+        user = interaction.user
+        try:
+            character = await runtime.store.get_character(user.id)
+            if character is None:
+                raise NoCharacterError(own=True)
+            status = guild.promotion_status(content, character, int(time.time()))
+            if not status.known_rank:
+                raise PromotionStaleError()
+            upcoming = status.next_rank
+            if upcoming is None:
+                raise TopRankError()
+            if not status.level_ok:
+                raise PromotionNotReadyError(upcoming.id, upcoming.min_level, character.level)
+            if status.cooldown_until is not None:
+                raise PromotionCooldownError(status.cooldown_until)
+            trial = content.promotion_mission(upcoming.id)
+            if trial is None:
+                raise PromotionStaleError()
+            today, resets_ts = self._day()
+            attempts = guild.attempt_status(
+                character, today, self.bot.config.rpg_base_attempts, content.balance.streak
+            )
+            if trial.attempt_cost > attempts.remaining:
+                raise NoAttemptsError(attempts.remaining, trial.attempt_cost, resets_ts)
+            if user.id in runtime.active_users:
+                raise AlreadyFightingError()
+            channel = interaction.channel
+            if not isinstance(channel, discord.TextChannel):
+                raise ThreadUnavailableError()
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        request = PromotionRequest(character.rank, upcoming.id, upcoming.min_level)
+        warnings = self._worn_gear_lines(content, await runtime.gear.equipped_items(user.id))
+        if warnings:
+            view = ConfirmView(
+                self.bot,
+                user.id,
+                lambda confirmed: self._launch(
+                    confirmed, channel, trial, character, today, resets_ts, request
+                ),
+            )
+            warning = EmbedFactory.gear_warning(warnings, bot_avatar_url=self._avatar_url())
+            await send(interaction, embed=warning, view=view, ephemeral=True)
+            return
+        await self._launch(interaction, channel, trial, character, today, resets_ts, request)
+
+    # ------------------------------------------------------------------ /guild leaderboard
+
+    @guild_group.command(name="leaderboard", description="See the guild standings.")
+    @app_commands.describe(sort="What to rank by (default: rank)", page="Page to open")
+    @app_commands.choices(sort=SORT_CHOICES)
+    async def leaderboard(
+        self,
+        interaction: discord.Interaction,
+        sort: Optional[app_commands.Choice[str]] = None,
+        page: Optional[int] = None,
+    ) -> None:
+        """Open to everyone; a dropdown switches the sort and buttons turn the pages."""
+        runtime = self._runtime()
+        await interaction.response.defer(thinking=True)
+        view = GuildLeaderboardView(
+            self.bot, runtime, sort.value if sort else "rank", page if page and page > 0 else 1
+        )
+        embed = await view.build_embed()
+        view.message = await send(interaction, embed=embed, view=view)
+
     # ------------------------------------------------------------------ /card
 
     @app_commands.command(name="card", description="Show an adventurer's player card.")
@@ -362,6 +510,12 @@ class RpgCog(commands.Cog, name="Guild"):
         equipped = await runtime.gear.equipped_items(target.id)
         loadout = compute_loadout(content, character.level, equipped)
         next_rank, top_rank = _promotion(content, character.rank)
+        status = guild.promotion_status(content, character, int(time.time()))
+        note: Optional[str] = None
+        if status.ready:
+            note = "ready: use /guild rank"
+        elif status.cooldown_until is not None and status.level_ok:
+            note = f"recovering, try again <t:{status.cooldown_until}:R>"
         embed = EmbedFactory.player_card(
             user_mention=f"<@{target.id}>",
             rank=character.rank,
@@ -377,6 +531,7 @@ class RpgCog(commands.Cog, name="Guild"):
             bot_avatar_url=self._avatar_url(),
             gear=self._gear_rows(content, equipped),
             bonus_lines=loadout.bonus_lines,
+            promotion_note=note,
         )
         await send(interaction, embed=embed)
 

@@ -23,6 +23,7 @@ from yokai.rpg.gear_store import GearSettlement, ItemDrop
 from yokai.rpg.models import Character, Mission
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import stats_at_level
+from yokai.rpg.store import PromotionRequest
 from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory
 from yokai.ui.rpg_views import FightView
@@ -64,8 +65,12 @@ class FightRunner:
         clock: Callable[[], float] = time.time,
         idle_delay: float = 1.5,
         archive_delay: float = 20.0,
+        promotion_to: Optional[str] = None,
+        promotion_cooldown_s: int = 0,
     ) -> None:
         self.bot = bot
+        self.promotion_to = promotion_to
+        self.promotion_cooldown_s = promotion_cooldown_s
         self.runtime = runtime
         self.fight_id = fight_id
         self.mission = mission
@@ -255,14 +260,7 @@ class FightRunner:
     async def _finish(self) -> None:
         fight = self.fight
         won = fight.outcome == OUTCOME_WON
-        rewards = (
-            {
-                p.user_id: guild.mission_reward(self.content, self.mission, p.character.rank)
-                for p in self.participants
-            }
-            if won
-            else {}
-        )
+        rewards = {p.user_id: self._reward_for(p) for p in self.participants} if won else {}
         settlements = await self.runtime.store.settle_fight(
             self.fight_id,
             won=won,
@@ -271,6 +269,7 @@ class FightRunner:
             xp_curve=self.content.balance.xp,
             welcome_bonus=self.bot.config.economy_welcome_bonus,
             gear=self._gear_settlement(won),
+            promotion_cooldown_s=self.promotion_cooldown_s,
         )
         self._settled = True
         if settlements is None:
@@ -280,6 +279,7 @@ class FightRunner:
             for uid, s in settlements.items()
         ]
         loot_lines, gear_lines = self._gear_report(settlements)
+        cooldowns = [s.cooldown_until for s in settlements.values() if s.cooldown_until]
         embed = EmbedFactory.fight_result(
             won,
             self.mission.name,
@@ -289,17 +289,26 @@ class FightRunner:
             loot_lines=loot_lines,
             gear_lines=gear_lines,
             bot_avatar_url=avatar_url(self.bot),
+            promotion_to=self.promotion_to,
+            cooldown_ts=cooldowns[0] if cooldowns else None,
         )
         try:
             await self._edit(embed=embed, view=None)
         except discord.HTTPException as exc:
             logger.warning("Could not show the result of fight %d: %s", self.fight_id, exc)
 
+    def _reward_for(self, participant: Participant) -> guild.Reward:
+        """Mission rewards; a promotion trial pays Renown only (no XP)."""
+        reward = guild.mission_reward(self.content, self.mission, participant.character.rank)
+        if self.promotion_to is not None:
+            return guild.Reward(0, reward.renown)
+        return reward
+
     def _gear_settlement(self, won: bool) -> GearSettlement:
-        """Wear for everyone, plus one drop roll per member on a win."""
+        """Wear for everyone, plus one drop roll per member on a win (not for a promotion)."""
         rules = self.content.balance.gear
         drops: dict[int, list[ItemDrop]] = {}
-        if won:
+        if won and self.promotion_to is None:
             for participant in self.participants:
                 definition = roll_drop(self.content, self.mission, self.rng)
                 if definition is not None:
@@ -359,8 +368,13 @@ async def launch_fight(
     resets_ts: int,
     base_attempts: int,
     turn_seconds: float,
+    promotion: Optional[PromotionRequest] = None,
+    promotion_cooldown_s: int = 0,
 ) -> discord.Thread:
     """Spend the attempts, open a thread and start the fight task.
+
+    With `promotion` the fight is a rank trial: the request is validated atomically with the
+    attempt spend, and settlement promotes or starts the cooldown.
 
     Raises NoAttemptsError or AlreadyFightingError (nothing changes), or ThreadUnavailableError
     (the attempts are refunded).
@@ -378,6 +392,7 @@ async def launch_fight(
             base_attempts=base_attempts,
             streak_rules=runtime.content.balance.streak,
             resets_ts=resets_ts,
+            promotion=promotion,
         )
     except BaseException:
         runtime.active_users.discard(member.id)
@@ -407,6 +422,8 @@ async def launch_fight(
         participants=[Participant(member.id, member_name, character, loadout)],
         thread=thread,
         turn_seconds=turn_seconds,
+        promotion_to=promotion.to_rank if promotion else None,
+        promotion_cooldown_s=promotion_cooldown_s,
     )
     task = asyncio.create_task(runner.run(), name=f"rpg-fight-{fight_id}")
     runtime.tasks.add(task)

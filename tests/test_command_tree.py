@@ -76,7 +76,7 @@ async def test_the_guild_rpg_commands_have_the_agreed_shape() -> None:
     card = tree.get_command("card")
     assert isinstance(guild, app_commands.Group) and isinstance(gear_group, app_commands.Group)
     assert isinstance(card, app_commands.Command)
-    assert {c.name for c in guild.commands} == {"join", "board", "mission"}
+    assert {c.name for c in guild.commands} == {"join", "board", "mission", "rank", "leaderboard"}
     assert {c.name for c in gear_group.commands} == {
         "inventory", "equip", "unequip", "repair", "shop", "buy", "sell",
     }  # fmt: skip
