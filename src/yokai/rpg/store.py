@@ -11,6 +11,7 @@ import aiosqlite
 
 from yokai.errors import NoCharacterError
 from yokai.rpg import guild
+from yokai.rpg.audit import record_admin_action
 from yokai.rpg.gear_store import (
     DropResult,
     GearSettlement,
@@ -106,6 +107,64 @@ class RpgStore:
             character = await _fetch_character(conn, user_id)
         assert character is not None
         return character, created
+
+    # ------------------------------------------------------------------ admin tools
+
+    async def admin_set_level(self, actor_id: int, user_id: int, level: int, cap: int) -> Character:
+        """Set a member's level (clamped to 1..cap) and clear their XP. Audited."""
+        new_level = max(1, min(level, cap))
+        async with self._db.transaction() as conn:
+            before = await _fetch_character(conn, user_id)
+            if before is None:
+                raise NoCharacterError(own=False)
+            await conn.execute(
+                "UPDATE rpg_characters SET level = ?, xp = 0 WHERE user_id = ?;",
+                (new_level, user_id),
+            )
+            await record_admin_action(
+                conn, actor_id, "set_level", user_id, {"from": before.level, "to": new_level}
+            )
+            after = await _fetch_character(conn, user_id)
+        assert after is not None
+        return after
+
+    async def admin_set_rank(self, actor_id: int, user_id: int, rank: str) -> Character:
+        """Set a member's rank. The caller validates that the rank exists. Audited."""
+        async with self._db.transaction() as conn:
+            before = await _fetch_character(conn, user_id)
+            if before is None:
+                raise NoCharacterError(own=False)
+            await conn.execute(
+                "UPDATE rpg_characters SET rank = ? WHERE user_id = ?;", (rank, user_id)
+            )
+            await record_admin_action(
+                conn, actor_id, "set_rank", user_id, {"from": before.rank, "to": rank}
+            )
+            after = await _fetch_character(conn, user_id)
+        assert after is not None
+        return after
+
+    async def admin_reset_character(self, actor_id: int, user_id: int) -> bool:
+        """Delete a member's character and all their gear (never their Renown). Audited."""
+        async with self._db.transaction() as conn:
+            before = await _fetch_character(conn, user_id)
+            if before is None:
+                return False
+            async with conn.execute(
+                "SELECT COUNT(*) FROM rpg_items WHERE owner_id = ?;", (user_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+            await conn.execute("DELETE FROM rpg_equipment WHERE user_id = ?;", (user_id,))
+            await conn.execute("DELETE FROM rpg_items WHERE owner_id = ?;", (user_id,))
+            await conn.execute("DELETE FROM rpg_characters WHERE user_id = ?;", (user_id,))
+            await record_admin_action(
+                conn,
+                actor_id,
+                "reset_character",
+                user_id,
+                {"level": before.level, "rank": before.rank, "items": int(row[0]) if row else 0},
+            )
+        return True
 
     # ------------------------------------------------------------------ the board
 

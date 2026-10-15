@@ -237,3 +237,12 @@ def test_a_non_numeric_rpg_attempt_count_is_a_config_error() -> None:
     with patch.dict(os.environ, env, clear=True):
         with pytest.raises(ConfigError, match="RPG_BASE_ATTEMPTS"):
             load_config(env_path=Path("non_existent_env"))
+
+
+def test_rpg_shop_daily_cap_has_a_default_and_a_floor() -> None:
+    with patch.dict(os.environ, RPG_BASE_ENV, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).rpg_shop_daily_cap == 3
+    with patch.dict(os.environ, {**RPG_BASE_ENV, "RPG_SHOP_DAILY_CAP": "7"}, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).rpg_shop_daily_cap == 7
+    with patch.dict(os.environ, {**RPG_BASE_ENV, "RPG_SHOP_DAILY_CAP": "0"}, clear=True):
+        assert load_config(env_path=Path("non_existent_env")).rpg_shop_daily_cap == 1

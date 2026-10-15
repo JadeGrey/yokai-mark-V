@@ -18,6 +18,7 @@ from yokai.errors import (
     ShopLimitError,
 )
 from yokai.rpg import gear
+from yokai.rpg.audit import record_admin_action
 from yokai.rpg.models import GearRules, ItemDef, ItemInstance, Stats
 
 if TYPE_CHECKING:
@@ -249,14 +250,32 @@ class GearStore:
     # ------------------------------------------------------------------ giving items
 
     async def grant_item(
-        self, user_id: int, drop: ItemDrop, *, inventory_cap: int, now: Optional[int] = None
+        self,
+        user_id: int,
+        drop: ItemDrop,
+        *,
+        inventory_cap: int,
+        now: Optional[int] = None,
+        audit_actor: Optional[int] = None,
     ) -> ItemInstance:
-        """Create an item for a member (admin grants and tests). Respects the inventory cap."""
+        """Create an item for a member (admin grants and tests). Respects the inventory cap.
+
+        With `audit_actor` the grant is written to the admin audit log in the same transaction.
+        """
         created_ts = int(time.time()) if now is None else now
         async with self._db.transaction() as conn:
             if await count_items(conn, user_id) >= inventory_cap:
                 raise InventoryFullError(inventory_cap)
             item_id = await insert_item(conn, user_id, drop, created_ts)
+            if audit_actor is not None:
+                await record_admin_action(
+                    conn,
+                    audit_actor,
+                    "grant_item",
+                    user_id,
+                    {"item": drop.content_id, "item_id": item_id},
+                    now=created_ts,
+                )
             created = await fetch_item(conn, item_id)
         assert created is not None
         return created

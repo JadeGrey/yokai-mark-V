@@ -700,7 +700,7 @@ class Database:
         return wallet.balance
 
     async def debit_within_transaction(
-        self, user_id: int, amount: int, reason: str, welcome_bonus: int
+        self, user_id: int, amount: int, reason: str, welcome_bonus: int, action: str = "spend"
     ) -> int:
         """Take Renown as part of the caller's open `transaction()`; returns the new balance.
 
@@ -714,7 +714,7 @@ class Database:
         wallet = await self.get_wallet(user_id)
         assert wallet is not None
         if wallet.balance < amount:
-            raise InsufficientFundsError(balance=wallet.balance, amount=amount)
+            raise InsufficientFundsError(balance=wallet.balance, amount=amount, action=action)
         await self.conn.execute(
             "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
             (amount, user_id, amount),

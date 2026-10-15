@@ -684,6 +684,79 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             ),
         ),
         (
+            "Guild (inventory)",
+            EmbedFactory.inventory_page(
+                [
+                    (12, "Hardened Oni Kanabo", "weapon", "rare", 38, "80%", True, True),
+                    (9, "Worn Kitsune Fox Mask", "head", "common", 1, "broken", False, True),
+                    (7, "Mythic Tengu Katana", "weapon", "epic", 52, "100%", False, False),
+                ],
+                1,
+                3,
+                21,
+                60,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (shop)",
+            EmbedFactory.shop_panel(
+                [
+                    (
+                        1,
+                        [
+                            ("Worn Oni Kanabo", "Oni", "weapon", "common", 60, "Oni: +1 Attack"),
+                            (
+                                "Sturdy Baku Dream Charm",
+                                "Baku",
+                                "accessory",
+                                "uncommon",
+                                75,
+                                "Baku: +1 Resist",
+                            ),
+                        ],
+                    ),
+                    (
+                        24,
+                        [
+                            (
+                                "Tempered Tengu Katana",
+                                "Tengu",
+                                "weapon",
+                                "common",
+                                288,
+                                "Tengu: +3 Crit, +5 Speed",
+                            )
+                        ],
+                    ),
+                ],
+                1234,
+                2,
+                3,
+                1_900_000_000,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (gear warning)",
+            EmbedFactory.gear_warning(
+                ["Worn Oni Kanabo: 25%", "Worn Oni Horned Mask: broken (0%)"], bot_avatar_url=av
+            ),
+        ),
+        (
+            "Guild (mission complete with loot)",
+            EmbedFactory.fight_result(
+                True,
+                "Alley Cats",
+                5,
+                [("<@42>", 12, 40, 0)],
+                ["The party stands victorious"],
+                loot_lines=["<@42> · **Forged Oni Kanabo** (rare)"],
+                gear_lines=["<@42> · Worn Oni Kanabo is at 49%"],
+                bot_avatar_url=av,
+            ),
+        ),
+        (
             "Guild (fight round)",
             EmbedFactory.fight_round(
                 "Alley Cats",

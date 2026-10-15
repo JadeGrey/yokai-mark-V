@@ -852,6 +852,67 @@ class EmbedFactory:
         )
 
     @classmethod
+    def inventory_page(
+        cls,
+        rows: Sequence[tuple[int, str, str, str, int, str, bool, bool]],
+        page: int,
+        total_pages: int,
+        total_items: int,
+        cap: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """One page of a member's gear. Rows are (id, name, slot, rarity, level requirement,
+        condition text, equipped, wearable at your level)."""
+        lines = []
+        for item_id, name, slot, rarity, req, condition, equipped, wearable in rows:
+            tail = " (equipped)" if equipped else ("" if wearable else " (too high a level)")
+            lines.append(
+                f"`#{item_id}` **{escape_md(clamp(name, 40))}**{SEP}{slot}{SEP}{rarity}"
+                f"{SEP}lvl {req}{SEP}{condition}{tail}"
+            )
+        body = "\n".join(lines) if lines else "You don't own any gear yet. Try /gear shop."
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Inventory",
+            description=f"**{total_items}/{cap}** items.\n{body}",
+            color=COLOR_BRAND,
+            context=f"Page {page}/{max(total_pages, 1)}",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
+    def shop_panel(
+        cls,
+        tiers: Sequence[tuple[int, Sequence[tuple[str, str, str, str, int, str]]]],
+        balance: int,
+        left: int,
+        daily_cap: int,
+        resets_ts: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """Today's guild shop. Each tier is (level requirement, items); an item is
+        (name, tag, slot, rarity, price, stats text)."""
+        fields: list[FieldSpec] = []
+        for req, items in tiers:
+            lines = [
+                f"**{escape_md(clamp(name, 40))}**{SEP}{slot}{SEP}{rarity}{SEP}{price:,} Renown"
+                f"\n{escape_md(stats)}"
+                for name, _tag, slot, rarity, price, stats in items
+            ]
+            fields.append((f"Level {req}+ gear", "\n".join(lines), False))
+        return cls._create_base(
+            title=f"{Emoji.COIN} Guild shop",
+            description=(
+                f"You have **{balance:,}** Renown and **{left}/{daily_cap}** "
+                "purchases left today.\n"
+                f"Stock changes <t:{resets_ts}:R>. Buy with /gear buy."
+            ),
+            color=COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            fields=fields,
+        )
+
+    @classmethod
     def gear_warning(
         cls, lines: Sequence[str], bot_avatar_url: Optional[str] = None
     ) -> discord.Embed:

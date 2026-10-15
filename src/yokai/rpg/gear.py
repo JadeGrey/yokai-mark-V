@@ -80,6 +80,16 @@ def sell_value(item: ItemDef, rules: GearRules) -> int:
     return max(1, item.price * rules.sell_percent // 100)
 
 
+def format_item_stats(stats: Stats) -> str:
+    """ "+5 Attack, +21 HP, -1 Speed" for an item's stats (crit is in points)."""
+    parts = []
+    for name in STAT_NAMES:
+        value = getattr(stats, name)
+        if value:
+            parts.append(f"{value:+d} {STAT_LABELS[name]}")
+    return ", ".join(parts) or "no stats"
+
+
 # ------------------------------------------------------------------------------ loadouts
 
 

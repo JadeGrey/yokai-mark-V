@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 import discord
@@ -19,9 +20,12 @@ from yokai.rpg.combat.models import (
     Action,
     Combatant,
 )
+from yokai.rpg.gear import durability_percent
 from yokai.rpg.models import SkillDef
+from yokai.rpg.runtime import RpgRuntime
 from yokai.ui.embeds import EmbedFactory, send
 from yokai.ui.table_common import avatar_url, reply_error
+from yokai.ui.views import BaseView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -345,3 +349,81 @@ class SkillSelect(discord.ui.Select):  # type: ignore[type-arg]
         target_id = candidates[0].id if candidates else None
         action = Action(ACTION_SKILL, skill_id=skill.id, target_id=target_id)
         await view.submit(interaction, self.combatant, action, from_prompt=True)
+
+
+class InventoryPaginator(BaseView):
+    """A member's gear, a page at a time. Items are read fresh on every page turn."""
+
+    PAGE_SIZE = 8
+
+    def __init__(
+        self,
+        bot: YokaiBot,
+        runtime: RpgRuntime,
+        user_id: int,
+        level: int,
+        page: int = 1,
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(allowed_user_ids=[user_id], timeout=timeout)
+        self.bot = bot
+        self.runtime = runtime
+        self.user_id = user_id
+        self.level = level
+        self.page = max(1, page)
+        self.total_pages = 1
+
+    async def build_embed(self) -> discord.Embed:
+        content = self.runtime.content
+        items = await self.runtime.gear.list_items(self.user_id)
+        items.sort(key=lambda i: (i.equipped_slot is None, -i.id))
+        self.total_pages = max(1, math.ceil(len(items) / self.PAGE_SIZE))
+        self.page = min(max(self.page, 1), self.total_pages)
+        self.prev_button.disabled = self.page <= 1
+        self.next_button.disabled = self.page >= self.total_pages
+        start = (self.page - 1) * self.PAGE_SIZE
+        rows = []
+        for item in items[start : start + self.PAGE_SIZE]:
+            definition = content.items.get(item.content_id)
+            if definition is None:
+                rows.append((item.id, item.content_id, "?", "retired", 0, "?", False, False))
+                continue
+            condition = (
+                "broken"
+                if item.durability <= 0
+                else f"{durability_percent(item.durability, definition.max_durability)}%"
+            )
+            rows.append(
+                (
+                    item.id,
+                    definition.name,
+                    definition.slot,
+                    definition.rarity,
+                    definition.req_level,
+                    condition,
+                    item.equipped_slot is not None,
+                    self.level >= definition.req_level,
+                )
+            )
+        return EmbedFactory.inventory_page(
+            rows,
+            self.page,
+            self.total_pages,
+            len(items),
+            content.balance.gear.inventory_cap,
+            bot_avatar_url=avatar_url(self.bot),
+        )
+
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
+    async def prev_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        self.page -= 1
+        await interaction.response.edit_message(embed=await self.build_embed(), view=self)
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
+    async def next_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        self.page += 1
+        await interaction.response.edit_message(embed=await self.build_embed(), view=self)

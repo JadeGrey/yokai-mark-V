@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -11,8 +12,15 @@ import ytmusicapi
 from discord import app_commands
 from discord.ext import commands
 
-from yokai.errors import InvalidGameChoiceError, InvalidPaymentError, YokaiError
+from yokai.errors import (
+    InvalidGameChoiceError,
+    InvalidPaymentError,
+    NoCharacterError,
+    YokaiError,
+)
 from yokai.gambling.lobby import GAME_SPECS
+from yokai.rpg import gear as rpg_gear
+from yokai.rpg.gear_store import ItemDrop
 from yokai.textutil import escape_md
 from yokai.ui.embeds import EmbedFactory, send
 from yokai.ui.views import DiagView
@@ -29,9 +37,11 @@ class AdminCog(commands.Cog, name="Admin"):
     """Tools for the owner and the adminlist, all under the /admin group."""
 
     admin = app_commands.Group(name="admin", description="Admin-only tools.")
+    rpg = app_commands.Group(name="rpg", description="Guild RPG tools.", parent=admin)
 
     def __init__(self, bot: YokaiBot) -> None:
         self.bot = bot
+        self._rpg_rng = random.Random()
 
     def _avatar_url(self) -> Optional[str]:
         return str(self.bot.user.display_avatar.url) if self.bot.user else None
@@ -146,6 +156,189 @@ class AdminCog(commands.Cog, name="Admin"):
         embed = build(
             title=title,
             description="\n".join(lines) or "No challenges.",
+            context="Admin",
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    # ------------------------------------------------------------------ /admin rpg
+
+    async def _rpg_admin_guard(
+        self, interaction: discord.Interaction, user: discord.Member
+    ) -> bool:
+        """True when the command must stop (not an admin, a bot target, or the RPG is off)."""
+        if await self._deny_unless_admin(interaction, "Ask the owner to add you to the adminlist."):
+            return True
+        if self.bot.rpg is None:
+            await self._send_domain_error(
+                interaction, YokaiError("The Guild RPG is switched off (RPG_ENABLED=false).")
+            )
+            return True
+        if user.bot:
+            await self._send_domain_error(interaction, YokaiError("Bots can't have an adventurer."))
+            return True
+        return False
+
+    @rpg.command(name="grant", description="Give a member a piece of gear.")
+    @app_commands.describe(user="Who receives it", item="Which item")
+    async def rpg_grant(
+        self, interaction: discord.Interaction, user: discord.Member, item: str
+    ) -> None:
+        if await self._rpg_admin_guard(interaction, user):
+            return
+        runtime = self.bot.rpg
+        assert runtime is not None
+        definition = runtime.content.items.get(item.strip())
+        if definition is None:
+            await self._send_domain_error(
+                interaction, YokaiError("There is no item with that id.", "Use the autocomplete.")
+            )
+            return
+        if await runtime.store.get_character(user.id) is None:
+            await self._send_domain_error(interaction, NoCharacterError(own=False))
+            return
+        rules = runtime.content.balance.gear
+        try:
+            created = await runtime.gear.grant_item(
+                user.id,
+                ItemDrop(
+                    definition.id,
+                    rpg_gear.roll_stats(definition, rules, self._rpg_rng),
+                    definition.max_durability,
+                ),
+                inventory_cap=rules.inventory_cap,
+                audit_actor=interaction.user.id,
+            )
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        embed = EmbedFactory.success(
+            title="Item granted",
+            description=(
+                f"Gave <@{user.id}> **{escape_md(definition.name)}** (`#{created.id}`, "
+                f"{definition.rarity})."
+            ),
+            context="Admin",
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    @rpg_grant.autocomplete("item")
+    async def rpg_grant_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        runtime = self.bot.rpg
+        if runtime is None:
+            return []
+        needle = current.strip().casefold()
+        choices = []
+        for definition in runtime.content.items.values():
+            if needle and needle not in definition.name.casefold() and needle not in definition.id:
+                continue
+            label = f"{definition.name} ({definition.rarity}, lvl {definition.req_level})"
+            choices.append(app_commands.Choice(name=label[:100], value=definition.id))
+            if len(choices) >= 25:
+                break
+        return choices
+
+    @rpg.command(name="level", description="Set a member's level (clears their XP).")
+    @app_commands.describe(user="Whose level", level="The new level")
+    async def rpg_level(
+        self, interaction: discord.Interaction, user: discord.Member, level: int
+    ) -> None:
+        if await self._rpg_admin_guard(interaction, user):
+            return
+        runtime = self.bot.rpg
+        assert runtime is not None
+        try:
+            character = await runtime.store.admin_set_level(
+                interaction.user.id, user.id, level, runtime.content.levels.cap
+            )
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        embed = EmbedFactory.success(
+            title="Level set",
+            description=f"<@{user.id}> is now level **{character.level}**.",
+            context="Admin",
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    @rpg.command(name="rank", description="Set a member's guild rank.")
+    @app_commands.describe(user="Whose rank", rank="The new rank")
+    async def rpg_rank(
+        self, interaction: discord.Interaction, user: discord.Member, rank: str
+    ) -> None:
+        if await self._rpg_admin_guard(interaction, user):
+            return
+        runtime = self.bot.rpg
+        assert runtime is not None
+        known = {r.id: r.id for r in runtime.content.ranks}
+        chosen = known.get(rank.strip().upper())
+        if chosen is None:
+            await self._send_domain_error(
+                interaction,
+                YokaiError("That isn't a guild rank.", f"Ranks: {', '.join(known)}."),
+            )
+            return
+        try:
+            character = await runtime.store.admin_set_rank(interaction.user.id, user.id, chosen)
+        except YokaiError as err:
+            await self._send_domain_error(interaction, err)
+            return
+        embed = EmbedFactory.success(
+            title="Rank set",
+            description=f"<@{user.id}> is now rank **{escape_md(character.rank)}**.",
+            context="Admin",
+            bot_avatar_url=self._avatar_url(),
+        )
+        await send(interaction, embed=embed, ephemeral=True)
+
+    @rpg_rank.autocomplete("rank")
+    async def rpg_rank_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        runtime = self.bot.rpg
+        if runtime is None:
+            return []
+        needle = current.strip().casefold()
+        return [
+            app_commands.Choice(name=r.id, value=r.id)
+            for r in runtime.content.ranks
+            if not needle or needle in r.id.casefold()
+        ]
+
+    @rpg.command(name="reset", description="Delete a member's adventurer and gear (not Renown).")
+    @app_commands.describe(user="Whose adventurer", confirm="Must be true to go ahead")
+    async def rpg_reset(
+        self, interaction: discord.Interaction, user: discord.Member, confirm: bool
+    ) -> None:
+        if await self._rpg_admin_guard(interaction, user):
+            return
+        runtime = self.bot.rpg
+        assert runtime is not None
+        if not confirm:
+            await self._send_domain_error(
+                interaction,
+                YokaiError("Nothing was deleted.", "Set confirm to true to reset the adventurer."),
+            )
+            return
+        if user.id in runtime.active_users:
+            await self._send_domain_error(
+                interaction,
+                YokaiError("They are in a fight right now.", "Try again after it ends."),
+            )
+            return
+        existed = await runtime.store.admin_reset_character(interaction.user.id, user.id)
+        build = EmbedFactory.success if existed else EmbedFactory.info
+        embed = build(
+            title="Adventurer reset" if existed else "Nothing to reset",
+            description=(
+                f"<@{user.id}>'s adventurer and gear were deleted. Their Renown is untouched."
+                if existed
+                else f"<@{user.id}> has no adventurer."
+            ),
             context="Admin",
             bot_avatar_url=self._avatar_url(),
         )

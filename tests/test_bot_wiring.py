@@ -387,7 +387,7 @@ async def test_setup_hook_loads_the_rpg_runtime_and_extension_when_enabled() -> 
     loaded = await _run_setup_hook(bot)
     assert bot.rpg is not None
     assert bot.rpg.content.ranks[0].id == "E"
-    assert "yokai.cogs.rpg" in loaded
+    assert "yokai.cogs.rpg" in loaded and "yokai.cogs.gear" in loaded
     abort, purge = bot.rpg_calls  # type: ignore[attr-defined]
     abort.assert_awaited_once()  # fights left open by the last run are cancelled and refunded
     purge.assert_awaited_once()
@@ -399,7 +399,7 @@ async def test_setup_hook_skips_the_rpg_when_disabled() -> None:
     bot = make_bot(rpg_enabled=False)
     loaded = await _run_setup_hook(bot)
     assert bot.rpg is None
-    assert "yokai.cogs.rpg" not in loaded
+    assert "yokai.cogs.rpg" not in loaded and "yokai.cogs.gear" not in loaded
 
 
 @pytest.mark.asyncio

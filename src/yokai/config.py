@@ -91,6 +91,7 @@ class Config:
     rpg_tz: str = "UTC"
     rpg_base_attempts: int = 8
     rpg_turn_seconds: int = 45
+    rpg_shop_daily_cap: int = 3
 
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
@@ -288,6 +289,9 @@ def load_config(env_path: Path | str | None = None) -> Config:
     rpg_base_attempts = max(1, _parse_int("RPG_BASE_ATTEMPTS", os.getenv("RPG_BASE_ATTEMPTS"), 8))
     # Floored at 10s: a shorter turn timer would auto-defend people before they can click.
     rpg_turn_seconds = max(10, _parse_int("RPG_TURN_SECONDS", os.getenv("RPG_TURN_SECONDS"), 45))
+    rpg_shop_daily_cap = max(
+        1, _parse_int("RPG_SHOP_DAILY_CAP", os.getenv("RPG_SHOP_DAILY_CAP"), 3)
+    )
 
     return Config(
         discord_token=token,
@@ -337,4 +341,5 @@ def load_config(env_path: Path | str | None = None) -> Config:
         rpg_tz=rpg_tz,
         rpg_base_attempts=rpg_base_attempts,
         rpg_turn_seconds=rpg_turn_seconds,
+        rpg_shop_daily_cap=rpg_shop_daily_cap,
     )
