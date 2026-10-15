@@ -681,3 +681,140 @@ class PartyTooSmallError(YokaiError):
             f"This mission needs a party of at least {needed} and you have {have}.",
             user_hint="Wait for others to join, then press Start.",
         )
+
+
+class TradeSelfError(YokaiError):
+    """Raised when a member tries to open a trade with themselves."""
+
+    title = "Pick someone else"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You can't trade with yourself.",
+            user_hint="Pick another adventurer.",
+        )
+
+
+class TradeBotError(YokaiError):
+    """Raised when a member tries to open a trade with a bot."""
+
+    title = "Bots don't trade"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Bots can't take part in a trade.",
+            user_hint="Pick another adventurer.",
+        )
+
+
+class TradeBusyError(YokaiError):
+    """Raised when a member who already has an open trade is asked into another."""
+
+    title = "Already in a trade"
+
+    def __init__(self, you: bool = True) -> None:
+        super().__init__(
+            "You already have an open trade." if you else "That member is already in a trade.",
+            user_hint="Finish or cancel it first." if you else "Try again in a few minutes.",
+        )
+
+
+class TradeFightingError(YokaiError):
+    """Raised when someone who is in a guild fight takes part in a trade."""
+
+    title = "Trading is locked"
+
+    def __init__(self, user_id: int, you: bool = False) -> None:
+        super().__init__(
+            "You're in a guild fight." if you else f"<@{user_id}> is in a guild fight.",
+            user_hint="Trades wait until the fight is over.",
+        )
+        self.user_id = user_id
+
+
+class TradeLimitError(YokaiError):
+    """Raised when an offer would hold more items than a trade allows."""
+
+    title = "Too many items"
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(
+            f"One side of a trade holds at most {limit} items.",
+            user_hint="Remove one first, or make a second trade.",
+        )
+
+
+class TradeNothingError(YokaiError):
+    """Raised when a trade with nothing in it is confirmed."""
+
+    title = "Nothing to trade"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "There is nothing in this trade yet.",
+            user_hint="Add an item or some Renown first.",
+        )
+
+
+class TradeRenownError(YokaiError):
+    """Raised when the Renown amount typed into a trade is not usable."""
+
+    title = "Invalid amount"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Enter a whole number of Renown, zero or more.",
+            user_hint="Use 0 to take your Renown back out of the offer.",
+        )
+
+
+class TradeItemsGoneError(YokaiError):
+    """Raised at commit when offered items were sold, equipped or moved in the meantime."""
+
+    title = "Items changed"
+
+    def __init__(self, item_ids: Sequence[int]) -> None:
+        super().__init__(
+            f"{len(item_ids)} offered item(s) can no longer be traded "
+            "(sold, equipped or given away).",
+            user_hint="They were taken out of the offer. Confirm again to continue.",
+        )
+        self.item_ids = tuple(item_ids)
+
+
+class TradeFundsError(YokaiError):
+    """Raised at commit when someone offered more Renown than they now hold."""
+
+    title = "Not enough Renown"
+
+    def __init__(self, user_id: int, offered: int, balance: int) -> None:
+        super().__init__(
+            f"<@{user_id}> offered **{offered:,}** Renown but has **{balance:,}**.",
+            user_hint="Lower the offer and confirm again.",
+        )
+        self.user_id = user_id
+
+
+class TradeRoomError(YokaiError):
+    """Raised at commit when the trade would overfill someone's inventory."""
+
+    title = "No room"
+
+    def __init__(self, user_id: int, cap: int) -> None:
+        super().__init__(
+            f"<@{user_id}> would end up with more than {cap} items.",
+            user_hint="Sell something with /gear sell, then confirm again.",
+        )
+        self.user_id = user_id
+
+
+class TradeClosedError(YokaiError):
+    """Raised when a finished, cancelled or expired trade is used."""
+
+    title = "Trade is closed"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "This trade is already over.",
+            user_hint="Open a new one with /trade.",
+        )
