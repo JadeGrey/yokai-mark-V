@@ -78,7 +78,7 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2738 passed, 1 skipped, 107 warnings in 186.36s
+# Result: 2768 passed, 1 skipped, 109 warnings in 165.46s
 
 python -m ruff check .
 # Result: All checks passed!
