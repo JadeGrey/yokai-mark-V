@@ -1,6 +1,6 @@
 # Yokai Mark V — Manual QA Checklist
 
-This document details the 36 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
+This document details the 43 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
 
 ---
 
@@ -44,6 +44,13 @@ This document details the 36 manual verification procedures to validate Yokai Ma
 | **34** | **Guild Join** | • `/guild join` creates a character and shows a "Welcome to the guild" embed with rank E, level 1 and the seven stats (HP 100, Attack 10, Magic 10, Defense 5, Resist 5, Speed 10, Crit 5%).<br>• The reply is visible to the channel and has exactly one emoji.<br>• Running it again answers privately with "Already on the roster". | 1. Run `/guild join` with an account that has not joined.<br>2. Check the embed fields and the single emoji.<br>3. Run `/guild join` again and confirm only you see the reply. | `Pending Owner Run` |
 | **35** | **Player Card** | • `/card` shows your own card; `/card member:@friend` shows a friend's (visible to the channel).<br>• Fields: Rank, Level (`1 / 60`), Record, seven stats, and "Next promotion: Rank D at level 5".<br>• A member who has not joined, and a bot account, produce a private "No adventurer yet" error. | 1. Run `/card`.<br>2. Run `/card` with another member who has joined, then one who has not, then a bot.<br>3. Check each reply and who can see it. | `Pending Owner Run` |
 | **36** | **RPG Disabled and Bad Content** | • With `RPG_ENABLED=false` and a restart, `/guild` and `/card` are absent from the command list and the rest of the bot works.<br>• With `RPG_ENABLED=true` and a broken file in `content/rpg/` (for example delete a closing bracket in `tags.toml`), the bot refuses to start and the log names `tags.toml` and the problem. | 1. Set `RPG_ENABLED=false`, restart, type `/guild` in Discord.<br>2. Set it back to `true`, damage `content/rpg/tags.toml`, start the bot, read the log, then restore the file with `git checkout content/rpg/tags.toml`. | `Pending Owner Run` |
+| **37** | **Guild Board** | • `/guild board` is private to you and shows one section per rank with three missions each.<br>• Your rank's section (and lower ones) list level, cost, XP and Renown; higher ranks show "(locked)" with names only.<br>• The description shows `Attempts: 8/8`, your rank, and a refresh countdown.<br>• Everyone sees the same missions on the same day. | 1. As a member who has joined, run `/guild board`.<br>2. Compare with a second account's board.<br>3. Check the locked sections and the countdown. | `Pending Owner Run` |
+| **38** | **Run a Mission** | • `/guild mission` autocompletes only today's missions you can enter.<br>• Choosing one replies privately with a thread link; a public thread opens with one live message showing Party, Foes and buttons Attack, Magic, Defend (no Skill button yet).<br>• Pressing Attack resolves the round; the message updates with HP bars and a "Last round" log.<br>• A win shows "Mission complete" with XP and Renown; `/balance` rises by the Renown and `/card` shows the new record.<br>• The thread archives shortly afterwards. | 1. `/guild mission` and pick a rank E mission.<br>2. Open the thread and fight to the end.<br>3. Check `/balance`, `/card` and `/guild board` (attempts spent). | `Pending Owner Run` |
+| **39** | **Targets and Others' Buttons** | • In a mission with two or more enemies, Attack opens a private "Choose a target" picker; choosing locks the action in.<br>• Another member pressing the fight's buttons gets a private "Not your fight" message and nothing changes. | 1. Start "Pest Control" (two Gaki).<br>2. Press Attack and choose a target.<br>3. Have a second account press a button in the thread. | `Pending Owner Run` |
+| **40** | **Timeouts and Away** | • Doing nothing for 45 seconds makes you defend automatically.<br>• After two missed rounds the live message marks you "away" and the fight stops waiting for you.<br>• Pressing a button while away gets you back in. | 1. Start a mission and do nothing for two rounds.<br>2. Watch the Party line and the round pace.<br>3. Press Attack and confirm the next round waits for you again. | `Pending Owner Run` |
+| **41** | **Attempts and Streak** | • Spending all your attempts makes `/guild mission` answer privately with "Out of attempts" and a reset time, before any thread is created.<br>• After the guild-day rollover the attempts are full again and the board has changed.<br>• Playing on consecutive days shows a streak on `/guild board`; after 3 days it adds +1 attempt. | 1. Run missions until attempts run out and try one more.<br>2. Return after midnight (guild time) and run `/guild board`.<br>3. Over several days watch the streak line. | `Pending Owner Run` |
+| **42** | **Restart Mid-Fight** | • Restarting the bot during a fight cancels it and refunds the attempts on startup.<br>• The old thread's buttons no longer do anything and nothing is paid. | 1. Start a mission and note your attempts.<br>2. Stop and restart the bot with `.\run.ps1`.<br>3. Run `/guild board`: the attempts are back. | `Pending Owner Run` |
+| **43** | **Thread Permissions in Diag** | • `/admin diag` shows a "Guild RPG" line with mission and enemy counts and `threads: ok`.<br>• Without the Create Public Threads permission the line says `threads: MISSING` and the embed turns amber. | 1. Run `/admin diag` as the owner.<br>2. Remove the bot's Create Public Threads permission in a test channel setup, re-run, then restore it. | `Pending Owner Run` |
 
 ---
 
@@ -51,11 +58,11 @@ This document details the 36 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2172 passed, 1 skipped, 101 warnings in 106.74s
+# Result: 2397 passed, 1 skipped, 101 warnings in 125.58s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 289 files already formatted
+# Result: 312 files already formatted
 ```

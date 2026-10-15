@@ -389,3 +389,33 @@ plans are written when their phase starts, so that balance learned from play can
 XP curve and level thresholds; the exact attempt costs and streak numbers; reward and drop numbers;
 repair and shop prices; the damage formula constants; per-tag bonuses and skills; the below-rank reward
 share; how many missions of each rank appear per day.
+
+## 18. Implementation notes (kept current as phases ship)
+
+**Phase 2 (solo missions) changed these details from the sections above:**
+- **Durability and repair moved to phase 3.** They act on equipped gear, which does not exist until
+  phase 3. Phase 2 fights deduct no durability. Phase 3 also re-tunes `enemy_power` once gear adds
+  player power.
+- **Rewards are formulas, not per-mission numbers.** XP = `xp_to_next(top stage level) x rank xp_share
+  x attempt cost`, Renown = `renown_per_level x top stage level x attempt cost`, both scaled by the
+  below-rank share. Missions in `missions.toml` carry no reward numbers.
+- **Enemy stats are derived.** An enemy definition holds percentage multipliers; a stage gives the
+  level; the rank's `enemy_power` (in `ranks.toml`) scales every stat of that rank's enemies.
+  Stats = `stats_at_level(level) x mult x enemy_power`.
+- **New content files:** `balance.toml` (combat rules, XP curve, reward rules, party scaling, streak
+  rules), `skills.toml`, `enemies.toml`, `missions.toml` (28 missions, four per rank). `ranks.toml`
+  gained `xp_share` and `enemy_power`.
+- **Skills:** the engine, the content format and the Skill button exist, but no player has a skill
+  until tag sets arrive in phase 3. Enemies already use skills (damage over time, debuffs, area hits).
+- **Promotion** arrives in phase 4; until then every character stays rank E. The pacing simulator
+  promotes instantly at the level threshold.
+- **Config added:** `RPG_TZ`, `RPG_BASE_ATTEMPTS`, `RPG_TURN_SECONDS`.
+- **Schema v10** adds the attempt and streak columns to `rpg_characters`, `rpg_boards` (without the
+  shop column, which phase 3 adds) and `rpg_fights`. History older than 30 days is purged at startup.
+- **Away players:** the runner does not wait for a player marked away. When nobody is waited for, the
+  round pauses `idle_delay` (1.5 seconds) before resolving, which is also the window in which an away
+  player can act to rejoin.
+- **Calibration:** with base stats and always-attack play, the simulator reaches level 30 (rank A) on
+  about day 28 and the level cap on about day 91 (spec targets: 30 and 90), with a win rate of about
+  80% right after each promotion and about 97% overall. Renown income is about 340 a day in the first
+  month, rising to about 1,200 at the cap. Phase 3 prices (shop, repair) are set against these.

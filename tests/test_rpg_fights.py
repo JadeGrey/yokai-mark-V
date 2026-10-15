@@ -607,3 +607,73 @@ async def test_launching_without_attempts_releases_the_active_slot(tmp_path: Pat
         assert USER not in runtime.active_users
     finally:
         await db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mission_id", ["e_pest_control", "e_trickster_hunt", "e_midnight_gate"])
+async def test_a_scripted_player_can_finish_the_shipped_missions_end_to_end(
+    tmp_path: Path, mission_id: str
+) -> None:
+    db = Database(tmp_path / "shipped.db")
+    await db.initialize()
+    try:
+        runtime = RpgRuntime.create(db, Path("content/rpg"))
+        await runtime.store.create_character(USER, "E", now=1)
+        mission = runtime.content.missions[mission_id]
+        fight_id = await runtime.store.begin_fight(
+            mission_id=mission.id,
+            kind="mission",
+            user_ids=[USER],
+            cost=mission.attempt_cost,
+            today="2026-10-14",
+            base_attempts=8,
+            streak_rules=runtime.content.balance.streak,
+        )
+        character = await runtime.store.get_character(USER)
+        assert character is not None
+        runtime.active_users.add(USER)
+        thread = FakeThread()
+        runner = FightRunner(
+            bot=make_bot(),
+            runtime=runtime,
+            fight_id=fight_id,
+            mission=mission,
+            participants=[Participant(USER, "Sami", character)],
+            thread=thread,  # type: ignore[arg-type]
+            turn_seconds=2,
+            rng=random.Random(5),
+            idle_delay=0,
+            archive_delay=0,
+        )
+        task = asyncio.create_task(runner.run())
+        guard = 0
+        while not task.done():
+            guard += 1
+            assert guard < 2000, "the fight never finished"
+            view = runner.view
+            if view and not view.closed and not runner.fight.has_chosen("p7"):
+                interaction = make_interaction()
+                # Several foes ask for a target first; pick the first living foe.
+                await view.attack_button.callback(interaction)
+                if (
+                    not runner.fight.has_chosen("p7")
+                    and interaction.response.send_message.await_args
+                ):
+                    select = interaction.response.send_message.await_args.kwargs["view"].children[0]
+                    with patch.object(
+                        TargetSelect, "values", [select.options[0].value], create=True
+                    ):
+                        await select.callback(make_interaction())
+            await asyncio.sleep(0.005)
+        await task
+
+        status = await fight_status(db, fight_id)
+        assert status in {"won", "lost"}
+        final = thread.last_embed()
+        assert ("Mission complete" if status == "won" else "Mission failed") in (final.title or "")
+        character = await runtime.store.get_character(USER)
+        assert character is not None
+        assert character.battles_won + character.battles_lost == 1
+        assert USER not in runtime.active_users
+    finally:
+        await db.close()
