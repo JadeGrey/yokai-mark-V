@@ -35,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -262,6 +262,35 @@ CREATE TABLE IF NOT EXISTS rpg_characters (
 );
 """
 
+# rpg_characters also gains four columns in _migrate (attempts_used, attempts_day, streak,
+# last_active_day), added only when missing because ALTER TABLE cannot be repeated.
+MIGRATION_V10 = """
+CREATE TABLE IF NOT EXISTS rpg_boards (
+  day_key TEXT PRIMARY KEY,
+  mission_ids TEXT NOT NULL,
+  created_ts INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rpg_fights (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  mission_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  participants TEXT NOT NULL,
+  thread_id INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_rpg_fights_status ON rpg_fights(status);
+"""
+
+RPG_CHARACTER_V10_COLUMNS = (
+    ("attempts_used", "INTEGER NOT NULL DEFAULT 0"),
+    ("attempts_day", "TEXT"),
+    ("streak", "INTEGER NOT NULL DEFAULT 0"),
+    ("last_active_day", "TEXT"),
+)
+
 
 class Database:
     """Async SQLite database manager."""
@@ -376,6 +405,15 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 9;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 9.")
+
+        if version < 10:
+            logger.info("Applying SQLite migration v10...")
+            await self.conn.executescript(MIGRATION_V10)
+            for column, definition in RPG_CHARACTER_V10_COLUMNS:
+                await self._add_column_if_missing("rpg_characters", column, definition)
+            await self.conn.execute("PRAGMA user_version = 10;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 10.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
@@ -600,6 +638,26 @@ class Database:
         async with self._write_tx():
             yield self.conn
             await self.conn.commit()
+
+    async def credit_within_transaction(
+        self, user_id: int, amount: int, reason: str, welcome_bonus: int
+    ) -> int:
+        """Credit Renown as part of the caller's open `transaction()`; returns the new balance.
+
+        Takes no lock and does not commit: the surrounding `transaction()` does both, so the
+        credit and the caller's other changes land together or not at all.
+        """
+        if amount <= 0:
+            raise ValueError("credit_within_transaction amount must be positive")
+        now = int(time.time())
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance + ? WHERE user_id = ?;", (amount, user_id)
+        )
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        await self._insert_transaction(user_id, amount, reason, None, wallet.balance, now)
+        return wallet.balance
 
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
         """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).

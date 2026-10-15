@@ -2,17 +2,45 @@
 
 from __future__ import annotations
 
+import json
 import time
-from typing import TYPE_CHECKING, Any, Optional, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Sequence
 
 import aiosqlite
 
-from yokai.rpg.models import Character
+from yokai.errors import NoCharacterError
+from yokai.rpg import guild
+from yokai.rpg.models import Character, StreakRules, XpCurve
 
 if TYPE_CHECKING:
     from yokai.storage.db import Database
 
-_CHARACTER_COLUMNS = "user_id, level, xp, rank, battles_won, battles_lost, created_ts"
+_CHARACTER_COLUMNS = (
+    "user_id, level, xp, rank, battles_won, battles_lost, created_ts, "
+    "attempts_used, attempts_day, streak, last_active_day"
+)
+
+FIGHT_OPEN = "open"
+FIGHT_WON = "won"
+FIGHT_LOST = "lost"
+FIGHT_ABORTED = "aborted"
+
+
+@dataclass(frozen=True, slots=True)
+class Settlement:
+    """What one participant received when a fight was settled."""
+
+    user_id: int
+    xp_gained: int
+    renown_gained: int
+    level_before: int
+    level_after: int
+    xp_now: int
+
+    @property
+    def levels_gained(self) -> int:
+        return self.level_after - self.level_before
 
 
 def _character_from_row(row: Sequence[Any]) -> Character:
@@ -24,6 +52,10 @@ def _character_from_row(row: Sequence[Any]) -> Character:
         battles_won=row[4],
         battles_lost=row[5],
         created_ts=row[6],
+        attempts_used=row[7],
+        attempts_day=row[8],
+        streak=row[9],
+        last_active_day=row[10],
     )
 
 
@@ -35,10 +67,12 @@ async def _fetch_character(conn: aiosqlite.Connection, user_id: int) -> Optional
 
 
 class RpgStore:
-    """Reads and writes RPG rows. Later phases add items, boards and fights here."""
+    """Reads and writes RPG rows. Later phases add items, shop stock and trades here."""
 
     def __init__(self, db: Database) -> None:
         self._db = db
+
+    # ------------------------------------------------------------------ characters
 
     async def get_character(self, user_id: int) -> Optional[Character]:
         """Read-only lookup; never creates a character."""
@@ -63,3 +97,182 @@ class RpgStore:
             character = await _fetch_character(conn, user_id)
         assert character is not None
         return character, created
+
+    # ------------------------------------------------------------------ the board
+
+    async def get_or_create_board(
+        self, day: str, build: Callable[[], list[str]], now: Optional[int] = None
+    ) -> list[str]:
+        """The day's mission ids. The first caller of the day draws and stores them."""
+        created_ts = int(time.time()) if now is None else now
+        async with self._db.transaction() as conn:
+            async with conn.execute(
+                "SELECT mission_ids FROM rpg_boards WHERE day_key = ?;", (day,)
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row:
+                return list(json.loads(row[0]))
+            ids = build()
+            await conn.execute(
+                "INSERT INTO rpg_boards (day_key, mission_ids, created_ts) VALUES (?, ?, ?);",
+                (day, json.dumps(ids), created_ts),
+            )
+        return ids
+
+    # ------------------------------------------------------------------ fights
+
+    async def begin_fight(
+        self,
+        *,
+        mission_id: str,
+        kind: str,
+        user_ids: Sequence[int],
+        cost: int,
+        today: str,
+        base_attempts: int,
+        streak_rules: StreakRules,
+        resets_ts: Optional[int] = None,
+        now: Optional[int] = None,
+    ) -> int:
+        """Spend `cost` attempts for every member and open a fight row, all or nothing.
+
+        Raises NoAttemptsError or NoCharacterError (changing nothing) if any member cannot.
+        """
+        ts = int(time.time()) if now is None else now
+        participants: dict[str, dict[str, Any]] = {}
+        async with self._db.transaction() as conn:
+            for user_id in user_ids:
+                character = await _fetch_character(conn, user_id)
+                if character is None:
+                    raise NoCharacterError(own=True)
+                plan = guild.plan_spend(
+                    character, cost, today, base_attempts, streak_rules, resets_ts
+                )
+                await conn.execute(
+                    "UPDATE rpg_characters SET attempts_used = ?, attempts_day = ?, "
+                    "streak = ?, last_active_day = ? WHERE user_id = ?;",
+                    (plan.used, plan.day, plan.streak, plan.last_active_day, user_id),
+                )
+                participants[str(user_id)] = {"cost": cost, "day": today}
+            cursor = await conn.execute(
+                "INSERT INTO rpg_fights (ts, mission_id, kind, status, participants) "
+                "VALUES (?, ?, ?, ?, ?);",
+                (ts, mission_id, kind, FIGHT_OPEN, json.dumps(participants)),
+            )
+            fight_id = cursor.lastrowid
+        assert fight_id is not None
+        return fight_id
+
+    async def set_fight_thread(self, fight_id: int, thread_id: int) -> None:
+        async with self._db.transaction() as conn:
+            await conn.execute(
+                "UPDATE rpg_fights SET thread_id = ? WHERE id = ?;", (thread_id, fight_id)
+            )
+
+    async def settle_fight(
+        self,
+        fight_id: int,
+        *,
+        won: bool,
+        rewards: Mapping[int, guild.Reward],
+        level_cap: int,
+        xp_curve: XpCurve,
+        welcome_bonus: int,
+    ) -> Optional[dict[int, Settlement]]:
+        """Close an open fight and pay the participants, once.
+
+        Returns None (and changes nothing) if the fight is not open any more, so a duplicate
+        call can never pay twice.
+        """
+        status = FIGHT_WON if won else FIGHT_LOST
+        results: dict[int, Settlement] = {}
+        async with self._db.transaction() as conn:
+            async with conn.execute(
+                "SELECT participants FROM rpg_fights WHERE id = ? AND status = ?;",
+                (fight_id, FIGHT_OPEN),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if row is None:
+                return None
+            await conn.execute("UPDATE rpg_fights SET status = ? WHERE id = ?;", (status, fight_id))
+            for raw_id in json.loads(row[0]):
+                user_id = int(raw_id)
+                character = await _fetch_character(conn, user_id)
+                if character is None:
+                    continue
+                if not won:
+                    await conn.execute(
+                        "UPDATE rpg_characters SET battles_lost = battles_lost + 1 "
+                        "WHERE user_id = ?;",
+                        (user_id,),
+                    )
+                    results[user_id] = Settlement(
+                        user_id, 0, 0, character.level, character.level, character.xp
+                    )
+                    continue
+                reward = rewards.get(user_id, guild.Reward(0, 0))
+                level, xp, _ = guild.apply_xp(
+                    character.level, character.xp, reward.xp, level_cap, xp_curve
+                )
+                await conn.execute(
+                    "UPDATE rpg_characters SET level = ?, xp = ?, battles_won = battles_won + 1 "
+                    "WHERE user_id = ?;",
+                    (level, xp, user_id),
+                )
+                if reward.renown > 0:
+                    await self._db.credit_within_transaction(
+                        user_id, reward.renown, "rpg_reward", welcome_bonus
+                    )
+                results[user_id] = Settlement(
+                    user_id, reward.xp, reward.renown, character.level, level, xp
+                )
+        return results
+
+    async def abort_fight(self, fight_id: int) -> bool:
+        """Cancel an open fight and refund its attempts. False if it was not open."""
+        async with self._db.transaction() as conn:
+            return await self._abort_in_transaction(conn, fight_id)
+
+    async def abort_open_fights(self) -> int:
+        """Startup recovery: abort every fight a restart left open. Returns how many."""
+        async with self._db.transaction() as conn:
+            async with conn.execute(
+                "SELECT id FROM rpg_fights WHERE status = ?;", (FIGHT_OPEN,)
+            ) as cursor:
+                ids = [row[0] for row in await cursor.fetchall()]
+            for fight_id in ids:
+                await self._abort_in_transaction(conn, fight_id)
+        return len(ids)
+
+    @staticmethod
+    async def _abort_in_transaction(conn: aiosqlite.Connection, fight_id: int) -> bool:
+        async with conn.execute(
+            "SELECT participants FROM rpg_fights WHERE id = ? AND status = ?;",
+            (fight_id, FIGHT_OPEN),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return False
+        for raw_id, info in json.loads(row[0]).items():
+            # Only refund while the counter still belongs to the day the attempts were spent on.
+            await conn.execute(
+                "UPDATE rpg_characters SET attempts_used = MAX(0, attempts_used - ?) "
+                "WHERE user_id = ? AND attempts_day = ?;",
+                (info["cost"], int(raw_id), info["day"]),
+            )
+        await conn.execute(
+            "UPDATE rpg_fights SET status = ? WHERE id = ?;", (FIGHT_ABORTED, fight_id)
+        )
+        return True
+
+    async def purge_history(self, older_than_ts: int) -> tuple[int, int]:
+        """Delete old boards and finished fights. Returns (boards, fights) removed."""
+        async with self._db.transaction() as conn:
+            boards = await conn.execute(
+                "DELETE FROM rpg_boards WHERE created_ts < ?;", (older_than_ts,)
+            )
+            fights = await conn.execute(
+                "DELETE FROM rpg_fights WHERE ts < ? AND status != ?;",
+                (older_than_ts, FIGHT_OPEN),
+            )
+            return boards.rowcount, fights.rowcount

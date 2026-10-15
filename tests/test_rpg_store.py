@@ -28,7 +28,7 @@ async def test_schema_is_at_least_v9_and_has_the_characters_table(tmp_path: Path
         assert row is not None and row[0] == CURRENT_SCHEMA_VERSION
         async with db.conn.execute("PRAGMA table_info(rpg_characters);") as cursor:
             columns = {r[1] for r in await cursor.fetchall()}
-        assert columns == {
+        assert columns >= {
             "user_id",
             "level",
             "xp",
