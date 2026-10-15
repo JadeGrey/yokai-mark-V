@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 STAT_NAMES: tuple[str, ...] = ("hp", "attack", "magic", "defense", "resist", "speed", "crit")
 
@@ -24,6 +24,8 @@ SKILL_TARGETS: tuple[str, ...] = ("foe", "all_foes", "ally", "all_allies", "self
 ENEMY_TARGET_RULES: tuple[str, ...] = ("random", "lowest_hp")
 BASIC_ACTIONS: tuple[str, ...] = ("attack", "magic")
 MISSION_KINDS: tuple[str, ...] = ("mission", "raid")
+SLOTS: tuple[str, ...] = ("weapon", "head", "body", "boots", "accessory")
+RARITIES: tuple[str, ...] = ("common", "uncommon", "rare", "epic")
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,13 +50,22 @@ class Stats:
 
 @dataclass(frozen=True, slots=True)
 class Tag:
-    """A gear tag, such as Oni or Kitsune."""
+    """A gear tag, such as Oni or Kitsune.
+
+    `bonus_2` and `bonus_4` are the set bonuses for wearing 2 or 4 working pieces: percentages of
+    the final stat, except Crit, which is flat points. Wearing 4 also grants `skill`. `drawback`
+    is the stat this tag's gear costs a little of (the nerf side of its trade-off).
+    """
 
     id: str
     name: str
     role: str
     leans: tuple[str, ...]
     description: str
+    bonus_2: Stats = field(default_factory=Stats)
+    bonus_4: Stats = field(default_factory=Stats)
+    skill: str | None = None
+    drawback: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +201,36 @@ class StreakRules:
 
 
 @dataclass(frozen=True, slots=True)
+class GearRules:
+    """How gear is priced, worn down and stored."""
+
+    sell_percent: int
+    repair_percent: int
+    win_wear: int
+    loss_wear: int
+    inventory_cap: int
+    roll_percent: int
+
+
+@dataclass(frozen=True, slots=True)
+class LootRules:
+    """What missions drop."""
+
+    drop_chance_percent: int
+    boss_drop_chance_percent: int
+    tier_window: int
+    rarity_weights: tuple[tuple[str, int], ...]
+    boss_rarity_weights: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ShopRules:
+    """The daily guild shop."""
+
+    stock_per_tier: int
+
+
+@dataclass(frozen=True, slots=True)
 class Balance:
     """Tunable numbers from balance.toml."""
 
@@ -198,3 +239,36 @@ class Balance:
     rewards: RewardRules
     party: PartyScaling
     streak: StreakRules
+    gear: GearRules
+    loot: LootRules
+    shop: ShopRules
+
+
+@dataclass(frozen=True, slots=True)
+class ItemDef:
+    """A piece of gear as defined in items.toml. `stats` may include negative values (nerfs)."""
+
+    id: str
+    name: str
+    slot: str
+    tag: str
+    rarity: str
+    req_level: int
+    stats: Stats
+    price: int
+    max_durability: int
+    skill: str | None = None
+    retired: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ItemInstance:
+    """One owned piece of gear: its rolled stats and current durability."""
+
+    id: int
+    owner_id: int
+    content_id: str
+    rolls: Stats
+    durability: int
+    created_ts: int
+    equipped_slot: str | None = None

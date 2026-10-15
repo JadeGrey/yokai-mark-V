@@ -71,6 +71,20 @@ def stats_value(table: object, where: str, hp_minimum: int, minimum: int = 0) ->
     return Stats(**values)
 
 
+def partial_stats_value(table: object, where: str, minimum: int, maximum: int) -> Stats:
+    """Stats where any stat may be left out (it counts as 0). Values may be negative."""
+    data = table_value(table, where)
+    unknown = sorted(set(data) - set(STAT_NAMES))
+    if unknown:
+        raise ContentError(f"{where} has unknown stat(s): {', '.join(unknown)}")
+    values = {
+        name: int_value(data[name], f"{where}.{name}", minimum, maximum)
+        for name in STAT_NAMES
+        if name in data
+    }
+    return Stats(**values)
+
+
 def entries(raw: dict[str, Any], key: str, file_name: str) -> list[dict[str, Any]]:
     found = raw.get(key)
     if not isinstance(found, list) or not found:

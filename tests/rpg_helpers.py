@@ -49,7 +49,11 @@ id = "oni"
 name = "Oni"
 role = "Bruiser"
 leans = ["attack", "hp"]
+drawback = "speed"
 description = "Ogres of folklore."
+bonus_2 = { attack = 8 }
+bonus_4 = { attack = 12, hp = 10 }
+skill = "rend"
 
 [[tag]]
 id = "kitsune"
@@ -86,6 +90,70 @@ extra_foes = [0, 0, 1, 1]
 days_per_bonus = 3
 bonus_cap = 3
 drop_per_missed_day = 3
+
+[gear]
+sell_percent = 30
+repair_percent = 35
+win_wear = 3
+loss_wear = 8
+inventory_cap = 60
+roll_percent = 10
+
+[loot]
+drop_chance_percent = 35
+boss_drop_chance_percent = 100
+tier_window = 15
+rarity_weights = { common = 60, uncommon = 28, rare = 10, epic = 2 }
+boss_rarity_weights = { common = 15, uncommon = 35, rare = 38, epic = 12 }
+
+[shop]
+stock_per_tier = 3
+"""
+
+ITEMS = """[[item]]
+id = "oni_weapon_t1_common"
+name = "Worn Oni Kanabo"
+slot = "weapon"
+tag = "oni"
+rarity = "common"
+req_level = 1
+price = 60
+max_durability = 100
+stats = { hp = 2, attack = 1, speed = -1 }
+
+[[item]]
+id = "oni_head_t1_common"
+name = "Worn Oni Mask"
+slot = "head"
+tag = "oni"
+rarity = "common"
+req_level = 1
+price = 36
+max_durability = 100
+stats = { hp = 1, attack = 1 }
+
+[[item]]
+id = "kitsune_head_t2_uncommon"
+name = "Honed Kitsune Mask"
+slot = "head"
+tag = "kitsune"
+rarity = "uncommon"
+req_level = 12
+price = 270
+max_durability = 110
+stats = { magic = 3, speed = 2, defense = -1 }
+
+[[item]]
+id = "oni_weapon_t2_epic"
+name = "Gilded Oni Kanabo"
+slot = "weapon"
+tag = "oni"
+rarity = "epic"
+req_level = 12
+price = 2160
+max_durability = 150
+stats = { hp = 30, attack = 9, speed = -2 }
+skill = "hex"
 """
 
 SKILLS = """\
@@ -159,6 +227,7 @@ DEFAULTS = {
     "skills.toml": SKILLS,
     "enemies.toml": ENEMIES,
     "missions.toml": MISSIONS,
+    "items.toml": ITEMS,
 }
 
 

@@ -5,7 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from yokai.rpg.models import Balance, EnemyDef, LevelTable, Mission, Rank, SkillDef, Tag
+from yokai.rpg.models import (
+    Balance,
+    EnemyDef,
+    ItemDef,
+    LevelTable,
+    Mission,
+    Rank,
+    SkillDef,
+    Tag,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +28,7 @@ class Content:
     skills: Mapping[str, SkillDef]
     enemies: Mapping[str, EnemyDef]
     missions: Mapping[str, Mission]
+    items: Mapping[str, ItemDef]
 
     def rank_index(self, rank_id: str) -> int:
         """Position of a rank in the ladder (0 is the lowest). Raises KeyError if unknown."""
@@ -39,3 +49,7 @@ class Content:
     def missions_for_rank(self, rank_id: str) -> list[Mission]:
         """Missions of exactly this rank, in file order."""
         return [m for m in self.missions.values() if m.rank == rank_id]
+
+    def item_tiers(self) -> list[int]:
+        """The distinct level requirements of all items, ascending (one per gear tier)."""
+        return sorted({item.req_level for item in self.items.values()})

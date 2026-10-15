@@ -9,6 +9,7 @@ from yokai.rpg.content.common import (
     entries,
     int_value,
     number_value,
+    partial_stats_value,
     stats_value,
     table_value,
     text_value,
@@ -18,17 +19,25 @@ from yokai.rpg.models import (
     ENEMY_TARGET_RULES,
     MISSION_KINDS,
     MODIFIABLE_STATS,
+    RARITIES,
     SKILL_KINDS,
     SKILL_TARGETS,
+    SLOTS,
+    STAT_NAMES,
     Balance,
     CombatRules,
     EnemyDef,
+    GearRules,
+    ItemDef,
+    LootRules,
     Mission,
     PartyScaling,
     RewardRules,
+    ShopRules,
     SkillDef,
     Stage,
     StreakRules,
+    Tag,
     XpCurve,
 )
 
@@ -45,6 +54,9 @@ def parse_balance(raw: dict[str, Any]) -> Balance:
     rewards = table_value(raw.get("rewards"), "balance.toml [rewards]")
     party = table_value(raw.get("party"), "balance.toml [party]")
     streak = table_value(raw.get("streak"), "balance.toml [streak]")
+    gear = table_value(raw.get("gear"), "balance.toml [gear]")
+    loot = table_value(raw.get("loot"), "balance.toml [loot]")
+    shop = table_value(raw.get("shop"), "balance.toml [shop]")
     where = "balance.toml [combat]"
     combat_rules = CombatRules(
         defense_k=int_value(combat.get("defense_k"), f"{where} defense_k", 1),
@@ -97,7 +109,57 @@ def parse_balance(raw: dict[str, Any]) -> Balance:
         rewards=reward_rules,
         party=party_scaling,
         streak=streak_rules,
+        gear=_parse_gear_rules(gear),
+        loot=_parse_loot_rules(loot),
+        shop=ShopRules(
+            stock_per_tier=int_value(
+                shop.get("stock_per_tier"), "balance.toml [shop] stock_per_tier", 1, 20
+            )
+        ),
     )
+
+
+def _parse_gear_rules(gear: dict[str, Any]) -> GearRules:
+    where = "balance.toml [gear]"
+    return GearRules(
+        sell_percent=int_value(gear.get("sell_percent"), f"{where} sell_percent", 0, 100),
+        repair_percent=int_value(gear.get("repair_percent"), f"{where} repair_percent", 0, 500),
+        win_wear=int_value(gear.get("win_wear"), f"{where} win_wear", 0, 100),
+        loss_wear=int_value(gear.get("loss_wear"), f"{where} loss_wear", 0, 100),
+        inventory_cap=int_value(gear.get("inventory_cap"), f"{where} inventory_cap", 1, 1000),
+        roll_percent=int_value(gear.get("roll_percent"), f"{where} roll_percent", 0, 50),
+    )
+
+
+def _parse_loot_rules(loot: dict[str, Any]) -> LootRules:
+    where = "balance.toml [loot]"
+    return LootRules(
+        drop_chance_percent=int_value(
+            loot.get("drop_chance_percent"), f"{where} drop_chance_percent", 0, 100
+        ),
+        boss_drop_chance_percent=int_value(
+            loot.get("boss_drop_chance_percent"), f"{where} boss_drop_chance_percent", 0, 100
+        ),
+        tier_window=int_value(loot.get("tier_window"), f"{where} tier_window", 0, 100),
+        rarity_weights=_rarity_weights(loot.get("rarity_weights"), f"{where} rarity_weights"),
+        boss_rarity_weights=_rarity_weights(
+            loot.get("boss_rarity_weights"), f"{where} boss_rarity_weights"
+        ),
+    )
+
+
+def _rarity_weights(value: object, where: str) -> tuple[tuple[str, int], ...]:
+    table = table_value(value, where)
+    unknown = sorted(set(table) - set(RARITIES))
+    if unknown:
+        raise ContentError(f"{where} has unknown rarity: {', '.join(unknown)}")
+    weights = tuple(
+        (rarity, int_value(table.get(rarity, 0), f"{where}.{rarity}", 0, 1000))
+        for rarity in RARITIES
+    )
+    if sum(weight for _, weight in weights) <= 0:
+        raise ContentError(f"{where} must give at least one rarity a weight above 0")
+    return weights
 
 
 def _int_list(value: object, where: str, minimum: int) -> tuple[int, ...]:
@@ -251,3 +313,51 @@ def _parse_stages(
         level = int_value(data.get("level"), f"{stage_where} level", 1, cap)
         stages.append(Stage(enemies=tuple(foes), level=level))
     return tuple(stages)
+
+
+def parse_items(
+    raw: dict[str, Any],
+    tags: Mapping[str, Tag],
+    skills: Mapping[str, SkillDef],
+    cap: int,
+) -> dict[str, ItemDef]:
+    items: dict[str, ItemDef] = {}
+    for index, entry in enumerate(entries(raw, "item", "items.toml"), start=1):
+        where = f"items.toml item #{index}"
+        item_id = text_value(entry.get("id"), f"{where} id")
+        if item_id in items:
+            raise ContentError(f"items.toml has a duplicate item id: {item_id}")
+        slot = entry.get("slot")
+        if slot not in SLOTS:
+            raise ContentError(f"{where} slot must be one of: {', '.join(SLOTS)}")
+        tag = entry.get("tag")
+        if tag not in tags:
+            raise ContentError(f"{where} tag {tag!r} is not in tags.toml")
+        rarity = entry.get("rarity")
+        if rarity not in RARITIES:
+            raise ContentError(f"{where} rarity must be one of: {', '.join(RARITIES)}")
+        stats = partial_stats_value(entry.get("stats", {}), f"{where} stats", -10_000, 10_000)
+        if not any(getattr(stats, name) for name in STAT_NAMES):
+            raise ContentError(f"{where} stats must change at least one stat")
+        skill = entry.get("skill")
+        if skill is not None and skill not in skills:
+            raise ContentError(f"{where} skill {skill!r} is not in skills.toml")
+        retired = entry.get("retired", False)
+        if not isinstance(retired, bool):
+            raise ContentError(f"{where} retired must be true or false")
+        items[item_id] = ItemDef(
+            id=item_id,
+            name=text_value(entry.get("name"), f"{where} name"),
+            slot=slot,
+            tag=tag,
+            rarity=rarity,
+            req_level=int_value(entry.get("req_level"), f"{where} req_level", 1, cap),
+            stats=stats,
+            price=int_value(entry.get("price"), f"{where} price", 1, 10_000_000),
+            max_durability=int_value(
+                entry.get("max_durability"), f"{where} max_durability", 1, 1000
+            ),
+            skill=skill,
+            retired=retired,
+        )
+    return items

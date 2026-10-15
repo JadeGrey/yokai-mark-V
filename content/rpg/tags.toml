@@ -1,57 +1,96 @@
-# Gear tags, themed on Japanese folklore. `leans` lists the stats a tag's gear favours (a
-# tendency in the item stats, not a rule). Set bonuses and skills arrive with the gear phase.
+# Gear tags, themed on Japanese folklore.
+#   leans      the stats a tag's gear favours (up to three, most important first).
+#   drawback   the stat this tag's gear costs a little of (the nerf side of its trade-off).
+#   bonus_2    set bonus for wearing 2 working pieces; bonus_4 for 4. Values are percentages of
+#              the final stat, except crit, which is flat points.
+#   skill      the skill wearing 4 working pieces grants.
+# Broken gear (0% durability) counts for nothing. Item stats are generated from leans and
+# drawback by scripts/gen_rpg_items.py.
+
 [[tag]]
 id = "oni"
 name = "Oni"
 role = "Bruiser"
 leans = ["attack", "hp"]
+drawback = "speed"
 description = "Ogres of folklore. They hit hard and shrug off hits."
+bonus_2 = { attack = 8 }
+bonus_4 = { attack = 12, hp = 10 }
+skill = "rampage"
 
 [[tag]]
 id = "kitsune"
 name = "Kitsune"
 role = "Trickster mage"
 leans = ["magic", "speed"]
+drawback = "defense"
 description = "Fox spirits of illusion and fire."
+bonus_2 = { magic = 8 }
+bonus_4 = { magic = 12, speed = 10 }
+skill = "trick_of_flames"
 
 [[tag]]
 id = "tengu"
 name = "Tengu"
 role = "Striker"
 leans = ["crit", "speed", "attack"]
+drawback = "hp"
 description = "Winged mountain swordsmen. Fast, precise and lethal."
+bonus_2 = { crit = 4 }
+bonus_4 = { attack = 10, crit = 6 }
+skill = "gale_slash"
 
 [[tag]]
 id = "kappa"
 name = "Kappa"
 role = "Healer"
 leans = ["hp", "resist", "magic"]
+drawback = "attack"
 description = "River spirits who mend what breaks."
+bonus_2 = { hp = 8 }
+bonus_4 = { hp = 10, resist = 12 }
+skill = "river_blessing"
 
 [[tag]]
 id = "yuki_onna"
 name = "Yuki-onna"
 role = "Controller"
 leans = ["magic", "resist"]
+drawback = "speed"
 description = "The snow woman. She slows and weakens everything near her."
+bonus_2 = { magic = 8 }
+bonus_4 = { magic = 8, resist = 12 }
+skill = "frozen_grasp"
 
 [[tag]]
 id = "tsukumogami"
 name = "Tsukumogami"
 role = "Tank"
 leans = ["defense", "resist", "hp"]
+drawback = "speed"
 description = "Old objects that woke up and refuse to break."
+bonus_2 = { defense = 10 }
+bonus_4 = { defense = 12, hp = 12 }
+skill = "iron_will"
 
 [[tag]]
 id = "jorogumo"
 name = "Jorogumo"
 role = "Damage over time"
 leans = ["speed", "crit", "attack"]
+drawback = "hp"
 description = "Spider women. Patient poison and bleeding."
+bonus_2 = { speed = 8 }
+bonus_4 = { attack = 8, crit = 5 }
+skill = "venomous_bite"
 
 [[tag]]
 id = "baku"
 name = "Baku"
 role = "Support"
 leans = ["resist", "speed", "magic"]
+drawback = "attack"
 description = "Dream eaters. They devour nightmares and cleanse what ails their allies."
+bonus_2 = { resist = 10 }
+bonus_4 = { speed = 10, magic = 8 }
+skill = "nightmare_feast"

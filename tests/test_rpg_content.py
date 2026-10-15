@@ -177,7 +177,11 @@ def test_every_stat_name_is_accepted_as_a_lean(tmp_path: Path) -> None:
         f'[[tag]]\nid = "t{i}"\nname = "T{i}"\nrole = "r"\nleans = ["{stat}"]\ndescription = "d"\n'
         for i, stat in enumerate(STAT_NAMES)
     )
-    content = load_content(write_content_dir(tmp_path, tags=entries))
+    items = (
+        '[[item]]\nid = "x"\nname = "X"\nslot = "weapon"\ntag = "t0"\nrarity = "common"\n'
+        "req_level = 1\nprice = 5\nmax_durability = 100\nstats = { hp = 1 }\n"
+    )
+    content = load_content(write_content_dir(tmp_path, tags=entries, items=items))
     assert len(content.tags) == len(STAT_NAMES)
 
 

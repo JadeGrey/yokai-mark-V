@@ -61,3 +61,77 @@ target = "all_foes"
 scaling = "magic"
 power = 80
 cooldown = 4
+
+# ---- Player skills, granted by wearing four pieces of a tag (see tags.toml) ----
+
+[[skill]]
+id = "rampage"
+name = "Rampage"
+kind = "damage"
+target = "foe"
+scaling = "attack"
+power = 180
+cooldown = 3
+
+[[skill]]
+id = "trick_of_flames"
+name = "Trick of Flames"
+kind = "damage"
+target = "all_foes"
+scaling = "magic"
+power = 85
+cooldown = 3
+
+[[skill]]
+id = "gale_slash"
+name = "Gale Slash"
+kind = "damage"
+target = "foe"
+scaling = "attack"
+power = 150
+cooldown = 2
+
+[[skill]]
+id = "river_blessing"
+name = "River Blessing"
+kind = "heal"
+target = "all_allies"
+power = 70
+cooldown = 4
+
+[[skill]]
+id = "frozen_grasp"
+name = "Frozen Grasp"
+kind = "debuff"
+target = "all_foes"
+stat = "speed"
+percent = 35
+duration = 2
+cooldown = 4
+
+[[skill]]
+id = "iron_will"
+name = "Iron Will"
+kind = "buff"
+target = "all_allies"
+stat = "defense"
+percent = 40
+duration = 2
+cooldown = 5
+
+[[skill]]
+id = "venomous_bite"
+name = "Venomous Bite"
+kind = "dot"
+target = "foe"
+scaling = "attack"
+power = 55
+duration = 4
+cooldown = 3
+
+[[skill]]
+id = "nightmare_feast"
+name = "Nightmare Feast"
+kind = "cleanse"
+target = "all_allies"
+cooldown = 3

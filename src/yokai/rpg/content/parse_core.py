@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from yokai.rpg.content.common import (
     ContentError,
     entries,
     int_value,
     number_value,
+    partial_stats_value,
     stats_value,
     text_value,
 )
-from yokai.rpg.models import STAT_NAMES, LevelTable, Rank, Tag
+from yokai.rpg.models import STAT_NAMES, LevelTable, Rank, SkillDef, Tag
 
 MAX_LEANS = 3
 
@@ -59,7 +60,7 @@ def _parse_leans(value: object, where: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def parse_tags(raw: dict[str, Any]) -> dict[str, Tag]:
+def parse_tags(raw: dict[str, Any], skills: Mapping[str, SkillDef]) -> dict[str, Tag]:
     tags: dict[str, Tag] = {}
     names: set[str] = set()
     for index, entry in enumerate(entries(raw, "tag", "tags.toml"), start=1):
@@ -77,5 +78,26 @@ def parse_tags(raw: dict[str, Any]) -> dict[str, Tag]:
             role=text_value(entry.get("role"), f"{where} role"),
             leans=_parse_leans(entry.get("leans"), where),
             description=text_value(entry.get("description"), f"{where} description"),
+            bonus_2=partial_stats_value(entry.get("bonus_2", {}), f"{where} bonus_2", 0, 100),
+            bonus_4=partial_stats_value(entry.get("bonus_4", {}), f"{where} bonus_4", 0, 100),
+            skill=_parse_tag_skill(entry.get("skill"), where, skills),
+            drawback=_parse_drawback(entry.get("drawback"), where),
         )
     return tags
+
+
+def _parse_tag_skill(value: object, where: str, skills: Mapping[str, SkillDef]) -> str | None:
+    if value is None:
+        return None
+    skill_id = text_value(value, f"{where} skill")
+    if skill_id not in skills:
+        raise ContentError(f"{where} skill {skill_id!r} is not in skills.toml")
+    return skill_id
+
+
+def _parse_drawback(value: object, where: str) -> str | None:
+    if value is None:
+        return None
+    if value not in STAT_NAMES:
+        raise ContentError(f"{where} drawback must be one of: {', '.join(STAT_NAMES)}")
+    return str(value)

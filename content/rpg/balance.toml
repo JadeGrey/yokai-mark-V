@@ -36,3 +36,28 @@ days_per_bonus = 3
 bonus_cap = 3
 # A fully missed day removes this many days from the streak (never below 0).
 drop_per_missed_day = 3
+
+[gear]
+# Selling an unequipped item pays this percent of its price.
+sell_percent = 30
+# A full repair (0% to 100%) costs this percent of the item's price, pro rata.
+repair_percent = 35
+# Durability points every equipped item loses when a fight ends.
+win_wear = 3
+loss_wear = 8
+# Items a member can hold. A drop into a full inventory is sold automatically.
+inventory_cap = 60
+# Each stat of a new item varies by up to this percent around the base value.
+roll_percent = 10
+
+[loot]
+drop_chance_percent = 35
+boss_drop_chance_percent = 100
+# Drops come from items whose level requirement is within this many levels below the mission's top level.
+tier_window = 15
+rarity_weights = { common = 60, uncommon = 28, rare = 10, epic = 2 }
+boss_rarity_weights = { common = 15, uncommon = 35, rare = 38, epic = 12 }
+
+[shop]
+# Common and uncommon items offered per gear tier each day.
+stock_per_tier = 3
