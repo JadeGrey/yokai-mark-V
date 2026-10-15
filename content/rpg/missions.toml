@@ -324,7 +324,7 @@ name = "Bandit Fortress"
 rank = "C"
 kind = "raid"
 attempt_cost = 3
-power = 100
+power = 97
 description = "A mountain fort held by oni-touched bandits."
 stages = [
   { enemies = ["karakasa", "karakasa", "kamaitachi"], level = 15 },
@@ -338,7 +338,7 @@ name = "The Long Night"
 rank = "C"
 kind = "raid"
 attempt_cost = 3
-power = 100
+power = 110
 description = "Something has been taking whole caravans after dark."
 stages = [
   { enemies = ["gaki", "gaki", "gaki"], level = 15 },
@@ -352,12 +352,12 @@ name = "Sunken Temple"
 rank = "B"
 kind = "raid"
 attempt_cost = 3
-power = 100
+power = 85
 description = "A drowned shrine where the dead walk the flooded halls."
 stages = [
   { enemies = ["nopperabo", "nopperabo", "rokurokubi"], level = 24 },
   { enemies = ["hannya", "hannya"], level = 26 },
-  { enemies = ["gashadokuro"], level = 28 },
+  { enemies = ["hannya", "gashadokuro"], level = 28 },
 ]
 
 [[mission]]
@@ -366,7 +366,7 @@ name = "Thunder Ridge"
 rank = "B"
 kind = "raid"
 attempt_cost = 3
-power = 100
+power = 95
 description = "Chimeras nest on the storm-wracked ridge above the pass."
 stages = [
   { enemies = ["kamaitachi", "kamaitachi", "kamaitachi"], level = 24 },
@@ -380,7 +380,7 @@ name = "Spider Warren"
 rank = "A"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 84
 description = "A web-choked warren beneath a ruined castle."
 stages = [
   { enemies = ["tsuchigumo", "tsuchigumo", "tsuchigumo"], level = 36 },
@@ -394,12 +394,12 @@ name = "Castle of Bones"
 rank = "A"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 70
 description = "The hungry skeleton lord has taken a whole castle."
 stages = [
   { enemies = ["nue", "nue"], level = 36 },
-  { enemies = ["gashadokuro"], level = 39 },
-  { enemies = ["gashadokuro", "hannya"], level = 42 },
+  { enemies = ["hannya", "gashadokuro"], level = 39 },
+  { enemies = ["nue", "gashadokuro", "hannya"], level = 42 },
 ]
 
 [[mission]]
@@ -408,12 +408,12 @@ name = "Ogre Stronghold"
 rank = "SS"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 71
 description = "The demon lord's mountain keep, guarded to the last gate."
 stages = [
   { enemies = ["ushi_oni", "ushi_oni", "ushi_oni"], level = 50 },
-  { enemies = ["gashadokuro"], level = 53 },
-  { enemies = ["shuten_doji"], level = 56 },
+  { enemies = ["ushi_oni", "gashadokuro"], level = 53 },
+  { enemies = ["ushi_oni", "shuten_doji"], level = 56 },
 ]
 
 [[mission]]
@@ -422,12 +422,12 @@ name = "The Eight-Headed Serpent"
 rank = "SS"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 75
 description = "A flooded valley and the serpent that rules it."
 stages = [
   { enemies = ["nue", "nue", "hannya"], level = 50 },
-  { enemies = ["nurarihyon"], level = 53 },
-  { enemies = ["yamata_orochi"], level = 56 },
+  { enemies = ["hannya", "nurarihyon"], level = 53 },
+  { enemies = ["nue", "yamata_orochi"], level = 56 },
 ]
 
 [[mission]]
@@ -436,12 +436,12 @@ name = "Court of the Nine Tails"
 rank = "SS+"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 79
 description = "The fox queen holds court and her guests do not leave."
 stages = [
   { enemies = ["hannya", "hannya", "nue"], level = 60 },
-  { enemies = ["nurarihyon"], level = 60 },
-  { enemies = ["tamamo"], level = 60 },
+  { enemies = ["hannya", "nurarihyon"], level = 60 },
+  { enemies = ["hannya", "tamamo"], level = 60 },
 ]
 
 [[mission]]
@@ -450,10 +450,10 @@ name = "Calamity"
 rank = "SS+"
 kind = "raid"
 attempt_cost = 4
-power = 100
+power = 59
 description = "Every great yokai at once. Bring everyone."
 stages = [
   { enemies = ["gashadokuro", "shuten_doji"], level = 60 },
-  { enemies = ["yamata_orochi"], level = 60 },
-  { enemies = ["tamamo", "nurarihyon"], level = 60 },
+  { enemies = ["nue", "yamata_orochi"], level = 60 },
+  { enemies = ["tamamo", "nurarihyon", "hannya"], level = 60 },
 ]

@@ -26,9 +26,13 @@ below_rank_step = 0.6
 below_rank_floor = 0.1
 
 [party]
-# Index 0 is a party of one, index 3 a party of four.
-hp_percent = [100, 170, 240, 310]
-extra_foes = [0, 0, 1, 1]
+# Index 0 is a party of one, index 3 a party of four. Enemy damage does not grow with the
+# party, so each extra member adds escorts (copies of the stage's weakest non-boss foe) as well
+# as HP, but only to a stage that already has a group. Tuned with the raids in missions.toml:
+# a party of three wins a raid about 70% of the time, a pair a little less often and four a
+# little less than three. Ordinary missions are slightly safer in a party than alone.
+hp_percent = [100, 120, 230, 255]
+extra_foes = [0, 1, 1, 2]
 
 [streak]
 # +1 attempt per this many consecutive active days, up to bonus_cap extra attempts.

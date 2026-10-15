@@ -164,3 +164,77 @@ def test_a_failed_trial_costs_a_day_not_the_whole_run(runs: list[SimResult]) -> 
         lost = sum(r.promotions_lost for r in run.records)
         won = sum(r.promotions_won for r in run.records)
         assert won == 6 and lost <= 6
+
+
+# ------------------------------------------------------------------- parties and raids
+
+
+def party_win_rate(
+    content: Content, mission_id: str, size: int, level: int, tier: int, fights: int = 50
+) -> float:
+    import random
+
+    from yokai.rpg.combat.builders import build_mission_stages, player_combatant
+    from yokai.rpg.combat.engine import Fight
+    from yokai.rpg.combat.models import ACTION_ATTACK, OUTCOME_WON, Action
+    from yokai.rpg.gear import typical_loadout
+
+    mission = content.missions[mission_id]
+    stats = typical_loadout(content, level, rarity="uncommon", gear_level=tier).stats
+    rng = random.Random(21)
+    wins = 0
+    for _ in range(fights):
+        heroes = [player_combatant(i + 1, f"P{i}", stats) for i in range(size)]
+        stages = build_mission_stages(content, mission, size)
+        fight = Fight(heroes, stages, content.skills, content.balance.combat, rng)
+        while not fight.finished:
+            for hero in heroes:
+                if hero.alive:
+                    fight.submit(hero.id, Action(ACTION_ATTACK))
+            fight.resolve_round()
+        wins += fight.outcome == OUTCOME_WON
+    return wins / fights
+
+
+# the party's level and the gear tier it wears, per rank (raids sit in the middle of each band)
+RAID_BAND = {"C": (15, 1), "B": (24, 12), "A": (36, 24), "SS": (50, 38), "SS+": (60, 52)}
+
+
+def test_raids_are_tuned_for_a_party_of_three(content: Content) -> None:
+    """About 70% for three members; four are safer and two face a real stretch."""
+    raids = [m for m in content.missions.values() if m.kind == "raid"]
+    rates = {m.id: party_win_rate(content, m.id, 3, *RAID_BAND[m.rank]) for m in raids}
+    for mission_id, rate in rates.items():
+        assert 0.55 <= rate <= 1.0, f"{mission_id}: {rate:.0%}"
+    assert 0.65 <= sum(rates.values()) / len(rates) <= 0.97
+
+
+def test_raids_are_winnable_at_every_party_size(content: Content) -> None:
+    """A pair is a stretch and four are comfortable, but no size is hopeless or a walkover."""
+    raids = [m for m in content.missions.values() if m.kind == "raid"]
+    for size in (2, 3, 4):
+        rates = [party_win_rate(content, m.id, size, *RAID_BAND[m.rank], fights=30) for m in raids]
+        mean = sum(rates) / len(rates)
+        assert 0.45 <= mean <= 0.97, f"party of {size}: {mean:.0%}"
+
+
+def test_ordinary_missions_are_never_riskier_in_a_party_than_alone(content: Content) -> None:
+    """A lobby is a little safer than going alone, and never a trap, for regular missions."""
+    entry = {"C": (13, 1), "B": (21, 12), "A": (31, 24), "SS": (46, 38)}
+    for mission_id in ("c_haunted_road", "b_night_parade", "a_veiled_court", "ss_hundred_demons"):
+        rank = content.missions[mission_id].rank
+        solo = party_win_rate(content, mission_id, 1, *entry[rank])
+        for size in (2, 3, 4):
+            party = party_win_rate(content, mission_id, size, *entry[rank])
+            assert party >= solo - 0.15, f"{mission_id} x{size}: {party:.0%} vs {solo:.0%}"
+            assert party >= 0.55, f"{mission_id} x{size}: {party:.0%}"
+
+
+def test_raid_rewards_scale_with_their_attempt_cost(content: Content) -> None:
+    from yokai.rpg import guild
+
+    raid = content.missions["raid_c_bandit_fortress"]
+    plain = content.missions["c_ox_pasture"]
+    per_attempt_raid = guild.mission_reward(content, raid, "C").renown / raid.attempt_cost
+    per_attempt_plain = guild.mission_reward(content, plain, "C").renown / plain.attempt_cost
+    assert per_attempt_raid >= per_attempt_plain  # higher stage levels, so never worse per attempt

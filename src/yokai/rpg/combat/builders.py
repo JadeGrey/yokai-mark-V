@@ -48,14 +48,16 @@ def build_stage_foes(
 ) -> list[Combatant]:
     """The foes of one stage, scaled for the party size (spec section 8).
 
-    Party scaling raises foe HP and adds extra copies of the stage's weakest non-boss foe.
+    Party scaling raises foe HP and adds extra copies of the stage's weakest non-boss foe, but
+    only to a stage that already has a group (a pack, or a boss with escorts). A stage with one
+    lone foe just gets more HP, so a party never meets three copies of a single big monster.
     """
     scaling = content.balance.party
     index = min(max(party_size, 1), len(scaling.hp_percent)) - 1
     hp_percent = scaling.hp_percent[index]
     foe_ids = list(stage.enemies)
     candidates = [e for e in foe_ids if not content.enemies[e].boss]
-    if scaling.extra_foes[index] and candidates:
+    if scaling.extra_foes[index] and candidates and len(foe_ids) >= 2:
         weakest = min(candidates, key=lambda e: content.enemies[e].mult.hp)
         foe_ids.extend([weakest] * scaling.extra_foes[index])
     foe_ids = foe_ids[:MAX_FOES]

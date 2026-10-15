@@ -883,7 +883,9 @@ class EmbedFactory:
             description=(
                 f"**{escape_md(clamp(mission_name, 60))}**{SEP}rank {escape_md(rank)}"
                 f"{SEP}level {level}{SEP}{cost} attempts each\n"
-                f"Needs {need} members. Press Join to take a seat; the leader presses Start. "
+                f"Needs {need} members"
+                + (" (3 or 4 recommended)" if is_raid else "")
+                + f". Press Join to take a seat; the leader presses Start. "
                 f"This lobby closes <t:{expires_ts}:R>."
             ),
             color=COLOR_BRAND,

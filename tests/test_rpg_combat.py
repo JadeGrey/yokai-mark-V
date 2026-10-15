@@ -531,11 +531,26 @@ def test_a_solo_stage_uses_the_level_stats_times_the_archetype(shipped) -> None:
 
 def test_party_scaling_raises_hp_and_adds_the_weakest_non_boss(shipped) -> None:  # type: ignore[no-untyped-def]
     stage = Stage(("ushi_oni", "gaki"), 20)
+    scaling = shipped.balance.party
     solo = build_stage_foes(shipped, stage, 1, 1)
     trio = build_stage_foes(shipped, stage, 1, 3)
-    assert len(solo) == 2 and len(trio) == 3
-    assert [f.name for f in trio].count("Gaki A") == 1 and "Gaki B" in [f.name for f in trio]
-    assert trio[0].max_hp == round(solo[0].max_hp * 2.4)
+    assert len(solo) == 2 and len(trio) == 2 + scaling.extra_foes[2]
+    assert "Gaki A" in [f.name for f in trio] and "Gaki B" in [f.name for f in trio]
+    assert trio[0].max_hp == round(solo[0].max_hp * scaling.hp_percent[2] / 100)
+
+
+def test_a_lone_foe_only_gains_hp_never_copies_of_itself(shipped) -> None:  # type: ignore[no-untyped-def]
+    stage = Stage(("ushi_oni",), 20)
+    solo = build_stage_foes(shipped, stage, 1, 1)
+    quad = build_stage_foes(shipped, stage, 1, 4)
+    assert len(quad) == 1
+    assert quad[0].max_hp == round(solo[0].max_hp * shipped.balance.party.hp_percent[3] / 100)
+
+
+def test_a_boss_with_escorts_gets_more_escorts_not_more_bosses(shipped) -> None:  # type: ignore[no-untyped-def]
+    foes = build_stage_foes(shipped, Stage(("hannya", "gashadokuro"), 28), 1, 4)
+    assert sum(f.boss for f in foes) == 1
+    assert len(foes) == 2 + shipped.balance.party.extra_foes[3]
 
 
 def test_bosses_are_never_duplicated_by_party_scaling(shipped) -> None:  # type: ignore[no-untyped-def]
@@ -549,8 +564,9 @@ def test_foe_count_is_capped(shipped) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_party_size_outside_the_table_is_clamped(shipped) -> None:  # type: ignore[no-untyped-def]
-    assert len(build_stage_foes(shipped, Stage(("gaki",), 2), 1, 0)) == 1
-    assert len(build_stage_foes(shipped, Stage(("gaki",), 2), 1, 99)) == 2
+    pair = Stage(("gaki", "gaki"), 2)
+    assert len(build_stage_foes(shipped, pair, 1, 0)) == 2
+    assert len(build_stage_foes(shipped, pair, 1, 99)) == 2 + shipped.balance.party.extra_foes[3]
 
 
 def test_build_stages_numbers_the_foe_ids_per_stage(shipped) -> None:  # type: ignore[no-untyped-def]
