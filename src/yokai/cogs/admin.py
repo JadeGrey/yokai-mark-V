@@ -151,6 +151,26 @@ class AdminCog(commands.Cog, name="Admin"):
         )
         await send(interaction, embed=embed, ephemeral=True)
 
+    def _rpg_status(self) -> tuple[str, bool]:
+        """(diagnostics text, healthy) for the Guild RPG: content loaded and thread permissions."""
+        runtime = self.bot.rpg
+        if runtime is None:
+            return "Disabled", True
+        content = runtime.content
+        server = self.bot.get_guild(self.bot.config.guild_id)
+        perms = server.me.guild_permissions if server is not None and server.me else None
+        if perms is None:
+            threads, ok = "unknown", True
+        elif perms.create_public_threads and perms.send_messages_in_threads:
+            threads, ok = "ok", True
+        else:
+            threads, ok = "MISSING (fights need thread permissions)", False
+        text = (
+            f"{len(content.missions)} missions · {len(content.enemies)} enemies · "
+            f"{len(runtime.active_users)} fighting · threads: {threads}"
+        )
+        return text, ok
+
     @admin.command(name="diag", description="Run comprehensive system diagnostics.")
     async def diag(self, interaction: discord.Interaction) -> None:
         """Diagnostic overview and yt-dlp updater."""
@@ -208,6 +228,8 @@ class AdminCog(commands.Cog, name="Admin"):
         if self.bot.health.ytdlp_outdated:
             ytdlp_age_str += " (outdated)"
 
+        rpg_text, rpg_ok = self._rpg_status()
+
         diagnostics = {
             "Python / discord.py": f"{platform.python_version()} / {discord.__version__}",
             "DAVE E2EE": dave_str,
@@ -219,6 +241,7 @@ class AdminCog(commands.Cog, name="Admin"):
             "Spotify Scraper": sp_scraper_str,
             "ytmusicapi": getattr(ytmusicapi, "__version__", "Unknown"),
             "Database Size": db_size_str,
+            "Guild RPG": rpg_text,
         }
 
         # Gather recent errors
@@ -231,6 +254,7 @@ class AdminCog(commands.Cog, name="Admin"):
             getattr(self.bot.resolver, "is_degraded", False) is True
             or self.bot.health.ytdlp_outdated is True
             or self.bot.health.davey_available is False
+            or not rpg_ok
         )
         embed = EmbedFactory.diag(
             diagnostics=diagnostics,

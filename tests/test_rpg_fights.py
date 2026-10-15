@@ -14,7 +14,7 @@ import pytest
 from tests.rpg_helpers import BALANCE, mutate, write_content_dir
 from yokai.errors import AlreadyFightingError, ThreadUnavailableError
 from yokai.rpg.combat.engine import Fight
-from yokai.rpg.combat.models import ACTION_ATTACK, Action
+from yokai.rpg.combat.models import Action
 from yokai.rpg.fights import FightRunner, Participant, launch_fight
 from yokai.rpg.models import SkillDef, Stats
 from yokai.rpg.runtime import RpgRuntime
@@ -607,7 +607,3 @@ async def test_launching_without_attempts_releases_the_active_slot(tmp_path: Pat
         assert USER not in runtime.active_users
     finally:
         await db.close()
-
-
-def test_the_fight_action_import_is_used() -> None:
-    assert Action(ACTION_ATTACK).kind == "attack"

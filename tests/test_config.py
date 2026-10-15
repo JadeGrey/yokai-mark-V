@@ -206,3 +206,34 @@ def test_blank_rpg_content_dir_falls_back_to_the_default() -> None:
     with patch.dict(os.environ, env, clear=True):
         config = load_config(env_path=Path("non_existent_env"))
     assert config.rpg_content_dir == Path("content/rpg")
+
+
+def test_rpg_gameplay_settings_have_defaults_and_overrides() -> None:
+    with patch.dict(os.environ, RPG_BASE_ENV, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert (config.rpg_tz, config.rpg_base_attempts, config.rpg_turn_seconds) == ("UTC", 8, 45)
+    env = {**RPG_BASE_ENV, "RPG_TZ": "utc", "RPG_BASE_ATTEMPTS": "12", "RPG_TURN_SECONDS": "30"}
+    with patch.dict(os.environ, env, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert (config.rpg_base_attempts, config.rpg_turn_seconds) == (12, 30)
+
+
+def test_rpg_numbers_are_floored_to_playable_values() -> None:
+    env = {**RPG_BASE_ENV, "RPG_BASE_ATTEMPTS": "0", "RPG_TURN_SECONDS": "1"}
+    with patch.dict(os.environ, env, clear=True):
+        config = load_config(env_path=Path("non_existent_env"))
+    assert config.rpg_base_attempts == 1 and config.rpg_turn_seconds == 10
+
+
+def test_a_bad_rpg_timezone_is_a_config_error_that_names_the_right_variable() -> None:
+    env = {**RPG_BASE_ENV, "RPG_TZ": "Not/AZone"}
+    with patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ConfigError, match="RPG_TZ"):
+            load_config(env_path=Path("non_existent_env"))
+
+
+def test_a_non_numeric_rpg_attempt_count_is_a_config_error() -> None:
+    env = {**RPG_BASE_ENV, "RPG_BASE_ATTEMPTS": "lots"}
+    with patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ConfigError, match="RPG_BASE_ATTEMPTS"):
+            load_config(env_path=Path("non_existent_env"))

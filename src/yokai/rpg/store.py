@@ -100,6 +100,14 @@ class RpgStore:
 
     # ------------------------------------------------------------------ the board
 
+    async def get_board(self, day: str) -> Optional[list[str]]:
+        """The stored board for a day, or None if nobody has opened it yet (read-only)."""
+        async with self._db.conn.execute(
+            "SELECT mission_ids FROM rpg_boards WHERE day_key = ?;", (day,)
+        ) as cursor:
+            row = await cursor.fetchone()
+        return list(json.loads(row[0])) if row else None
+
     async def get_or_create_board(
         self, day: str, build: Callable[[], list[str]], now: Optional[int] = None
     ) -> list[str]:

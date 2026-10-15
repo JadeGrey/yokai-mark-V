@@ -88,6 +88,9 @@ class Config:
     # Guild RPG
     rpg_enabled: bool = True
     rpg_content_dir: Path = Path("content/rpg")
+    rpg_tz: str = "UTC"
+    rpg_base_attempts: int = 8
+    rpg_turn_seconds: int = 45
 
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
@@ -277,6 +280,14 @@ def load_config(env_path: Path | str | None = None) -> Config:
 
     rpg_enabled = _parse_bool(os.getenv("RPG_ENABLED"), default=True)
     rpg_content_dir = Path(os.getenv("RPG_CONTENT_DIR", "content/rpg").strip() or "content/rpg")
+    rpg_tz = os.getenv("RPG_TZ", "UTC").strip() or "UTC"
+    try:
+        load_tz(rpg_tz)
+    except ValueError as err:
+        raise ConfigError(str(err).replace("CHALLENGE_TZ", "RPG_TZ")) from err
+    rpg_base_attempts = max(1, _parse_int("RPG_BASE_ATTEMPTS", os.getenv("RPG_BASE_ATTEMPTS"), 8))
+    # Floored at 10s: a shorter turn timer would auto-defend people before they can click.
+    rpg_turn_seconds = max(10, _parse_int("RPG_TURN_SECONDS", os.getenv("RPG_TURN_SECONDS"), 45))
 
     return Config(
         discord_token=token,
@@ -323,4 +334,7 @@ def load_config(env_path: Path | str | None = None) -> Config:
         challenge_reward_scale=challenge_reward_scale,
         rpg_enabled=rpg_enabled,
         rpg_content_dir=rpg_content_dir,
+        rpg_tz=rpg_tz,
+        rpg_base_attempts=rpg_base_attempts,
+        rpg_turn_seconds=rpg_turn_seconds,
     )

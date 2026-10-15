@@ -12,9 +12,12 @@ from yokai.bot import YokaiBot
 from yokai.config import Config
 from yokai.errors import NotFoundError
 from yokai.health import HealthReport
+from yokai.rpg.store import RpgStore
 
 
 def make_bot(**overrides: object) -> YokaiBot:
+    # The RPG talks to a real database at startup; only the RPG tests below switch it on.
+    overrides.setdefault("rpg_enabled", False)
     config = Config(
         discord_token="fake_token",
         guild_id=123,
@@ -368,18 +371,26 @@ async def _run_setup_hook(bot: YokaiBot) -> list[str]:
     bot.searcher.warm_up = AsyncMock()
     bot.load_extension = AsyncMock()
     bot.tree.sync = AsyncMock(return_value=[])
-    with patch.object(bot.voice_earn_tracker, "start"):
+    with (
+        patch.object(bot.voice_earn_tracker, "start"),
+        patch.object(RpgStore, "abort_open_fights", new=AsyncMock(return_value=0)) as abort,
+        patch.object(RpgStore, "purge_history", new=AsyncMock(return_value=(0, 0))) as purge,
+    ):
         await bot.setup_hook()
+    bot.rpg_calls = (abort, purge)  # type: ignore[attr-defined]
     return [call.args[0] for call in bot.load_extension.await_args_list]
 
 
 @pytest.mark.asyncio
 async def test_setup_hook_loads_the_rpg_runtime_and_extension_when_enabled() -> None:
-    bot = make_bot()
+    bot = make_bot(rpg_enabled=True)
     loaded = await _run_setup_hook(bot)
     assert bot.rpg is not None
     assert bot.rpg.content.ranks[0].id == "E"
     assert "yokai.cogs.rpg" in loaded
+    abort, purge = bot.rpg_calls  # type: ignore[attr-defined]
+    abort.assert_awaited_once()  # fights left open by the last run are cancelled and refunded
+    purge.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -397,7 +408,7 @@ async def test_setup_hook_refuses_to_start_on_broken_rpg_content(tmp_path: Path)
     from yokai.rpg.content import ContentError
 
     (tmp_path / "levels.toml").write_text("cap = 'sixty'\n", encoding="utf-8")
-    bot = make_bot(rpg_content_dir=tmp_path)
+    bot = make_bot(rpg_enabled=True, rpg_content_dir=tmp_path)
     with pytest.raises(ContentError, match=r"levels\.toml"):
         await _run_setup_hook(bot)
     assert bot.rpg is None

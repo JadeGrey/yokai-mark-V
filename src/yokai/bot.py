@@ -49,6 +49,8 @@ from yokai.ui.embeds import EmbedFactory, send
 
 logger = logging.getLogger(__name__)
 
+RPG_HISTORY_DAYS = 30
+
 
 class YokaiBot(commands.Bot):
     """Core Discord bot class for Yokai."""
@@ -186,6 +188,10 @@ class YokaiBot(commands.Bot):
                 logger.error("Guild RPG content is invalid, refusing to start: %s", err)
                 raise
             logger.info("Guild RPG content loaded from %s", self.config.rpg_content_dir)
+            aborted = await self.rpg.store.abort_open_fights()
+            if aborted:
+                logger.info("Cancelled and refunded %d guild fight(s) left open.", aborted)
+            await self.rpg.store.purge_history(int(time.time()) - RPG_HISTORY_DAYS * 86400)
         else:
             logger.info("Guild RPG is disabled (RPG_ENABLED=false).")
         await self.audio_buffer.start()
