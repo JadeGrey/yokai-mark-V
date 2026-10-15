@@ -359,3 +359,46 @@ async def test_setup_hook_loads_the_lottery_extension() -> None:
         await bot.setup_hook()
     loaded = [call.args[0] for call in bot.load_extension.await_args_list]
     assert "yokai.cogs.lottery" in loaded
+
+
+async def _run_setup_hook(bot: YokaiBot) -> list[str]:
+    bot.db.initialize = AsyncMock()
+    bot.db.refund_open_bets = AsyncMock(return_value=0)
+    bot.audio_buffer.start = AsyncMock()
+    bot.searcher.warm_up = AsyncMock()
+    bot.load_extension = AsyncMock()
+    bot.tree.sync = AsyncMock(return_value=[])
+    with patch.object(bot.voice_earn_tracker, "start"):
+        await bot.setup_hook()
+    return [call.args[0] for call in bot.load_extension.await_args_list]
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_loads_the_rpg_runtime_and_extension_when_enabled() -> None:
+    bot = make_bot()
+    loaded = await _run_setup_hook(bot)
+    assert bot.rpg is not None
+    assert bot.rpg.content.ranks[0].id == "E"
+    assert "yokai.cogs.rpg" in loaded
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_skips_the_rpg_when_disabled() -> None:
+    """Review Focus 6: RPG_ENABLED=false leaves the cog unloaded and the runtime unset."""
+    bot = make_bot(rpg_enabled=False)
+    loaded = await _run_setup_hook(bot)
+    assert bot.rpg is None
+    assert "yokai.cogs.rpg" not in loaded
+
+
+@pytest.mark.asyncio
+async def test_setup_hook_refuses_to_start_on_broken_rpg_content(tmp_path: Path) -> None:
+    """Review Focus 3: a bad content file stops startup instead of half-loading the game."""
+    from yokai.rpg.content import ContentError
+
+    (tmp_path / "levels.toml").write_text("cap = 'sixty'\n", encoding="utf-8")
+    bot = make_bot(rpg_content_dir=tmp_path)
+    with pytest.raises(ContentError, match=r"levels\.toml"):
+        await _run_setup_hook(bot)
+    assert bot.rpg is None
+    assert "yokai.cogs.rpg" not in [call.args[0] for call in bot.load_extension.await_args_list]

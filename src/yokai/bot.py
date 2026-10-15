@@ -42,6 +42,8 @@ from yokai.music.spotify import (
     SpotifyOrchestrator,
 )
 from yokai.presence import PresenceManager, get_default_activity
+from yokai.rpg.content import ContentError
+from yokai.rpg.runtime import RpgRuntime
 from yokai.storage.db import Database
 from yokai.ui.embeds import EmbedFactory, send
 
@@ -67,6 +69,7 @@ class YokaiBot(commands.Bot):
         self.config = config
         self.health = health_report or check_health(config.ffmpeg_path, config.deno_path)
         self.db = Database(config.db_path)
+        self.rpg: Optional[RpgRuntime] = None
         self.moderation = ModerationStore(self.db, config.owner_id)
         self.challenges = ChallengeEngine(
             self.db,
@@ -176,6 +179,15 @@ class YokaiBot(commands.Bot):
         refunded = await self.db.refund_open_bets()
         if refunded:
             logger.info("Refunded %d gambling bet(s) left open by the previous run.", refunded)
+        if self.config.rpg_enabled:
+            try:
+                self.rpg = RpgRuntime.create(self.db, self.config.rpg_content_dir)
+            except ContentError as err:
+                logger.error("Guild RPG content is invalid, refusing to start: %s", err)
+                raise
+            logger.info("Guild RPG content loaded from %s", self.config.rpg_content_dir)
+        else:
+            logger.info("Guild RPG is disabled (RPG_ENABLED=false).")
         await self.audio_buffer.start()
         # ytmusicapi's first call is slow (about 1.5 s); pay it now, not on someone's /play
         self._warmup_task = asyncio.create_task(self.searcher.warm_up())
@@ -191,6 +203,8 @@ class YokaiBot(commands.Bot):
         await self.load_extension("yokai.cogs.tables")
         await self.load_extension("yokai.cogs.lottery")
         await self.load_extension("yokai.cogs.challenges")
+        if self.rpg is not None:
+            await self.load_extension("yokai.cogs.rpg")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)

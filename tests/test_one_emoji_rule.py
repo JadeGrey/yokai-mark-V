@@ -16,6 +16,7 @@ CHECKED = [
     "cogs/admin.py",
     "cogs/tables.py",
     "cogs/lottery.py",
+    "cogs/rpg.py",
     "ui/lottery_views.py",
     "ui/table_common.py",
     "ui/table_views.py",
