@@ -174,6 +174,15 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
     long_rows = [(i, f"{long_title} #{i}", long_artist, 200 + i) for i in range(1, 31)]
     special_title = "Song (Official Video) [HD] *live* `demo`"
     special_artist = "A*rtist [x](http://evil.example)"
+    guild_stats = [
+        ("HP", "100"),
+        ("Attack", "10"),
+        ("Magic", "10"),
+        ("Defense", "5"),
+        ("Resist", "5"),
+        ("Speed", "10"),
+        ("Crit", "5%"),
+    ]
     samples: list[tuple[str, discord.Embed]] = [
         (
             "Now playing",
@@ -654,6 +663,25 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             "Lottery (rollover)",
             EmbedFactory.lottery_announcement(
                 5, 12, 1500, [], 0, 1500, 1_900_000_000, bot_avatar_url=av
+            ),
+        ),
+        (
+            "Guild (joined)",
+            EmbedFactory.guild_joined("<@42>", "E", 1, guild_stats, bot_avatar_url=av),
+        ),
+        (
+            "Guild (player card)",
+            EmbedFactory.player_card(
+                "<@42>",
+                "C",
+                14,
+                60,
+                guild_stats,
+                31,
+                9,
+                1_700_000_000,
+                next_rank=("B", 20),
+                bot_avatar_url=av,
             ),
         ),
     ]

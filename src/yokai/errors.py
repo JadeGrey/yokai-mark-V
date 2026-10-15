@@ -369,3 +369,21 @@ class InvalidPokerActionError(YokaiError):
     """Raised when a poker move is not allowed right now (bad raise size, nothing to call...)."""
 
     title = "Can't do that"
+
+
+class NoCharacterError(YokaiError):
+    """Raised when someone looks up a guild character that does not exist."""
+
+    title = "No adventurer yet"
+
+    def __init__(self, own: bool = True) -> None:
+        if own:
+            super().__init__(
+                "You haven't joined the adventurers' guild yet.",
+                user_hint="Run /guild join to create your character.",
+            )
+        else:
+            super().__init__(
+                "That member hasn't joined the adventurers' guild yet.",
+                user_hint="They can run /guild join to create a character.",
+            )

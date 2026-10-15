@@ -30,6 +30,7 @@ class Emoji:
     COIN: Final[str] = "🪙"
     SLOTS: Final[str] = "🎰"
     DICE: Final[str] = "🎲"
+    SWORDS: Final[str] = "⚔️"
 
 
 # Layout tokens shared by every embed builder
@@ -154,6 +155,11 @@ QUIP_VARIANTS: Final[Mapping[str, Sequence[str]]] = {
         "Too greedy.",
         "Bust. It happens.",
         "One card too many.",
+    ),
+    "guild_join": (
+        "Signed in. Don't make me regret it.",
+        "Your name's on the roster now.",
+        "Another recruit. Let's see what you've got.",
     ),
 }
 

@@ -748,6 +748,67 @@ class EmbedFactory:
         )
 
     @classmethod
+    def guild_joined(
+        cls,
+        user_mention: str,
+        rank: str,
+        level: int,
+        stats: Sequence[tuple[str, str]],  # (label, display value)
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        fields: list[FieldSpec] = [(label, f"**{value}**", True) for label, value in stats]
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Welcome to the guild",
+            description=(
+                f"{user_mention} signed the roster as a **rank {escape_md(rank)}** adventurer "
+                f"at level **{level}**. Use /card to see your adventurer card."
+            ),
+            color=COLOR_SUCCESS,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("guild_join"),
+            fields=_grid(fields),
+        )
+
+    @classmethod
+    def player_card(
+        cls,
+        user_mention: str,
+        rank: str,
+        level: int,
+        level_cap: int,
+        stats: Sequence[tuple[str, str]],  # (label, display value)
+        wins: int,
+        losses: int,
+        joined_ts: int,
+        next_rank: Optional[tuple[str, int]] = None,  # (rank id, level it opens at)
+        top_rank: bool = False,
+        thumbnail_url: Optional[str] = None,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        fields: list[FieldSpec] = [
+            ("Rank", f"**{escape_md(rank)}**", True),
+            ("Level", f"**{level}** / {level_cap}", True),
+            ("Record", f"**{wins:,}**W{SEP}**{losses:,}**L", True),
+        ]
+        fields.extend((label, f"**{value}**", True) for label, value in stats)
+        if next_rank is not None:
+            next_id, next_level = next_rank
+            promotion = f"Rank **{escape_md(next_id)}** at level **{next_level}**"
+            fields.append(("Next promotion", promotion, False))
+        elif top_rank:
+            fields.append(("Next promotion", "Top rank reached.", False))
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Adventurer card",
+            description=f"{user_mention}{SEP}joined <t:{joined_ts}:D>",
+            color=COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            thumbnail_url=thumbnail_url,
+            fields=_grid(fields),
+        )
+
+    @classmethod
     def spinning(
         cls,
         title: str,
