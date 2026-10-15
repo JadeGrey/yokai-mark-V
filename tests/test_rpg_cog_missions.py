@@ -44,6 +44,7 @@ def make_interaction(user_id: int = USER, *, text_channel: bool = True) -> Magic
     user.display_name = "Sami"
     interaction.user = user
     interaction.response.defer = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
     interaction.channel = MagicMock(spec=discord.TextChannel if text_channel else discord.Thread)
     return interaction
 

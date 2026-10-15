@@ -23,10 +23,13 @@ from yokai.errors import (
 from yokai.rpg import guild
 from yokai.rpg.content import Content
 from yokai.rpg.fights import launch_fight
-from yokai.rpg.models import Character, Mission
+from yokai.rpg.gear import compute_loadout, durability_percent
+from yokai.rpg.models import SLOTS, Character, ItemInstance, Mission
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import format_stats, stats_at_level
+from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory, send
+from yokai.ui.rpg_views import ConfirmView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -96,6 +99,39 @@ class RpgCog(commands.Cog, name="Guild"):
             bot_avatar_url=self._avatar_url(),
         )
         await send(interaction, embed=embed, ephemeral=True)
+
+    @staticmethod
+    def _gear_rows(content: Content, equipped: list[ItemInstance]) -> list[tuple[str, str]]:
+        """(slot label, "name · 80%") for every slot, with "empty" where nothing is worn."""
+        by_slot = {item.equipped_slot: item for item in equipped}
+        rows: list[tuple[str, str]] = []
+        for slot in SLOTS:
+            item = by_slot.get(slot)
+            definition = content.items.get(item.content_id) if item else None
+            if item is None:
+                rows.append((slot.title(), "empty"))
+            elif definition is None:
+                rows.append((slot.title(), "retired item"))
+            elif item.durability <= 0:
+                rows.append((slot.title(), f"{definition.name}{SEP}broken"))
+            else:
+                percent = durability_percent(item.durability, definition.max_durability)
+                rows.append((slot.title(), f"{definition.name}{SEP}{percent}%"))
+        return rows
+
+    @staticmethod
+    def _worn_gear_lines(content: Content, equipped: list[ItemInstance]) -> list[str]:
+        """Equipped items at or below 25% durability, for the warning before a mission."""
+        lines: list[str] = []
+        for item in equipped:
+            definition = content.items.get(item.content_id)
+            if definition is None:
+                continue
+            percent = durability_percent(item.durability, definition.max_durability)
+            if percent <= 25:
+                state = "broken (0%)" if percent == 0 else f"{percent}%"
+                lines.append(f"{definition.name}: {state}")
+        return lines
 
     async def _board_for(self, today: str, runtime: RpgRuntime) -> list[Mission]:
         content = runtime.content
@@ -230,16 +266,41 @@ class RpgCog(commands.Cog, name="Guild"):
             await self._send_domain_error(interaction, ThreadUnavailableError())
             return
 
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        warnings = self._worn_gear_lines(content, await runtime.gear.equipped_items(user.id))
+        if warnings:
+            view = ConfirmView(
+                self.bot,
+                user.id,
+                lambda confirmed: self._launch(
+                    confirmed, channel, chosen, character, today, resets_ts
+                ),
+            )
+            warning = EmbedFactory.gear_warning(warnings, bot_avatar_url=self._avatar_url())
+            await send(interaction, embed=warning, view=view, ephemeral=True)
+            return
+        await self._launch(interaction, channel, chosen, character, today, resets_ts)
+
+    async def _launch(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        mission: Mission,
+        character: Character,
+        today: str,
+        resets_ts: int,
+    ) -> None:
+        """Spend the attempts and start the fight. Defers first unless the click already did."""
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=True)
         try:
             thread = await launch_fight(
                 bot=self.bot,
-                runtime=runtime,
+                runtime=self._runtime(),
                 channel=channel,
-                member=user,
-                member_name=_display_name(user),
+                member=interaction.user,
+                member_name=_display_name(interaction.user),
                 character=character,
-                mission=chosen,
+                mission=mission,
                 today=today,
                 resets_ts=resets_ts,
                 base_attempts=self.bot.config.rpg_base_attempts,
@@ -250,7 +311,7 @@ class RpgCog(commands.Cog, name="Guild"):
             return
         embed = EmbedFactory.info(
             title="Mission started",
-            description=f"Your fight against **{chosen.name}** is under way in {thread.mention}.",
+            description=f"Your fight against **{mission.name}** is under way in {thread.mention}.",
             context="Guild",
             bot_avatar_url=self._avatar_url(),
         )
@@ -298,13 +359,15 @@ class RpgCog(commands.Cog, name="Guild"):
 
         await interaction.response.defer(thinking=True)
         content = runtime.content
+        equipped = await runtime.gear.equipped_items(target.id)
+        loadout = compute_loadout(content, character.level, equipped)
         next_rank, top_rank = _promotion(content, character.rank)
         embed = EmbedFactory.player_card(
             user_mention=f"<@{target.id}>",
             rank=character.rank,
             level=character.level,
             level_cap=content.levels.cap,
-            stats=format_stats(stats_at_level(content.levels, character.level)),
+            stats=format_stats(loadout.stats),
             wins=character.battles_won,
             losses=character.battles_lost,
             joined_ts=character.created_ts,
@@ -312,6 +375,8 @@ class RpgCog(commands.Cog, name="Guild"):
             top_rank=top_rank,
             thumbnail_url=_avatar_of(target),
             bot_avatar_url=self._avatar_url(),
+            gear=self._gear_rows(content, equipped),
+            bonus_lines=loadout.bonus_lines,
         )
         await send(interaction, embed=embed)
 

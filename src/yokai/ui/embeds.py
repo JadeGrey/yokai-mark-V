@@ -785,6 +785,8 @@ class EmbedFactory:
         top_rank: bool = False,
         thumbnail_url: Optional[str] = None,
         bot_avatar_url: Optional[str] = None,
+        gear: Sequence[tuple[str, str]] = (),  # (slot label, "item name · 80%" or "empty")
+        bonus_lines: Sequence[str] = (),
     ) -> discord.Embed:
         fields: list[FieldSpec] = [
             ("Rank", f"**{escape_md(rank)}**", True),
@@ -798,6 +800,12 @@ class EmbedFactory:
             fields.append(("Next promotion", promotion, False))
         elif top_rank:
             fields.append(("Next promotion", "Top rank reached.", False))
+        if gear:
+            gear_text = "\n".join(f"**{label}**{SEP}{escape_md(value)}" for label, value in gear)
+            fields.append(("Gear", clamp(gear_text, 1000), False))
+        if bonus_lines:
+            bonus_text = "\n".join(escape_md(line) for line in bonus_lines)
+            fields.append(("Set bonuses", clamp(bonus_text, 1000), False))
         return cls._create_base(
             title=f"{Emoji.SWORDS} Adventurer card",
             description=f"{user_mention}{SEP}joined <t:{joined_ts}:D>",
@@ -841,6 +849,23 @@ class EmbedFactory:
             context="Guild",
             bot_avatar_url=bot_avatar_url,
             fields=fields,
+        )
+
+    @classmethod
+    def gear_warning(
+        cls, lines: Sequence[str], bot_avatar_url: Optional[str] = None
+    ) -> discord.Embed:
+        """Shown before a mission when equipped gear is low or broken."""
+        body = "\n".join(f"{escape_md(line)}" for line in lines)
+        return cls._create_base(
+            title="Your gear is worn",
+            description=(
+                f"{clamp(body, 1500)}\n\nBroken gear gives you nothing. "
+                "Repair it with /gear repair, or start anyway."
+            ),
+            color=COLOR_WARNING,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
         )
 
     @classmethod
@@ -896,6 +921,8 @@ class EmbedFactory:
         rounds: int,
         rewards: Sequence[tuple[str, int, int, int]],
         log_lines: Sequence[str],
+        loot_lines: Sequence[str] = (),
+        gear_lines: Sequence[str] = (),
         bot_avatar_url: Optional[str] = None,
     ) -> discord.Embed:
         """The end of a fight. Rewards are (mention, XP, Renown, levels gained)."""
@@ -908,6 +935,10 @@ class EmbedFactory:
         fields: list[FieldSpec] = []
         if won and lines:
             fields.append(("Rewards", clamp("\n".join(lines), 1000), False))
+        if loot_lines:
+            fields.append(("Loot", clamp("\n".join(loot_lines), 1000), False))
+        if gear_lines:
+            fields.append(("Gear", clamp("\n".join(gear_lines), 1000), False))
         if log_lines:
             fields.append(("Final round", clamp("\n".join(log_lines), 900), False))
         verdict = "Mission complete" if won else "Mission failed"

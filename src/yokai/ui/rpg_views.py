@@ -222,6 +222,59 @@ class FightView(discord.ui.View):
             await send(interaction, embed=embed, view=prompt, ephemeral=True)
 
 
+class ConfirmView(discord.ui.View):
+    """Start/Cancel buttons for the low-gear warning. Only the member it is for may press them."""
+
+    def __init__(
+        self,
+        bot: YokaiBot,
+        owner_id: int,
+        on_confirm: Callable[[discord.Interaction], Awaitable[None]],
+    ) -> None:
+        super().__init__(timeout=PROMPT_TIMEOUT)
+        self.bot = bot
+        self.owner_id = owner_id
+        self.on_confirm = on_confirm
+        self._used = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if await screen(interaction):
+            return False
+        return interaction.user.id == self.owner_id
+
+    @discord.ui.button(label="Start anyway", style=discord.ButtonStyle.danger)
+    async def start_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        if self._used:
+            await interaction.response.defer()
+            return
+        self._used = True
+        self.stop()
+        starting = EmbedFactory.info(
+            title="Starting",
+            description="Opening your fight thread...",
+            context="Guild",
+            bot_avatar_url=avatar_url(self.bot),
+        )
+        await interaction.response.edit_message(embed=starting, view=None)
+        await self.on_confirm(interaction)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        self._used = True
+        self.stop()
+        cancelled = EmbedFactory.info(
+            title="Cancelled",
+            description="No attempt was spent.",
+            context="Guild",
+            bot_avatar_url=avatar_url(self.bot),
+        )
+        await interaction.response.edit_message(embed=cancelled, view=None)
+
+
 class PromptView(discord.ui.View):
     """A private, short-lived view holding one select, usable only by the player it is for."""
 

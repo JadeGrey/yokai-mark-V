@@ -18,9 +18,12 @@ from yokai.rpg.combat.builders import build_mission_stages, player_combatant
 from yokai.rpg.combat.describe import describe_all
 from yokai.rpg.combat.engine import Fight
 from yokai.rpg.combat.models import OUTCOME_WON
+from yokai.rpg.gear import Loadout, compute_loadout, durability_percent, roll_drop, roll_stats
+from yokai.rpg.gear_store import GearSettlement, ItemDrop
 from yokai.rpg.models import Character, Mission
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import stats_at_level
+from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory
 from yokai.ui.rpg_views import FightView
 from yokai.ui.table_common import NO_MENTIONS, avatar_url
@@ -41,6 +44,7 @@ class Participant:
     user_id: int
     name: str
     character: Character
+    loadout: Optional[Loadout] = None
 
 
 class FightRunner:
@@ -75,7 +79,12 @@ class FightRunner:
         content = runtime.content
         self.content = content
         combatants = [
-            player_combatant(p.user_id, p.name, stats_at_level(content.levels, p.character.level))
+            player_combatant(
+                p.user_id,
+                p.name,
+                p.loadout.stats if p.loadout else stats_at_level(content.levels, p.character.level),
+                p.loadout.skills if p.loadout else (),
+            )
             for p in participants
         ]
         stages = build_mission_stages(content, mission, len(participants))
@@ -261,6 +270,7 @@ class FightRunner:
             level_cap=self.content.levels.cap,
             xp_curve=self.content.balance.xp,
             welcome_bonus=self.bot.config.economy_welcome_bonus,
+            gear=self._gear_settlement(won),
         )
         self._settled = True
         if settlements is None:
@@ -269,18 +279,68 @@ class FightRunner:
             (f"<@{uid}>", s.xp_gained, s.renown_gained, s.levels_gained)
             for uid, s in settlements.items()
         ]
+        loot_lines, gear_lines = self._gear_report(settlements)
         embed = EmbedFactory.fight_result(
             won,
             self.mission.name,
             fight.round_no - 1,
             rows,
             self.last_log,
+            loot_lines=loot_lines,
+            gear_lines=gear_lines,
             bot_avatar_url=avatar_url(self.bot),
         )
         try:
             await self._edit(embed=embed, view=None)
         except discord.HTTPException as exc:
             logger.warning("Could not show the result of fight %d: %s", self.fight_id, exc)
+
+    def _gear_settlement(self, won: bool) -> GearSettlement:
+        """Wear for everyone, plus one drop roll per member on a win."""
+        rules = self.content.balance.gear
+        drops: dict[int, list[ItemDrop]] = {}
+        if won:
+            for participant in self.participants:
+                definition = roll_drop(self.content, self.mission, self.rng)
+                if definition is not None:
+                    drops[participant.user_id] = [
+                        ItemDrop(
+                            definition.id,
+                            roll_stats(definition, rules, self.rng),
+                            definition.max_durability,
+                        )
+                    ]
+        return GearSettlement(items=self.content.items, rules=rules, drops=drops)
+
+    def _gear_report(self, settlements: dict) -> tuple[list[str], list[str]]:  # type: ignore[type-arg]
+        """Loot lines and gear-warning lines for the result embed."""
+        items = self.content.items
+        loot: list[str] = []
+        warnings: list[str] = []
+        for user_id, settled in settlements.items():
+            mention = f"<@{user_id}>"
+            for drop in settled.drops:
+                definition = items.get(drop.content_id)
+                name = definition.name if definition else drop.content_id
+                rarity = definition.rarity if definition else "?"
+                if drop.sold_for is not None:
+                    loot.append(
+                        f"{mention}{SEP}{name} ({rarity}) sold for {drop.sold_for:,} Renown "
+                        "(inventory full)"
+                    )
+                else:
+                    loot.append(f"{mention}{SEP}**{name}** ({rarity})")
+            for wear in settled.wear:
+                if not wear.crossed:
+                    continue
+                definition = items.get(wear.content_id)
+                name = definition.name if definition else wear.content_id
+                if wear.after <= 0:
+                    warnings.append(f"{mention}{SEP}{name} is broken (0%) and counts for nothing")
+                else:
+                    percent = durability_percent(wear.after, wear.max_durability)
+                    warnings.append(f"{mention}{SEP}{name} is at {percent}%")
+        return loot, warnings
 
 
 # ---------------------------------------------------------------------------- launching
@@ -337,12 +397,14 @@ async def launch_fight(
         await thread.add_user(member)
     await runtime.store.set_fight_thread(fight_id, thread.id)
 
+    equipped = await runtime.gear.equipped_items(member.id)
+    loadout = compute_loadout(runtime.content, character.level, equipped)
     runner = FightRunner(
         bot=bot,
         runtime=runtime,
         fight_id=fight_id,
         mission=mission,
-        participants=[Participant(member.id, member_name, character)],
+        participants=[Participant(member.id, member_name, character, loadout)],
         thread=thread,
         turn_seconds=turn_seconds,
     )
