@@ -1,0 +1,38 @@
+# Tunable numbers for combat, progression and rewards. Placeholders tuned by the pacing
+# simulator. Operational settings (daily attempts, turn timer) are environment variables.
+
+[combat]
+# Damage multiplier is defense_k / (defense_k + defense). Higher means defense matters less.
+defense_k = 40
+crit_multiplier_percent = 150
+crit_cap = 75
+variance_percent = 10
+# Damage taken while defending, as a percent of normal.
+defend_percent = 50
+# Living players recover this percent of max HP between stages.
+stage_recovery_percent = 10
+# A fight that lasts longer than this many rounds is lost.
+max_rounds = 40
+
+[xp]
+# XP to go from level L to L+1 is round(base * L ^ exponent).
+base = 30
+exponent = 1.5
+
+[rewards]
+renown_per_level = 4
+# Missions below the player's rank pay step ^ ranks_below of the reward, never less than floor.
+below_rank_step = 0.6
+below_rank_floor = 0.1
+
+[party]
+# Index 0 is a party of one, index 3 a party of four.
+hp_percent = [100, 170, 240, 310]
+extra_foes = [0, 0, 1, 1]
+
+[streak]
+# +1 attempt per this many consecutive active days, up to bonus_cap extra attempts.
+days_per_bonus = 3
+bonus_cap = 3
+# A fully missed day removes this many days from the streak (never below 0).
+drop_per_missed_day = 3

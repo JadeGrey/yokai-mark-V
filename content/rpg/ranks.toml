@@ -1,29 +1,38 @@
 # Guild ranks in ascending order. `min_level` is the level at which promotion into that rank
-# opens (the first rank starts at level 1). Placeholders, tuned by the pacing simulator.
+# opens (the first rank starts at level 1). `xp_share` is the fraction of one level that a
+# single attempt's worth of mission pays at that mission rank. All numbers are placeholders
+# tuned by the pacing simulator (tests/test_rpg_pacing.py, scripts/rpg_sim.py).
 [[rank]]
 id = "E"
 min_level = 1
+xp_share = 0.10
 
 [[rank]]
 id = "D"
 min_level = 5
+xp_share = 0.10
 
 [[rank]]
 id = "C"
 min_level = 12
+xp_share = 0.10
 
 [[rank]]
 id = "B"
 min_level = 20
+xp_share = 0.09
 
 [[rank]]
 id = "A"
 min_level = 30
+xp_share = 0.07
 
 [[rank]]
 id = "SS"
 min_level = 45
+xp_share = 0.05
 
 [[rank]]
 id = "SS+"
 min_level = 60
+xp_share = 0.04

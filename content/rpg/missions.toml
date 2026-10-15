@@ -1,0 +1,284 @@
+# The mission pool. Each day the guild board draws a few missions per rank from this pool.
+# `stages` run in order; HP carries over between stages. `level` is the enemy level for the
+# stage. `attempt_cost` is the daily attempts it uses. Rewards are formulas (see balance.toml
+# and ranks.toml), not per-mission numbers. Ids are permanent.
+
+# ---------------------------------------------------------------- Rank E (levels 1-4)
+[[mission]]
+id = "e_pest_control"
+name = "Pest Control"
+rank = "E"
+attempt_cost = 1
+description = "Hungry ghosts are raiding a village granary."
+stages = [{ enemies = ["gaki", "gaki"], level = 1 }]
+
+[[mission]]
+id = "e_lost_umbrellas"
+name = "Lost Umbrellas"
+rank = "E"
+attempt_cost = 1
+description = "Umbrella spirits are hopping through the market."
+stages = [{ enemies = ["karakasa", "karakasa"], level = 2 }]
+
+[[mission]]
+id = "e_trickster_hunt"
+name = "Trickster Hunt"
+rank = "E"
+attempt_cost = 1
+description = "A tanuki has been stealing from travellers."
+stages = [
+  { enemies = ["tanuki"], level = 2 },
+  { enemies = ["tanuki", "gaki"], level = 3 },
+]
+
+[[mission]]
+id = "e_midnight_gate"
+name = "Midnight Gate"
+rank = "E"
+attempt_cost = 1
+description = "Something prowls the old gate after dark."
+stages = [
+  { enemies = ["gaki", "gaki", "gaki"], level = 3 },
+  { enemies = ["bakeneko"], level = 4 },
+]
+
+# ---------------------------------------------------------------- Rank D (levels 5-11)
+[[mission]]
+id = "d_alley_cats"
+name = "Alley Cats"
+rank = "D"
+attempt_cost = 1
+description = "Shapeshifting cats have taken over the lantern district."
+stages = [{ enemies = ["bakeneko", "bakeneko"], level = 6 }]
+
+[[mission]]
+id = "d_wind_blades"
+name = "Wind Blades"
+rank = "D"
+attempt_cost = 1
+description = "A whirlwind of sickle weasels is cutting travellers on the road."
+stages = [{ enemies = ["kamaitachi", "kamaitachi"], level = 8 }]
+
+[[mission]]
+id = "d_long_necks"
+name = "Long Necks"
+rank = "D"
+attempt_cost = 1
+description = "Long-necked spirits drift through the inn at night."
+stages = [
+  { enemies = ["rokurokubi"], level = 7 },
+  { enemies = ["rokurokubi", "rokurokubi"], level = 9 },
+]
+
+[[mission]]
+id = "d_faceless"
+name = "The Faceless"
+rank = "D"
+attempt_cost = 1
+description = "Travellers meet a smooth, faceless figure on the mountain path."
+stages = [{ enemies = ["nopperabo", "nopperabo"], level = 10 }]
+
+# ---------------------------------------------------------------- Rank C (levels 12-19)
+[[mission]]
+id = "c_ox_pasture"
+name = "Ox Demon Pasture"
+rank = "C"
+attempt_cost = 1
+description = "An ox-headed demon has taken over a mountain pasture."
+stages = [{ enemies = ["ushi_oni"], level = 14 }]
+
+[[mission]]
+id = "c_web_cellar"
+name = "Web Cellar"
+rank = "C"
+attempt_cost = 1
+description = "Earth spiders nest beneath the old brewery."
+stages = [
+  { enemies = ["tsuchigumo", "tsuchigumo"], level = 15 },
+  { enemies = ["tsuchigumo"], level = 17 },
+]
+
+[[mission]]
+id = "c_haunted_road"
+name = "Haunted Road"
+rank = "C"
+attempt_cost = 1
+description = "A road where lanterns go out one by one."
+stages = [
+  { enemies = ["karakasa", "karakasa"], level = 13 },
+  { enemies = ["nopperabo"], level = 16 },
+  { enemies = ["hannya"], level = 18 },
+]
+
+[[mission]]
+id = "c_masked_maidens"
+name = "Masked Maidens"
+rank = "C"
+attempt_cost = 1
+description = "Two jealous spirits haunt a theatre."
+stages = [{ enemies = ["hannya", "hannya"], level = 17 }]
+
+# ---------------------------------------------------------------- Rank B (levels 20-29)
+[[mission]]
+id = "b_hungry_giant"
+name = "The Hungry Giant"
+rank = "B"
+attempt_cost = 2
+description = "A skeleton as tall as a temple walks the valley."
+stages = [{ enemies = ["gashadokuro"], level = 24 }]
+
+[[mission]]
+id = "b_chimera_roost"
+name = "Chimera Roost"
+rank = "B"
+attempt_cost = 2
+description = "A monkey-faced, tiger-limbed horror circles the capital."
+stages = [
+  { enemies = ["nue"], level = 22 },
+  { enemies = ["nue"], level = 26 },
+]
+
+[[mission]]
+id = "b_mountain_pass"
+name = "Mountain Pass"
+rank = "B"
+attempt_cost = 2
+description = "Demons and wind blades guard the only pass north."
+stages = [
+  { enemies = ["ushi_oni", "ushi_oni"], level = 23 },
+  { enemies = ["kamaitachi", "kamaitachi"], level = 25 },
+]
+
+[[mission]]
+id = "b_night_parade"
+name = "Night Parade"
+rank = "B"
+attempt_cost = 2
+description = "A parade of spirits marches through the streets."
+stages = [
+  { enemies = ["gaki", "gaki", "gaki"], level = 21 },
+  { enemies = ["nopperabo", "nopperabo"], level = 24 },
+  { enemies = ["hannya"], level = 27 },
+]
+
+# ---------------------------------------------------------------- Rank A (levels 30-44)
+[[mission]]
+id = "a_chimera_hunt"
+name = "Chimera Hunt"
+rank = "A"
+attempt_cost = 2
+description = "The great chimera has taken a fortress."
+stages = [{ enemies = ["nue"], level = 34 }]
+
+[[mission]]
+id = "a_spider_queen"
+name = "The Spider Queen's Court"
+rank = "A"
+attempt_cost = 2
+description = "A hive of earth spiders threatens a mining town."
+stages = [
+  { enemies = ["tsuchigumo", "tsuchigumo", "tsuchigumo"], level = 32 },
+  { enemies = ["tsuchigumo", "tsuchigumo"], level = 36 },
+]
+
+[[mission]]
+id = "a_bone_hall"
+name = "Hall of Bones"
+rank = "A"
+attempt_cost = 2
+description = "Skeletons of the battlefield gather in one hall."
+stages = [{ enemies = ["gashadokuro"], level = 38 }]
+
+[[mission]]
+id = "a_veiled_court"
+name = "The Veiled Court"
+rank = "A"
+attempt_cost = 2
+description = "Masked spirits hold court in a ruined palace."
+stages = [
+  { enemies = ["hannya", "hannya"], level = 36 },
+  { enemies = ["hannya"], level = 40 },
+]
+
+# ---------------------------------------------------------------- Rank SS (levels 45-59)
+[[mission]]
+id = "ss_demon_gate"
+name = "The Demon's Gate"
+rank = "SS"
+attempt_cost = 2
+description = "An ogre king guards the gate to his mountain."
+stages = [
+  { enemies = ["ushi_oni", "ushi_oni"], level = 47 },
+  { enemies = ["shuten_doji"], level = 52 },
+]
+
+[[mission]]
+id = "ss_serpent_cave"
+name = "Eight-Headed Serpent"
+rank = "SS"
+attempt_cost = 2
+description = "A serpent with eight heads sleeps in a flooded cave."
+stages = [{ enemies = ["yamata_orochi"], level = 54 }]
+
+[[mission]]
+id = "ss_goblin_lord"
+name = "The Goblin Lord"
+rank = "SS"
+attempt_cost = 2
+description = "The master of a hundred spirits walks into the guild hall."
+stages = [{ enemies = ["nurarihyon"], level = 56 }]
+
+[[mission]]
+id = "ss_hundred_demons"
+name = "A Hundred Demons"
+rank = "SS"
+attempt_cost = 2
+description = "The great night march of the demons."
+stages = [
+  { enemies = ["nue", "nue"], level = 48 },
+  { enemies = ["hannya", "hannya"], level = 51 },
+  { enemies = ["gashadokuro"], level = 55 },
+]
+
+# ---------------------------------------------------------------- Rank SS+ (level 60)
+[[mission]]
+id = "sp_nine_tails"
+name = "The Nine-Tailed Empress"
+rank = "SS+"
+attempt_cost = 2
+description = "A fox who has ruled empires wants the guild's throne."
+stages = [{ enemies = ["tamamo"], level = 60 }]
+
+[[mission]]
+id = "sp_serpent_return"
+name = "Serpent's Return"
+rank = "SS+"
+attempt_cost = 2
+description = "The eight-headed serpent has grown new heads."
+stages = [
+  { enemies = ["nue", "nue"], level = 60 },
+  { enemies = ["yamata_orochi"], level = 60 },
+]
+
+[[mission]]
+id = "sp_demon_lords"
+name = "Demon Lords"
+rank = "SS+"
+attempt_cost = 2
+description = "Two demon lords have allied against the guild."
+stages = [
+  { enemies = ["shuten_doji"], level = 60 },
+  { enemies = ["nurarihyon"], level = 60 },
+]
+
+[[mission]]
+id = "sp_endless_night"
+name = "The Endless Night"
+rank = "SS+"
+attempt_cost = 2
+description = "The night does not end, and something walks in it."
+stages = [
+  { enemies = ["nue", "nue"], level = 60 },
+  { enemies = ["gashadokuro"], level = 60 },
+  { enemies = ["tamamo"], level = 60 },
+]

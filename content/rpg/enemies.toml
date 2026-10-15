@@ -1,0 +1,146 @@
+# Enemy archetypes. Stats are the stats of the stage's level multiplied by `mult` (percent), so
+# 100 is a player-equivalent. `actions` is a weighted list; `do` is "attack", "magic" or a skill id.
+# `target` is how the enemy picks a player: random | lowest_hp. Bosses are never duplicated by
+# party scaling. Ids are permanent: retire an enemy by removing it from missions, never by
+# deleting it.
+
+[[enemy]]
+id = "gaki"
+name = "Gaki"
+mult = { hp = 70, attack = 85, magic = 50, defense = 70, resist = 70, speed = 85, crit = 80 }
+actions = [{ do = "attack", weight = 1 }]
+
+[[enemy]]
+id = "tanuki"
+name = "Tanuki Trickster"
+mult = { hp = 80, attack = 80, magic = 90, defense = 80, resist = 90, speed = 110, crit = 120 }
+actions = [{ do = "attack", weight = 2 }, { do = "magic", weight = 1 }]
+
+[[enemy]]
+id = "karakasa"
+name = "Karakasa-obake"
+mult = { hp = 90, attack = 100, magic = 60, defense = 90, resist = 70, speed = 100, crit = 100 }
+actions = [{ do = "attack", weight = 1 }]
+
+[[enemy]]
+id = "bakeneko"
+name = "Bakeneko"
+mult = { hp = 85, attack = 110, magic = 80, defense = 80, resist = 80, speed = 130, crit = 150 }
+actions = [{ do = "attack", weight = 2 }, { do = "rend", weight = 1 }]
+
+[[enemy]]
+id = "kamaitachi"
+name = "Kamaitachi"
+mult = { hp = 75, attack = 115, magic = 60, defense = 70, resist = 70, speed = 140, crit = 160 }
+actions = [{ do = "attack", weight = 3 }, { do = "rend", weight = 1 }]
+target = "lowest_hp"
+
+[[enemy]]
+id = "rokurokubi"
+name = "Rokurokubi"
+mult = { hp = 100, attack = 90, magic = 110, defense = 85, resist = 100, speed = 95, crit = 100 }
+actions = [{ do = "magic", weight = 2 }, { do = "attack", weight = 1 }]
+
+[[enemy]]
+id = "nopperabo"
+name = "Nopperabo"
+mult = { hp = 95, attack = 100, magic = 100, defense = 95, resist = 95, speed = 90, crit = 90 }
+actions = [
+  { do = "attack", weight = 1 },
+  { do = "magic", weight = 1 },
+  { do = "weakening_hex", weight = 1 },
+]
+
+[[enemy]]
+id = "ushi_oni"
+name = "Ushi-oni"
+mult = { hp = 140, attack = 120, magic = 60, defense = 110, resist = 70, speed = 80, crit = 90 }
+actions = [{ do = "attack", weight = 2 }, { do = "crushing_blow", weight = 1 }]
+
+[[enemy]]
+id = "tsuchigumo"
+name = "Tsuchigumo"
+mult = { hp = 105, attack = 105, magic = 90, defense = 95, resist = 90, speed = 105, crit = 110 }
+actions = [{ do = "attack", weight = 2 }, { do = "venom_spit", weight = 1 }]
+
+[[enemy]]
+id = "hannya"
+name = "Hannya"
+mult = { hp = 110, attack = 110, magic = 130, defense = 90, resist = 120, speed = 105, crit = 120 }
+actions = [
+  { do = "magic", weight = 2 },
+  { do = "weakening_hex", weight = 1 },
+  { do = "fox_fire", weight = 1 },
+]
+
+[[enemy]]
+id = "nue"
+name = "Nue"
+mult = { hp = 130, attack = 115, magic = 115, defense = 100, resist = 100, speed = 110, crit = 110 }
+actions = [
+  { do = "attack", weight = 1 },
+  { do = "magic", weight = 1 },
+  { do = "fox_fire", weight = 1 },
+  { do = "venom_spit", weight = 1 },
+]
+
+[[enemy]]
+id = "gashadokuro"
+name = "Gashadokuro"
+mult = { hp = 250, attack = 130, magic = 60, defense = 140, resist = 80, speed = 70, crit = 80 }
+actions = [
+  { do = "attack", weight = 2 },
+  { do = "crushing_blow", weight = 2 },
+  { do = "terrifying_howl", weight = 1 },
+]
+boss = true
+
+[[enemy]]
+id = "shuten_doji"
+name = "Shuten-doji"
+mult = { hp = 380, attack = 150, magic = 90, defense = 140, resist = 90, speed = 100, crit = 120 }
+actions = [
+  { do = "attack", weight = 2 },
+  { do = "crushing_blow", weight = 2 },
+  { do = "rend", weight = 1 },
+]
+target = "lowest_hp"
+boss = true
+
+[[enemy]]
+id = "nurarihyon"
+name = "Nurarihyon"
+mult = { hp = 300, attack = 125, magic = 125, defense = 120, resist = 120, speed = 110, crit = 120 }
+actions = [
+  { do = "attack", weight = 1 },
+  { do = "magic", weight = 1 },
+  { do = "crushing_blow", weight = 1 },
+  { do = "fox_fire", weight = 1 },
+  { do = "weakening_hex", weight = 1 },
+]
+boss = true
+
+[[enemy]]
+id = "yamata_orochi"
+name = "Yamata-no-Orochi"
+mult = { hp = 400, attack = 130, magic = 130, defense = 130, resist = 130, speed = 100, crit = 100 }
+actions = [
+  { do = "attack", weight = 2 },
+  { do = "venom_spit", weight = 2 },
+  { do = "fox_fire", weight = 1 },
+  { do = "terrifying_howl", weight = 1 },
+]
+boss = true
+
+[[enemy]]
+id = "tamamo"
+name = "Tamamo-no-Mae"
+mult = { hp = 450, attack = 120, magic = 150, defense = 120, resist = 150, speed = 130, crit = 140 }
+actions = [
+  { do = "magic", weight = 2 },
+  { do = "fox_fire", weight = 2 },
+  { do = "weakening_hex", weight = 1 },
+  { do = "terrifying_howl", weight = 1 },
+  { do = "venom_spit", weight = 1 },
+]
+boss = true

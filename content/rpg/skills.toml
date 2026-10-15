@@ -1,0 +1,63 @@
+# Combat skills. kind: damage | heal | buff | debuff | dot | cleanse.
+# target: foe | all_foes | ally | all_allies | self (foe means the opposing side).
+# power is a percent of the scaling stat; cooldown is in rounds; buff/debuff change one stat by
+# `percent` for `duration` rounds; dot deals its damage every round for `duration` rounds.
+# Phase 2 ships enemy skills only; player skills arrive with gear tags.
+
+[[skill]]
+id = "rend"
+name = "Rend"
+kind = "dot"
+target = "foe"
+scaling = "attack"
+power = 40
+duration = 3
+cooldown = 3
+
+[[skill]]
+id = "venom_spit"
+name = "Venom Spit"
+kind = "dot"
+target = "foe"
+scaling = "magic"
+power = 35
+duration = 4
+cooldown = 4
+
+[[skill]]
+id = "weakening_hex"
+name = "Weakening Hex"
+kind = "debuff"
+target = "foe"
+stat = "attack"
+percent = 25
+duration = 2
+cooldown = 4
+
+[[skill]]
+id = "terrifying_howl"
+name = "Terrifying Howl"
+kind = "debuff"
+target = "all_foes"
+stat = "speed"
+percent = 30
+duration = 2
+cooldown = 5
+
+[[skill]]
+id = "crushing_blow"
+name = "Crushing Blow"
+kind = "damage"
+target = "foe"
+scaling = "attack"
+power = 160
+cooldown = 3
+
+[[skill]]
+id = "fox_fire"
+name = "Fox Fire"
+kind = "damage"
+target = "all_foes"
+scaling = "magic"
+power = 80
+cooldown = 4
