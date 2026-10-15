@@ -35,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -250,6 +250,18 @@ CREATE TABLE IF NOT EXISTS challenge_progress (
 );
 """
 
+MIGRATION_V9 = """
+CREATE TABLE IF NOT EXISTS rpg_characters (
+  user_id INTEGER PRIMARY KEY,
+  level INTEGER NOT NULL DEFAULT 1,
+  xp INTEGER NOT NULL DEFAULT 0,
+  rank TEXT NOT NULL,
+  battles_won INTEGER NOT NULL DEFAULT 0,
+  battles_lost INTEGER NOT NULL DEFAULT 0,
+  created_ts INTEGER NOT NULL
+);
+"""
+
 
 class Database:
     """Async SQLite database manager."""
@@ -357,6 +369,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 8;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 8.")
+
+        if version < 9:
+            logger.info("Applying SQLite migration v9...")
+            await self.conn.executescript(MIGRATION_V9)
+            await self.conn.execute("PRAGMA user_version = 9;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 9.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
@@ -569,6 +588,18 @@ class Database:
             except BaseException:
                 await self.conn.rollback()
                 raise
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Run a block of reads and writes as one atomic transaction on the shared connection.
+
+        Takes the same locks as the wallet code (`_write_tx`), commits when the block ends
+        normally and rolls back if it raises. Feature modules such as the RPG use this so item
+        and Renown changes can never be half-applied.
+        """
+        async with self._write_tx():
+            yield self.conn
+            await self.conn.commit()
 
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
         """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).
