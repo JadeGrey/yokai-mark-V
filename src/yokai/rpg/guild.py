@@ -10,7 +10,7 @@ from typing import Optional
 from yokai.challenges.periods import DAILY, next_reset_ts, period_key
 from yokai.errors import NoAttemptsError
 from yokai.rpg.content import Content
-from yokai.rpg.models import Character, Mission, StreakRules, XpCurve
+from yokai.rpg.models import Character, Mission, Rank, StreakRules, XpCurve
 
 MISSIONS_PER_RANK = 3
 
@@ -181,3 +181,36 @@ def draw_board(content: Content, day: str, per_rank: int = MISSIONS_PER_RANK) ->
 def board_missions(content: Content, ids: list[str]) -> list[Mission]:
     """The board's missions, skipping any id that content changes have since removed."""
     return [content.missions[i] for i in ids if i in content.missions]
+
+
+# ----------------------------------------------------------------------------- promotion
+
+
+@dataclass(frozen=True, slots=True)
+class PromotionStatus:
+    """Where a member stands on the way to the next rank."""
+
+    next_rank: Optional[Rank]  # None at the top, or when the member's rank is not in the content
+    known_rank: bool
+    level_ok: bool
+    cooldown_until: Optional[int]  # set only while a cooldown is still running
+
+    @property
+    def top(self) -> bool:
+        return self.known_rank and self.next_rank is None
+
+    @property
+    def ready(self) -> bool:
+        return self.next_rank is not None and self.level_ok and self.cooldown_until is None
+
+
+def promotion_status(content: Content, character: Character, now: int) -> PromotionStatus:
+    """Whether a member can challenge for the next rank right now (read-only)."""
+    try:
+        upcoming = content.next_rank(character.rank)
+    except KeyError:
+        return PromotionStatus(None, False, False, None)
+    cooldown = character.promo_cooldown_until
+    active = cooldown if cooldown is not None and cooldown > now else None
+    level_ok = upcoming is not None and character.level >= upcoming.min_level
+    return PromotionStatus(upcoming, True, level_ok, active)

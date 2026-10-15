@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Sequence
 
 import aiosqlite
 
-from yokai.errors import NoCharacterError
+from yokai.errors import (
+    AlreadyFightingError,
+    NoCharacterError,
+    PromotionCooldownError,
+    PromotionNotReadyError,
+    PromotionStaleError,
+)
 from yokai.rpg import guild
 from yokai.rpg.audit import record_admin_action
 from yokai.rpg.gear_store import (
@@ -26,7 +32,7 @@ if TYPE_CHECKING:
 
 _CHARACTER_COLUMNS = (
     "user_id, level, xp, rank, battles_won, battles_lost, created_ts, "
-    "attempts_used, attempts_day, streak, last_active_day"
+    "attempts_used, attempts_day, streak, last_active_day, promo_cooldown_until"
 )
 
 FIGHT_OPEN = "open"
@@ -47,10 +53,24 @@ class Settlement:
     xp_now: int
     wear: tuple[GearWear, ...] = ()
     drops: tuple[DropResult, ...] = ()
+    promoted_to: Optional[str] = None
+    cooldown_until: Optional[int] = None
 
     @property
     def levels_gained(self) -> int:
         return self.level_after - self.level_before
+
+
+@dataclass(frozen=True, slots=True)
+class PromotionRequest:
+    """A promotion fight to open: the rank held, the rank sought and its level threshold."""
+
+    from_rank: str
+    to_rank: str
+    min_level: int
+
+
+LEADERBOARD_SORTS = ("rank", "level", "wins")
 
 
 def _character_from_row(row: Sequence[Any]) -> Character:
@@ -66,6 +86,7 @@ def _character_from_row(row: Sequence[Any]) -> Character:
         attempts_day=row[8],
         streak=row[9],
         last_active_day=row[10],
+        promo_cooldown_until=row[11],
     )
 
 
@@ -107,6 +128,36 @@ class RpgStore:
             character = await _fetch_character(conn, user_id)
         assert character is not None
         return character, created
+
+    async def top_characters(
+        self, sort: str, rank_order: Sequence[str], limit: int, offset: int
+    ) -> tuple[list[Character], int]:
+        """A page of the guild ordered by "rank", "level" or "wins", and the total count.
+
+        `rank_order` lists rank ids lowest to highest, so ranks sort by the ladder and not
+        alphabetically; a rank missing from it sorts below every known rank. Ties break the same
+        way every time (earlier joiners first).
+        """
+        if sort not in LEADERBOARD_SORTS:
+            raise ValueError(f"Unknown leaderboard sort: {sort!r}")
+        rank_case = "CASE rank " + " ".join("WHEN ? THEN ?" for _ in rank_order) + " ELSE -1 END"
+        params: list[Any] = []
+        for index, rank_id in enumerate(rank_order):
+            params.extend((rank_id, index))
+        orders = {
+            "rank": f"{rank_case} DESC, level DESC, battles_won DESC, created_ts ASC, user_id ASC",
+            "level": f"level DESC, xp DESC, {rank_case} DESC, created_ts ASC, user_id ASC",
+            "wins": f"battles_won DESC, level DESC, {rank_case} DESC, created_ts ASC, user_id ASC",
+        }
+        query = (
+            f"SELECT {_CHARACTER_COLUMNS} FROM rpg_characters ORDER BY {orders[sort]} "
+            "LIMIT ? OFFSET ?;"
+        )
+        async with self._db.conn.execute(query, (*params, limit, offset)) as cursor:
+            characters = [_character_from_row(row) for row in await cursor.fetchall()]
+        async with self._db.conn.execute("SELECT COUNT(*) FROM rpg_characters;") as cursor:
+            row = await cursor.fetchone()
+        return characters, int(row[0]) if row else 0
 
     # ------------------------------------------------------------------ admin tools
 
@@ -209,10 +260,13 @@ class RpgStore:
         streak_rules: StreakRules,
         resets_ts: Optional[int] = None,
         now: Optional[int] = None,
+        promotion: Optional[PromotionRequest] = None,
     ) -> int:
         """Spend `cost` attempts for every member and open a fight row, all or nothing.
 
-        Raises NoAttemptsError or NoCharacterError (changing nothing) if any member cannot.
+        Raises NoAttemptsError or NoCharacterError (changing nothing) if any member cannot. For a
+        promotion fight (solo only) it also checks, in the same transaction, that the member still
+        holds the rank being left, has the level and is not in a cooldown.
         """
         ts = int(time.time()) if now is None else now
         participants: dict[str, dict[str, Any]] = {}
@@ -221,6 +275,8 @@ class RpgStore:
                 character = await _fetch_character(conn, user_id)
                 if character is None:
                     raise NoCharacterError(own=True)
+                if promotion is not None:
+                    await self._check_promotion(conn, character, promotion, ts)
                 plan = guild.plan_spend(
                     character, cost, today, base_attempts, streak_rules, resets_ts
                 )
@@ -230,6 +286,8 @@ class RpgStore:
                     (plan.used, plan.day, plan.streak, plan.last_active_day, user_id),
                 )
                 participants[str(user_id)] = {"cost": cost, "day": today}
+                if promotion is not None:
+                    participants[str(user_id)]["promote_to"] = promotion.to_rank
             cursor = await conn.execute(
                 "INSERT INTO rpg_fights (ts, mission_id, kind, status, participants) "
                 "VALUES (?, ?, ?, ?, ?);",
@@ -238,6 +296,25 @@ class RpgStore:
             fight_id = cursor.lastrowid
         assert fight_id is not None
         return fight_id
+
+    @staticmethod
+    async def _check_promotion(
+        conn: aiosqlite.Connection, character: Character, request: PromotionRequest, now: int
+    ) -> None:
+        if character.rank != request.from_rank:
+            raise PromotionStaleError()
+        if character.level < request.min_level:
+            raise PromotionNotReadyError(request.to_rank, request.min_level, character.level)
+        cooldown = character.promo_cooldown_until
+        if cooldown is not None and cooldown > now:
+            raise PromotionCooldownError(cooldown)
+        async with conn.execute(
+            "SELECT participants FROM rpg_fights WHERE status = ? AND kind = 'promotion';",
+            (FIGHT_OPEN,),
+        ) as cursor:
+            for (raw,) in await cursor.fetchall():
+                if str(character.user_id) in json.loads(raw):
+                    raise AlreadyFightingError()
 
     async def set_fight_thread(self, fight_id: int, thread_id: int) -> None:
         async with self._db.transaction() as conn:
@@ -256,6 +333,7 @@ class RpgStore:
         welcome_bonus: int,
         gear: Optional[GearSettlement] = None,
         now: Optional[int] = None,
+        promotion_cooldown_s: int = 0,
     ) -> Optional[dict[int, Settlement]]:
         """Close an open fight and pay the participants, once.
 
@@ -263,6 +341,7 @@ class RpgStore:
         call can never pay twice.
         """
         status = FIGHT_WON if won else FIGHT_LOST
+        ts = int(time.time()) if now is None else now
         results: dict[int, Settlement] = {}
         async with self._db.transaction() as conn:
             async with conn.execute(
@@ -273,8 +352,9 @@ class RpgStore:
             if row is None:
                 return None
             await conn.execute("UPDATE rpg_fights SET status = ? WHERE id = ?;", (status, fight_id))
-            for raw_id in json.loads(row[0]):
+            for raw_id, info in json.loads(row[0]).items():
                 user_id = int(raw_id)
+                promote_to = info.get("promote_to")
                 character = await _fetch_character(conn, user_id)
                 if character is None:
                     continue
@@ -285,6 +365,13 @@ class RpgStore:
                         (user_id,),
                     )
                     wear = await self._wear(conn, user_id, gear, won=False)
+                    cooldown_until: Optional[int] = None
+                    if promote_to and promotion_cooldown_s > 0:
+                        cooldown_until = ts + promotion_cooldown_s
+                        await conn.execute(
+                            "UPDATE rpg_characters SET promo_cooldown_until = ? WHERE user_id = ?;",
+                            (cooldown_until, user_id),
+                        )
                     results[user_id] = Settlement(
                         user_id,
                         0,
@@ -293,6 +380,7 @@ class RpgStore:
                         character.level,
                         character.xp,
                         wear=tuple(wear),
+                        cooldown_until=cooldown_until,
                     )
                     continue
                 reward = rewards.get(user_id, guild.Reward(0, 0))
@@ -304,6 +392,12 @@ class RpgStore:
                     "WHERE user_id = ?;",
                     (level, xp, user_id),
                 )
+                if promote_to:
+                    await conn.execute(
+                        "UPDATE rpg_characters SET rank = ?, promo_cooldown_until = NULL "
+                        "WHERE user_id = ?;",
+                        (promote_to, user_id),
+                    )
                 if reward.renown > 0:
                     await self._db.credit_within_transaction(
                         user_id, reward.renown, "rpg_reward", welcome_bonus
@@ -318,7 +412,7 @@ class RpgStore:
                         gear.drops[user_id],
                         gear,
                         welcome_bonus,
-                        int(time.time()) if now is None else now,
+                        ts,
                     )
                 results[user_id] = Settlement(
                     user_id,
@@ -329,6 +423,7 @@ class RpgStore:
                     xp,
                     wear=tuple(wear),
                     drops=tuple(dropped),
+                    promoted_to=promote_to,
                 )
         return results
 
