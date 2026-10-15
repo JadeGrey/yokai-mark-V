@@ -156,6 +156,16 @@ QUIP_VARIANTS: Final[Mapping[str, Sequence[str]]] = {
         "Bust. It happens.",
         "One card too many.",
     ),
+    "fight_win": (
+        "Clean work out there.",
+        "Another one for the ledger.",
+        "That went about how I expected.",
+    ),
+    "fight_loss": (
+        "Rough one. Patch up and go again.",
+        "Not your best. It happens.",
+        "The mission will still be there tomorrow.",
+    ),
     "guild_join": (
         "Signed in. Don't make me regret it.",
         "Your name's on the roster now.",

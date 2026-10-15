@@ -670,6 +670,50 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             EmbedFactory.guild_joined("<@42>", "E", 1, guild_stats, bot_avatar_url=av),
         ),
         (
+            "Guild (board)",
+            EmbedFactory.guild_board(
+                [
+                    ("E", True, [("Pest Control", 1, 1, 3, 4), ("Midnight Gate", 1, 4, 12, 16)]),
+                    ("D", True, [("Alley Cats", 1, 6, 9, 14)]),
+                    ("C", False, [("Ox Demon Pasture", 1, 14, 0, 0)]),
+                ],
+                "D",
+                "Attempts: **5/8** left, streak **3** day(s).",
+                1_900_000_000,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (fight round)",
+            EmbedFactory.fight_round(
+                "Alley Cats",
+                "Stage 1 of 2",
+                3,
+                [("Sami", 80, 100, [], "ready"), ("Friend", 0, 120, [], "down")],
+                [("Bakeneko A", 30, 70, ["Rend"]), ("Bakeneko B", 70, 70, [])],
+                ["**Sami** strikes **Bakeneko A** for **18**", "**Bakeneko B** braces for impact"],
+                deadline_ts=1_900_000_000,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (mission complete)",
+            EmbedFactory.fight_result(
+                True,
+                "Alley Cats",
+                5,
+                [("<@42>", 12, 40, 1)],
+                ["The party stands victorious"],
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (mission failed)",
+            EmbedFactory.fight_result(
+                False, "Alley Cats", 9, [], ["The party has fallen"], bot_avatar_url=av
+            ),
+        ),
+        (
             "Guild (player card)",
             EmbedFactory.player_card(
                 "<@42>",

@@ -809,6 +809,125 @@ class EmbedFactory:
         )
 
     @classmethod
+    def guild_board(
+        cls,
+        groups: Sequence[tuple[str, bool, Sequence[tuple[str, int, int, int, int]]]],
+        your_rank: str,
+        attempts_text: str,
+        resets_ts: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """Today's missions by rank. Each mission is (name, attempt cost, level, XP, Renown)."""
+        fields: list[FieldSpec] = []
+        for rank_id, is_open, missions in groups:
+            lines: list[str] = []
+            for name, cost, level, xp, renown in missions:
+                if is_open:
+                    lines.append(
+                        f"**{escape_md(clamp(name, 40))}**{SEP}lvl {level}{SEP}cost {cost}"
+                        f"{SEP}+{xp:,} XP{SEP}+{renown:,} Renown"
+                    )
+                else:
+                    lines.append(f"{escape_md(clamp(name, 40))}{SEP}lvl {level}")
+            heading = f"Rank {escape_md(rank_id)}" + ("" if is_open else " (locked)")
+            fields.append((heading, "\n".join(lines) or "No missions today.", False))
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Guild board",
+            description=(
+                f"You are rank **{escape_md(your_rank)}**. {attempts_text}\n"
+                f"The board refreshes <t:{resets_ts}:R>. Start one with /guild mission."
+            ),
+            color=COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            fields=fields,
+        )
+
+    @classmethod
+    def fight_round(
+        cls,
+        mission_name: str,
+        stage_text: str,
+        round_no: int,
+        players: Sequence[tuple[str, int, int, Sequence[str], str]],
+        foes: Sequence[tuple[str, int, int, Sequence[str]]],
+        log_lines: Sequence[str],
+        deadline_ts: Optional[int] = None,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The live fight board. Players are (name, hp, max hp, statuses, state)."""
+        party_lines = []
+        for name, hp, max_hp, statuses, state in players:
+            note = f"{SEP}{', '.join(escape_md(s) for s in statuses)}" if statuses else ""
+            tag = {"waiting": "choosing", "ready": "ready", "away": "away", "down": "down"}.get(
+                state, state
+            )
+            party_lines.append(
+                f"**{escape_md(clamp(name, 24))}** `{_hp_bar(hp, max_hp)}` {hp}/{max_hp}"
+                f"{SEP}{tag}{note}"
+            )
+        foe_lines = []
+        for name, hp, max_hp, statuses in foes:
+            note = f"{SEP}{', '.join(escape_md(s) for s in statuses)}" if statuses else ""
+            foe_lines.append(
+                f"**{escape_md(clamp(name, 24))}** `{_hp_bar(hp, max_hp)}` {hp}/{max_hp}{note}"
+            )
+        prompt = f"Choose your action <t:{deadline_ts}:R>." if deadline_ts else "Round resolving."
+        fields: list[FieldSpec] = [
+            ("Party", "\n".join(party_lines) or "-", False),
+            ("Foes", "\n".join(foe_lines) or "-", False),
+        ]
+        if log_lines:
+            fields.append(("Last round", clamp("\n".join(log_lines), 900), False))
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} {escape_md(clamp(mission_name, 60))}",
+            description=f"{stage_text}\n{prompt}",
+            color=COLOR_BRAND,
+            context=f"Round {round_no}",
+            bot_avatar_url=bot_avatar_url,
+            fields=fields,
+        )
+
+    @classmethod
+    def fight_result(
+        cls,
+        won: bool,
+        mission_name: str,
+        rounds: int,
+        rewards: Sequence[tuple[str, int, int, int]],
+        log_lines: Sequence[str],
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The end of a fight. Rewards are (mention, XP, Renown, levels gained)."""
+        lines = []
+        for mention, xp, renown, levels in rewards:
+            parts = [f"+{xp:,} XP", f"+{renown:,} Renown"]
+            if levels:
+                parts.append(f"level up x{levels}" if levels > 1 else "level up")
+            lines.append(f"{mention}{SEP}{SEP.join(parts)}")
+        fields: list[FieldSpec] = []
+        if won and lines:
+            fields.append(("Rewards", clamp("\n".join(lines), 1000), False))
+        if log_lines:
+            fields.append(("Final round", clamp("\n".join(log_lines), 900), False))
+        verdict = "Mission complete" if won else "Mission failed"
+        body = (
+            f"**{escape_md(clamp(mission_name, 60))}** cleared in {rounds} round(s)."
+            if won
+            else f"**{escape_md(clamp(mission_name, 60))}** was lost after {rounds} round(s). "
+            "No rewards this time."
+        )
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} {verdict}",
+            description=body,
+            color=COLOR_SUCCESS if won else COLOR_WARNING,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            quip=quip_bank.get("fight_win" if won else "fight_loss"),
+            fields=fields,
+        )
+
+    @classmethod
     def spinning(
         cls,
         title: str,
@@ -1445,6 +1564,14 @@ def _render_progress_bar(current: int, total: int, length: int = PROGRESS_LENGTH
     progress = min(max(current / total, 0.0), 1.0)
     head = min(int(progress * length), length - 1)
     return PROGRESS_FILLED * head + PROGRESS_HEAD + PROGRESS_EMPTY * (length - 1 - head)
+
+
+def _hp_bar(hp: int, max_hp: int, length: int = 10) -> str:
+    """A short health bar: filled segments for the share of HP left (empty at 0)."""
+    if max_hp <= 0 or hp <= 0:
+        return PROGRESS_EMPTY * length
+    filled = max(1, min(length, round(hp / max_hp * length)))
+    return PROGRESS_FILLED * filled + PROGRESS_EMPTY * (length - filled)
 
 
 def _format_duration(seconds: Optional[int]) -> str:
