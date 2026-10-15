@@ -76,11 +76,21 @@ class FightView(discord.ui.View):
         return True
 
     def close(self) -> None:
-        """Stop accepting presses and disable the buttons (the message edit is the caller's)."""
+        """Stop accepting presses and disable the buttons (the message edit is the caller's).
+
+        The view stays registered with discord.py on purpose: until the message shows the next
+        round, a late click must still reach `_guard` and get an answer ("already resolved").
+        A stopped view is dropped from dispatch, and the click would fail with "did not respond
+        in time". Call `retire()` once the message no longer shows these buttons.
+        """
         self.closed = True
         for item in self.children:
             if isinstance(item, discord.ui.Button):
                 item.disabled = True
+
+    def retire(self) -> None:
+        """Release the view for good, after the message has moved on to something else."""
+        self.close()
         self.stop()
 
     def _combatant(self, user_id: int) -> Optional[Combatant]:

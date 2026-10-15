@@ -689,3 +689,62 @@ async def test_a_scripted_player_can_finish_the_shipped_missions_end_to_end(
         assert USER not in runtime.active_users
     finally:
         await db.close()
+
+
+@pytest.mark.asyncio
+async def test_a_closed_round_view_stays_dispatchable_until_the_next_round_is_posted(
+    tmp_path: Path,
+) -> None:
+    """A stopped view is dropped by discord.py and a late click would get no reply at all."""
+    db, runtime, runner, thread = await build(tmp_path, "m_sponge", turn_seconds=0.5, max_rounds=3)
+    try:
+        original_edit = runner._edit
+        gate = asyncio.Event()
+        calls = {"n": 0}
+
+        async def slow_edit(**kwargs: Any) -> None:
+            calls["n"] += 1
+            if calls["n"] == 2:  # the post of round 2: hold it back, as a slow API call would
+                await gate.wait()
+            await original_edit(**kwargs)
+
+        runner._edit = slow_edit  # type: ignore[method-assign]
+        task = asyncio.create_task(runner.run())
+        first = await wait_for_view(runner, 1)
+        await first.attack_button.callback(make_interaction())
+        for _ in range(200):  # the runner has closed round 1 and is waiting on the round-2 post
+            if first.closed:
+                break
+            await asyncio.sleep(0.005)
+        assert first.closed and not first.is_finished()
+        with patch("yokai.ui.table_common.send", new=AsyncMock()) as sent:
+            await first.attack_button.callback(make_interaction())
+        assert "already" in (sent.await_args.kwargs["embed"].description or "")
+        gate.set()
+        await wait_for_view(runner, 2)
+        for _ in range(200):
+            if first.is_finished():
+                break
+            await asyncio.sleep(0.005)
+        assert first.is_finished()  # retired once the message moved on
+        await asyncio.wait_for(task, 10)
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
+async def test_every_round_view_is_released_when_the_fight_ends(tmp_path: Path) -> None:
+    db, runtime, runner, thread = await build(tmp_path, "m_sponge", turn_seconds=0.05, max_rounds=3)
+    try:
+        seen = []
+        original = runner._play_round
+
+        async def spy() -> None:
+            await original()
+            seen.append(runner.view)
+
+        runner._play_round = spy  # type: ignore[method-assign]
+        await asyncio.wait_for(runner.run(), 10)
+        assert seen and all(view is not None and view.is_finished() for view in seen)
+    finally:
+        await db.close()

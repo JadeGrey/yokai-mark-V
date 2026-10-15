@@ -121,6 +121,8 @@ class FightRunner:
         await self._archive_later()
 
     def _release(self) -> None:
+        if self.view is not None:
+            self.view.retire()
         for participant in self.participants:
             self.runtime.active_users.discard(participant.user_id)
 
@@ -160,6 +162,7 @@ class FightRunner:
             for p in fight.awaiting()
             if p.user_id is not None and self.missed[p.user_id] < AWAY_AFTER_MISSED_ROUNDS
         }
+        previous = self.view
         view = FightView(
             bot=self.bot,
             fight=fight,
@@ -170,6 +173,8 @@ class FightRunner:
         self.view = view
         deadline = int(self.clock() + self.turn_seconds) if waiting_for else None
         await self._edit(embed=self._round_embed(deadline), view=view)
+        if previous is not None:
+            previous.retire()  # the message shows the new buttons now; stale clicks are moot
 
         timed_out = False
         if waiting_for:
