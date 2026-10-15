@@ -659,6 +659,18 @@ class NotPartyLeaderError(YokaiError):
         )
 
 
+class LeaderCannotLeaveError(YokaiError):
+    """Raised when the party leader presses Leave instead of Cancel."""
+
+    title = "You're the leader"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The leader can't leave the party.",
+            user_hint="Press Cancel to close the lobby instead.",
+        )
+
+
 class PartyTooSmallError(YokaiError):
     """Raised when a lobby is started with fewer members than the mission needs."""
 

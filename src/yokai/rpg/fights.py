@@ -7,6 +7,7 @@ import contextlib
 import logging
 import random
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
@@ -355,6 +356,15 @@ class FightRunner:
 # ---------------------------------------------------------------------------- launching
 
 
+@dataclass(frozen=True, slots=True)
+class Entrant:
+    """A member about to fight: the Discord user, the name to show and their character."""
+
+    user: discord.abc.User
+    name: str
+    character: Character
+
+
 async def launch_fight(
     *,
     bot: YokaiBot,
@@ -371,7 +381,7 @@ async def launch_fight(
     promotion: Optional[PromotionRequest] = None,
     promotion_cooldown_s: int = 0,
 ) -> discord.Thread:
-    """Spend the attempts, open a thread and start the fight task.
+    """Spend the attempts, open a thread and start a solo fight task.
 
     With `promotion` the fight is a rank trial: the request is validated atomically with the
     attempt spend, and settlement promotes or starts the cooldown.
@@ -379,14 +389,81 @@ async def launch_fight(
     Raises NoAttemptsError or AlreadyFightingError (nothing changes), or ThreadUnavailableError
     (the attempts are refunded).
     """
-    if member.id in runtime.active_users:
+    return await _start_fight(
+        bot=bot,
+        runtime=runtime,
+        channel=channel,
+        entrants=[Entrant(member, member_name, character)],
+        thread_name=f"{mission.name} - {member_name}",
+        mission=mission,
+        today=today,
+        resets_ts=resets_ts,
+        base_attempts=base_attempts,
+        turn_seconds=turn_seconds,
+        promotion=promotion,
+        promotion_cooldown_s=promotion_cooldown_s,
+    )
+
+
+async def launch_party_fight(
+    *,
+    bot: YokaiBot,
+    runtime: RpgRuntime,
+    channel: discord.TextChannel,
+    entrants: Sequence[Entrant],
+    mission: Mission,
+    today: str,
+    resets_ts: int,
+    base_attempts: int,
+    turn_seconds: float,
+) -> discord.Thread:
+    """Charge every member's attempts at once, open one thread and start the shared fight.
+
+    The first entrant is the leader. It is all or nothing: if any member cannot pay (or is
+    already fighting) nothing changes and the matching error is raised; if the thread cannot
+    be created everyone is refunded.
+    """
+    leader = entrants[0]
+    return await _start_fight(
+        bot=bot,
+        runtime=runtime,
+        channel=channel,
+        entrants=entrants,
+        thread_name=f"{mission.name} - {leader.name}'s party",
+        mission=mission,
+        today=today,
+        resets_ts=resets_ts,
+        base_attempts=base_attempts,
+        turn_seconds=turn_seconds,
+    )
+
+
+async def _start_fight(
+    *,
+    bot: YokaiBot,
+    runtime: RpgRuntime,
+    channel: discord.TextChannel,
+    entrants: Sequence[Entrant],
+    thread_name: str,
+    mission: Mission,
+    today: str,
+    resets_ts: int,
+    base_attempts: int,
+    turn_seconds: float,
+    promotion: Optional[PromotionRequest] = None,
+    promotion_cooldown_s: int = 0,
+) -> discord.Thread:
+    user_ids = [entrant.user.id for entrant in entrants]
+    if len(set(user_ids)) != len(user_ids):
+        raise ValueError("A fight cannot list the same member twice.")
+    if any(user_id in runtime.active_users for user_id in user_ids):
         raise AlreadyFightingError()
-    runtime.active_users.add(member.id)
+    runtime.active_users.update(user_ids)
     try:
         fight_id = await runtime.store.begin_fight(
             mission_id=mission.id,
             kind=mission.kind,
-            user_ids=[member.id],
+            user_ids=user_ids,
             cost=mission.attempt_cost,
             today=today,
             base_attempts=base_attempts,
@@ -395,31 +472,35 @@ async def launch_fight(
             promotion=promotion,
         )
     except BaseException:
-        runtime.active_users.discard(member.id)
+        runtime.active_users.difference_update(user_ids)
         raise
     try:
         thread = await channel.create_thread(
-            name=f"{mission.name} - {member_name}"[:100],
+            name=thread_name[:100],
             type=discord.ChannelType.public_thread,
             auto_archive_duration=THREAD_ARCHIVE_MINUTES,
         )
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("Could not open a fight thread in channel %s: %s", channel.id, exc)
         await runtime.store.abort_fight(fight_id)
-        runtime.active_users.discard(member.id)
+        runtime.active_users.difference_update(user_ids)
         raise ThreadUnavailableError() from exc
-    with contextlib.suppress(discord.HTTPException):
-        await thread.add_user(member)
+    for entrant in entrants:
+        with contextlib.suppress(discord.HTTPException):
+            await thread.add_user(entrant.user)
     await runtime.store.set_fight_thread(fight_id, thread.id)
 
-    equipped = await runtime.gear.equipped_items(member.id)
-    loadout = compute_loadout(runtime.content, character.level, equipped)
+    participants = []
+    for entrant in entrants:
+        equipped = await runtime.gear.equipped_items(entrant.user.id)
+        loadout = compute_loadout(runtime.content, entrant.character.level, equipped)
+        participants.append(Participant(entrant.user.id, entrant.name, entrant.character, loadout))
     runner = FightRunner(
         bot=bot,
         runtime=runtime,
         fight_id=fight_id,
         mission=mission,
-        participants=[Participant(member.id, member_name, character, loadout)],
+        participants=participants,
         thread=thread,
         turn_seconds=turn_seconds,
         promotion_to=promotion.to_rank if promotion else None,

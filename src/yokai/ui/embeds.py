@@ -855,6 +855,44 @@ class EmbedFactory:
         )
 
     @classmethod
+    def party_lobby(
+        cls,
+        mission_name: str,
+        rank: str,
+        level: int,
+        cost: int,
+        members: Sequence[tuple[str, str, int]],
+        min_party: int,
+        max_party: int,
+        expires_ts: int,
+        is_raid: bool,
+        note: Optional[str] = None,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """The open lobby: the mission, who has joined (mention, rank, level) and when it closes."""
+        seats = [
+            f"{number}. {mention}{SEP}rank {escape_md(member_rank)}{SEP}level {member_level}"
+            for number, (mention, member_rank, member_level) in enumerate(members, start=1)
+        ]
+        need = f"{min_party} to {max_party}" if min_party > 1 else f"up to {max_party}"
+        fields: list[FieldSpec] = [(f"Party ({len(members)}/{max_party})", "\n".join(seats), False)]
+        if note:
+            fields.append(("Heads up", note, False))
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} {'Raid' if is_raid else 'Party'} lobby",
+            description=(
+                f"**{escape_md(clamp(mission_name, 60))}**{SEP}rank {escape_md(rank)}"
+                f"{SEP}level {level}{SEP}{cost} attempts each\n"
+                f"Needs {need} members. Press Join to take a seat; the leader presses Start. "
+                f"This lobby closes <t:{expires_ts}:R>."
+            ),
+            color=COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            fields=fields,
+        )
+
+    @classmethod
     def rank_status(
         cls,
         rank: str,

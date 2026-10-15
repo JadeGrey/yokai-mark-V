@@ -26,15 +26,17 @@ from yokai.errors import (
 )
 from yokai.rpg import guild
 from yokai.rpg.content import Content
-from yokai.rpg.fights import launch_fight
+from yokai.rpg.fights import Entrant, launch_fight, launch_party_fight
 from yokai.rpg.gear import compute_loadout, durability_percent
 from yokai.rpg.models import SLOTS, Character, ItemInstance, Mission
+from yokai.rpg.party import Lobby, PartyMember, check_member, screen_members
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import format_stats, stats_at_level
 from yokai.rpg.store import PromotionRequest
 from yokai.textutil import escape_md
 from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory, send
+from yokai.ui.party_views import PartyLobbyView
 from yokai.ui.rpg_views import ConfirmView, GuildLeaderboardView, PromotionView
 
 if TYPE_CHECKING:
@@ -71,6 +73,75 @@ def _promotion(content: Content, rank_id: str) -> tuple[Optional[tuple[str, int]
     if upcoming is None:
         return None, True
     return (upcoming.id, upcoming.min_level), False
+
+
+class _LobbyHost:
+    """The cog's side of a party lobby: eligibility for joiners and the final launch."""
+
+    def __init__(
+        self,
+        cog: RpgCog,
+        channel: discord.TextChannel,
+        mission: Mission,
+        today: str,
+        resets_ts: int,
+    ) -> None:
+        self.cog = cog
+        self.channel = channel
+        self.mission = mission
+        self.today = today
+        self.resets_ts = resets_ts
+        self.users: dict[int, discord.abc.User] = {}
+
+    def _rules(self) -> dict:  # type: ignore[type-arg]
+        runtime = self.cog._runtime()
+        return {
+            "today": self.today,
+            "base_attempts": self.cog.bot.config.rpg_base_attempts,
+            "streak_rules": runtime.content.balance.streak,
+            "resets_ts": self.resets_ts,
+            "fighting": runtime.active_users,
+        }
+
+    async def admit(self, user: discord.abc.User) -> tuple[PartyMember, Optional[str]]:
+        runtime = self.cog._runtime()
+        character = await runtime.store.get_character(user.id)
+        if character is None:
+            raise NoCharacterError(own=True)
+        check_member(runtime.content, character, self.mission, **self._rules())
+        self.users[user.id] = user
+        worn = self.cog._worn_gear_lines(
+            runtime.content, await runtime.gear.equipped_items(user.id)
+        )
+        heads_up = ("Your gear is worn: " + "; ".join(worn) + ".") if worn else None
+        member = PartyMember(user.id, _display_name(user), character.rank, character.level)
+        return member, heads_up
+
+    async def rejected(self, lobby: Lobby) -> dict[int, YokaiError]:
+        runtime = self.cog._runtime()
+        characters = {uid: await runtime.store.get_character(uid) for uid in lobby.members}
+        _, rejected = screen_members(runtime.content, characters, self.mission, **self._rules())
+        return rejected
+
+    async def launch(self, lobby: Lobby) -> discord.Thread:
+        runtime = self.cog._runtime()
+        entrants = []
+        for user_id, member in lobby.members.items():
+            character = await runtime.store.get_character(user_id)
+            if character is None:
+                raise NoCharacterError(own=False)
+            entrants.append(Entrant(self.users[user_id], member.name, character))
+        return await launch_party_fight(
+            bot=self.cog.bot,
+            runtime=runtime,
+            channel=self.channel,
+            entrants=entrants,
+            mission=self.mission,
+            today=self.today,
+            resets_ts=self.resets_ts,
+            base_attempts=self.cog.bot.config.rpg_base_attempts,
+            turn_seconds=self.cog.bot.config.rpg_turn_seconds,
+        )
 
 
 class RpgCog(commands.Cog, name="Guild"):
@@ -218,7 +289,7 @@ class RpgCog(commands.Cog, name="Guild"):
                 )
                 rows.append(
                     (
-                        mission.name,
+                        f"Raid: {mission.name}" if mission.kind == "raid" else mission.name,
                         mission.attempt_cost,
                         mission.top_level,
                         reward.xp,
@@ -239,8 +310,13 @@ class RpgCog(commands.Cog, name="Guild"):
     # ------------------------------------------------------------------ /guild mission
 
     @guild_group.command(name="mission", description="Take a mission from today's board.")
-    @app_commands.describe(mission="Which mission to run")
-    async def mission(self, interaction: discord.Interaction, mission: str) -> None:
+    @app_commands.describe(
+        mission="Which mission to run",
+        party="Open a lobby so others can join (raids always do)",
+    )
+    async def mission(
+        self, interaction: discord.Interaction, mission: str, party: Optional[bool] = None
+    ) -> None:
         """Everything that can be refused is checked before deferring, so refusals are private."""
         runtime = self._runtime()
         content = runtime.content
@@ -277,6 +353,10 @@ class RpgCog(commands.Cog, name="Guild"):
             await self._send_domain_error(interaction, ThreadUnavailableError())
             return
 
+        if chosen.kind == "raid" or party:
+            await self._open_lobby(interaction, channel, chosen, character, today, resets_ts)
+            return
+
         warnings = self._worn_gear_lines(content, await runtime.gear.equipped_items(user.id))
         if warnings:
             view = ConfirmView(
@@ -290,6 +370,24 @@ class RpgCog(commands.Cog, name="Guild"):
             await send(interaction, embed=warning, view=view, ephemeral=True)
             return
         await self._launch(interaction, channel, chosen, character, today, resets_ts)
+
+    async def _open_lobby(
+        self,
+        interaction: discord.Interaction,
+        channel: discord.TextChannel,
+        mission: Mission,
+        character: Character,
+        today: str,
+        resets_ts: int,
+    ) -> None:
+        """Post a public lobby with the leader seated; nothing is charged until Start."""
+        user = interaction.user
+        lobby = Lobby(mission, leader_id=user.id)
+        lobby.add(PartyMember(user.id, _display_name(user), character.rank, character.level))
+        host = _LobbyHost(self, channel, mission, today, resets_ts)
+        host.users[user.id] = user
+        view = PartyLobbyView(self.bot, lobby, host)
+        view.message = await send(interaction, embed=view.render(), view=view)
 
     async def _launch(
         self,
@@ -353,7 +451,8 @@ class RpgCog(commands.Cog, name="Guild"):
                 continue
             if needle and needle not in mission.name.casefold():
                 continue
-            label = f"{mission.name} (rank {mission.rank}, cost {mission.attempt_cost})"
+            kind = "raid, " if mission.kind == "raid" else ""
+            label = f"{mission.name} ({kind}rank {mission.rank}, cost {mission.attempt_cost})"
             choices.append(app_commands.Choice(name=label[:100], value=mission.id))
         return choices[:MAX_AUTOCOMPLETE]
 

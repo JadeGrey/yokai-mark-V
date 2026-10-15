@@ -19,6 +19,8 @@ CHECKED = [
     "cogs/rpg.py",
     "cogs/gear.py",
     "ui/lottery_views.py",
+    "ui/party_views.py",
+    "ui/rpg_views.py",
     "ui/table_common.py",
     "ui/table_views.py",
     "ui/duel_views.py",
