@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from yokai.rpg.content import Content, load_content
 from yokai.rpg.gear_store import GearStore
 from yokai.rpg.store import RpgStore
+from yokai.rpg.trade import TradeSession
 
 if TYPE_CHECKING:
     from yokai.storage.db import Database
@@ -21,7 +22,7 @@ class RpgRuntime:
 
     `active_users` is the set of members who are mid-fight (not persisted: a restart clears it,
     and the store refunds the attempts of fights that were left open). `tasks` keeps running
-    fight tasks alive.
+    fight tasks alive. `trading` maps each member with an open trade to that session.
     """
 
     content: Content
@@ -29,6 +30,7 @@ class RpgRuntime:
     gear: GearStore
     active_users: set[int] = field(default_factory=set)
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
+    trading: dict[int, TradeSession] = field(default_factory=dict)
 
     @classmethod
     def create(cls, db: Database, content_dir: Path | str) -> RpgRuntime:

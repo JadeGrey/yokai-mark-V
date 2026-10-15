@@ -826,6 +826,24 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             ),
         ),
         (
+            "Guild (trade in progress)",
+            EmbedFactory.trade_session(
+                [
+                    (
+                        "Aiko",
+                        "<@42>",
+                        ["`#12` **Oni Blade**  ·  uncommon  ·  lvl 12  ·  85%"],
+                        0,
+                        True,
+                    ),
+                    ("Ben", "<@77>", [], 400, False),
+                ],
+                1_900_000_000,
+                False,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
             "Guild (raid lobby)",
             EmbedFactory.party_lobby(
                 "Bandit Fortress",

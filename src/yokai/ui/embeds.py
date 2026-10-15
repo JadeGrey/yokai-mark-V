@@ -855,6 +855,40 @@ class EmbedFactory:
         )
 
     @classmethod
+    def trade_session(
+        cls,
+        sides: Sequence[tuple[str, str, Sequence[str], int, bool]],
+        expires_ts: int,
+        is_gift: bool,
+        note: Optional[str] = None,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """An open trade. Each side is (name, mention, item lines, Renown offered, confirmed)."""
+        fields: list[FieldSpec] = []
+        for name, mention, lines, renown, confirmed in sides:
+            body = list(lines)
+            if renown:
+                body.append(f"**{renown:,}** Renown")
+            listing = "\n".join(body) if body else "Nothing yet"
+            value = f"{mention}\n{listing}"
+            tag = " (confirmed)" if confirmed else ""
+            fields.append((f"{escape_md(clamp(name, 30))}{tag}", clamp(value, 1000), True))
+        if note:
+            fields.append(("Heads up", clamp(note, 1000), False))
+        kind = "a gift" if is_gift else "a trade"
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} Trade",
+            description=(
+                f"This is {kind} in progress. Add items or Renown, then both press Confirm. "
+                f"Changing an offer clears the confirmations. Closes <t:{expires_ts}:R>."
+            ),
+            color=COLOR_BRAND,
+            context="Guild",
+            bot_avatar_url=bot_avatar_url,
+            fields=fields,
+        )
+
+    @classmethod
     def party_lobby(
         cls,
         mission_name: str,

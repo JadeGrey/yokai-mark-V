@@ -6,7 +6,7 @@ import pytest
 from discord import app_commands
 
 from tests.test_bot_wiring import make_bot
-from yokai.cogs import admin, economy, gear, meta, owner, rpg
+from yokai.cogs import admin, economy, gear, meta, owner, rpg, trade
 
 
 async def _loaded_tree() -> app_commands.CommandTree:
@@ -63,7 +63,7 @@ def test_admin_commands_never_earn_the_music_reward() -> None:
 
 async def _rpg_tree() -> app_commands.CommandTree:
     bot = make_bot()
-    for module in (economy, admin, rpg, gear):
+    for module in (economy, admin, rpg, gear, trade):
         await module.setup(bot)
     return bot.tree
 
@@ -76,6 +76,9 @@ async def test_the_guild_rpg_commands_have_the_agreed_shape() -> None:
     card = tree.get_command("card")
     assert isinstance(guild, app_commands.Group) and isinstance(gear_group, app_commands.Group)
     assert isinstance(card, app_commands.Command)
+    trade_command = tree.get_command("trade")
+    assert isinstance(trade_command, app_commands.Command)
+    assert [p.name for p in trade_command.parameters] == ["member"]
     assert {c.name for c in guild.commands} == {"join", "board", "mission", "rank", "leaderboard"}
     assert {c.name for c in gear_group.commands} == {
         "inventory", "equip", "unequip", "repair", "shop", "buy", "sell",

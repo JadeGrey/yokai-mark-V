@@ -212,6 +212,7 @@ class YokaiBot(commands.Bot):
         if self.rpg is not None:
             await self.load_extension("yokai.cogs.rpg")
             await self.load_extension("yokai.cogs.gear")
+            await self.load_extension("yokai.cogs.trade")
 
         # Sync commands directly to the single target guild for instant availability
         guild_obj = discord.Object(id=self.config.guild_id)

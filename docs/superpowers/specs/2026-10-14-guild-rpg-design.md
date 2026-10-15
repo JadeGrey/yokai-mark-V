@@ -508,3 +508,19 @@ share; how many missions of each rank appear per day.
 - **Not included:** parties skip the private worn-gear confirmation (a joiner gets a heads-up),
   and there is no matchmaking or invite list. Trading is phase 6.
 
+**Phase 6 (trading) added or changed these details:**
+
+- **Session:** `/trade member` posts one public message with Add item, Remove item, Set Renown,
+  Confirm and Cancel. The session is in-memory (`rpg/trade.py`, pure and tested alone) and lives in
+  `RpgRuntime.trading`, which also stops a member from holding two trades. Items are chosen in a
+  private paged picker and Renown in a modal. Up to 6 items per side; the session lasts 5 minutes.
+- **Commit:** `GearStore.commit_trade` runs in one transaction and re-checks that neither member
+  is in a fight (the in-memory set and open `rpg_fights` rows), both have characters, every item
+  still belongs to its giver and is unequipped, both can cover their Renown, and nobody ends over
+  the inventory cap. Any failure rolls everything back. An item that went stale is dropped from the
+  offer, the confirmations are cleared, and the members are told why.
+- **Ledger:** Renown moves through the wallet ledger as `rpg_gift` when exactly one side offers
+  anything, otherwise `rpg_trade`. There is no fee. Every completed trade is also written to the new
+  `rpg_trades` table (schema v13) as JSON for dispute resolution.
+- **Gifts** are ordinary trades with one side empty; the recipient still has to press Confirm.
+

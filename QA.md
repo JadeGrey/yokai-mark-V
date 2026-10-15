@@ -66,6 +66,9 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **56** | **Party Lobby** | • `/guild mission mission:<x> party:true` posts a public lobby with you seated; others press **Join**, **Leave** works for members, the leader can't leave but can **Cancel**.<br>• Joining checks rank, attempts and that you aren't fighting, and a joiner with worn gear gets a private heads-up.<br>• Only the leader can Start or Cancel; the lobby holds at most four and its buttons disable when full.<br>• After three minutes it says it expired and nobody is charged. | 1. Open a lobby, join from a second account (and a third that is a lower rank or out of attempts).<br>2. Try Start from a non-leader and Leave as the leader.<br>3. Let one lobby expire. | `Pending Owner Run` |
 | **57** | **Party Fight** | • Start charges every member's attempts together, opens one thread and adds everyone.<br>• All members choose actions each round; a member who is away doesn't stall the others.<br>• On a win each member gets their own XP, Renown and a separate drop roll; on a loss everyone's gear wears and nobody is paid.<br>• If a member used their attempts elsewhere before Start, they are removed (named in the lobby) and the leader presses Start again. | 1. Start a party mission with two or three accounts.<br>2. Have one account stay idle for a few rounds.<br>3. Check each member's `/card`, Renown and `/gear inventory` afterwards.<br>4. Spend a member's attempts in another channel before Start. | `Pending Owner Run` |
 | **58** | **Raids** | • From rank C the board shows `Raid:` entries; a raid always opens a lobby and Start needs two members.<br>• A raid has three stages (HP carries over), costs 3 or 4 attempts and a win drops better gear.<br>• A three-member party usually wins; two struggle and four have it easiest. | 1. Open `/guild board` as a rank C+ member.<br>2. Open a raid lobby and try Start alone.<br>3. Run a raid with three accounts. | `Pending Owner Run` |
+| **59** | **Trade Session** | • `/trade @member` posts a public trade showing both offers; only the two members can press its buttons.<br>• **Add item** opens a private picker of your unequipped gear that isn't already offered; **Remove item** and **Set Renown** (0 withdraws it) work; you can't offer more Renown than you have.<br>• Any change clears both confirmations (the "(confirmed)" tags disappear).<br>• Trading with yourself, a bot, someone who hasn't joined, or someone already in a trade or a fight is refused privately. | 1. Open a trade between two accounts.<br>2. Add and remove items, set Renown, confirm from one side then change the offer.<br>3. Press buttons from a third account.<br>4. Try the refused cases. | `Pending Owner Run` |
+| **60** | **Trade Completion** | • When both confirm, gear and Renown swap at once; the result lists what each side received. Durability travels with the gear.<br>• A gift (one side empty) needs the receiver to press Confirm too.<br>• Cancel, or five idle minutes, closes the trade with nothing moved and frees both members to start another. | 1. Do a gear-for-gear, a gear-for-Renown and a gift trade.<br>2. Check `/gear inventory` and Renown on both accounts.<br>3. Cancel one and let another expire. | `Pending Owner Run` |
+| **61** | **Trade Safety** | • Equipping, selling or giving away an offered item before the second Confirm removes it from the offer with a clear message and nothing moves.<br>• Offering more Renown than you hold at the moment of confirming, or a trade that would exceed the 60-item inventory, is refused and names who is short.<br>• Starting a guild fight blocks trading until it ends. | 1. Offer an item, then equip or sell it in another window before confirming.<br>2. Spend your Renown after setting an offer.<br>3. Start a mission while a trade is open. | `Pending Owner Run` |
 
 ---
 
@@ -73,11 +76,11 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2681 passed, 1 skipped, 107 warnings in 243.11s
+# Result: 2736 passed, 1 skipped, 107 warnings in 186.36s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 331 files already formatted
+# Result: 336 files already formatted
 ```
