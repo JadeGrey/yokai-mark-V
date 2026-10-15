@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ file or "Log" }} - Yokai admin{% endblock %}
+{% block content %}
+  <p class="crumb"><a href="/m/logs">All logs</a></p>
+  {% if not result %}
+    <h1 class="page-title">No such log</h1>
+    <p class="lede">{{ problem }}</p>
+  {% else %}
+    <h1 class="page-title">{{ file }}</h1>
+    <p class="lede">Newest first. {{ result.total|number }} {{ 'entry' if result.total == 1 else 'entries' }}{% if result.level != 'ALL' or result.query %} match{% endif %}.{% if result.truncated_file %} Only the last 8 MB of this file is read.{% endif %}</p>
+    <form class="filters search" method="get" action="/m/logs/view">
+      <input type="hidden" name="file" value="{{ file }}">
+      <label>Level (this and above)
+        <select name="level">
+          <option value=""{% if result.level == 'ALL' %} selected{% endif %}>All</option>
+          {% for lv in levels %}<option value="{{ lv }}"{% if result.level == lv %} selected{% endif %}>{{ lv|capitalize }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Search text<input name="q" value="{{ result.query }}" maxlength="100" autocomplete="off"></label>
+      <button type="submit" class="btn">Filter</button>
+      {% if result.level != 'ALL' or result.query %}<a href="/m/logs/view?file={{ file|urlencode }}">Clear</a>{% endif %}
+    </form>
+    {% if result.entries %}
+      {% for e in result.entries %}
+      <article class="log-entry" data-level="{{ e.level or 'NONE' }}">
+        <pre>{{ e.text }}</pre>
+      </article>
+      {% endfor %}
+    {% else %}
+      <p class="empty">{% if result.total == 0 and result.level == 'ALL' and not result.query %}This file is empty.{% else %}No entries match.{% endif %}</p>
+    {% endif %}
+    <p class="pager">
+      {% if has_newer %}<a href="/m/logs/view?file={{ file|urlencode }}&amp;level={{ result.level if result.level != 'ALL' else '' }}&amp;q={{ result.query|urlencode }}&amp;page={{ result.page - 1 }}">Newer</a>{% endif %}
+      {% if has_older %}<a href="/m/logs/view?file={{ file|urlencode }}&amp;level={{ result.level if result.level != 'ALL' else '' }}&amp;q={{ result.query|urlencode }}&amp;page={{ result.page + 1 }}">Older</a>{% endif %}
+    </p>
+  {% endif %}
+{% endblock %}

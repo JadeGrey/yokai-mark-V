@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Live tail - Yokai admin{% endblock %}
+{% block content %}
+  <p class="crumb"><a href="/m/logs">All logs</a></p>
+  <h1 class="page-title">Live tail</h1>
+  <p class="lede">The current <span class="mono">yokai.log</span>, newest line on top. Reload the page to clear it.</p>
+  {% if problem %}
+    <p class="empty">{{ problem }}</p>
+  {% endif %}
+  {% set paused = false %}
+  {% include "logs/_poller.html" %}
+  <div id="tail-lines" class="tail">{% include "logs/_lines.html" %}</div>
+{% endblock %}

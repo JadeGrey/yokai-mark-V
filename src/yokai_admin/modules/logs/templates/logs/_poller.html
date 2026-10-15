@@ -1,0 +1,11 @@
+{% if paused %}
+<div id="tail-poller" class="confirm-row">
+  <span class="hint">Paused.</span>
+  <button type="button" class="btn" hx-get="/m/logs/live/poll?pos={{ pos }}&amp;ino={{ ino }}" hx-target="#tail-poller" hx-swap="outerHTML">Resume</button>
+</div>
+{% else %}
+<div id="tail-poller" class="confirm-row" hx-get="/m/logs/live/poll?pos={{ pos }}&amp;ino={{ ino }}" hx-trigger="every 2s" hx-target="#tail-poller" hx-swap="outerHTML">
+  <span class="hint">{% if problem %}{{ problem }}{% else %}Live: checking for new lines every 2 seconds.{% endif %}</span>
+  <button type="button" class="btn plain" hx-get="/m/logs/live/pause?pos={{ pos }}&amp;ino={{ ino }}" hx-target="#tail-poller" hx-swap="outerHTML" hx-trigger="click" hx-sync="#tail-poller:replace">Pause</button>
+</div>
+{% endif %}

@@ -1,0 +1,3 @@
+{% if items %}<div id="tail-lines" hx-swap-oob="afterbegin">{% include "logs/_lines.html" %}</div>{% endif %}
+{% set paused = false %}
+{% include "logs/_poller.html" %}

@@ -17,9 +17,12 @@ __pycache__/
 dist/
 build/
 
-# Application storage & logs
-data/
-logs/
+# Application storage & logs (anchored: a bare `logs/` also matched the panel's source
+# package src/yokai_admin/modules/logs/)
+/data/
+/logs/
+/src/data/
+/src/logs/
 *.db
 *.sqlite
 *.sqlite3
