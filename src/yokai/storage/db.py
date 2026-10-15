@@ -35,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -284,6 +284,39 @@ CREATE TABLE IF NOT EXISTS rpg_fights (
 CREATE INDEX IF NOT EXISTS idx_rpg_fights_status ON rpg_fights(status);
 """
 
+MIGRATION_V11 = """
+CREATE TABLE IF NOT EXISTS rpg_items (
+  id INTEGER PRIMARY KEY,
+  owner_id INTEGER NOT NULL,
+  content_id TEXT NOT NULL,
+  rolls TEXT NOT NULL,
+  durability INTEGER NOT NULL,
+  created_ts INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rpg_items_owner ON rpg_items(owner_id);
+
+CREATE TABLE IF NOT EXISTS rpg_equipment (
+  user_id INTEGER NOT NULL,
+  slot TEXT NOT NULL,
+  item_id INTEGER NOT NULL UNIQUE,
+  PRIMARY KEY (user_id, slot)
+);
+
+CREATE TABLE IF NOT EXISTS rpg_shops (
+  day_key TEXT PRIMARY KEY,
+  item_ids TEXT NOT NULL,
+  created_ts INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rpg_shop_purchases (
+  user_id INTEGER NOT NULL,
+  day_key TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, day_key)
+);
+"""
+
 RPG_CHARACTER_V10_COLUMNS = (
     ("attempts_used", "INTEGER NOT NULL DEFAULT 0"),
     ("attempts_day", "TEXT"),
@@ -414,6 +447,13 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 10;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 10.")
+
+        if version < 11:
+            logger.info("Applying SQLite migration v11...")
+            await self.conn.executescript(MIGRATION_V11)
+            await self.conn.execute("PRAGMA user_version = 11;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 11.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).
@@ -658,6 +698,29 @@ class Database:
         assert wallet is not None
         await self._insert_transaction(user_id, amount, reason, None, wallet.balance, now)
         return wallet.balance
+
+    async def debit_within_transaction(
+        self, user_id: int, amount: int, reason: str, welcome_bonus: int
+    ) -> int:
+        """Take Renown as part of the caller's open `transaction()`; returns the new balance.
+
+        Raises InsufficientFundsError (the caller's transaction then rolls back) if the wallet
+        cannot cover it. Like the credit twin, it takes no lock and does not commit.
+        """
+        if amount <= 0:
+            raise ValueError("debit_within_transaction amount must be positive")
+        now = int(time.time())
+        await self._ensure_wallet(user_id, welcome_bonus, now)
+        wallet = await self.get_wallet(user_id)
+        assert wallet is not None
+        if wallet.balance < amount:
+            raise InsufficientFundsError(balance=wallet.balance, amount=amount)
+        await self.conn.execute(
+            "UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND balance >= ?;",
+            (amount, user_id, amount),
+        )
+        await self._insert_transaction(user_id, -amount, reason, None, wallet.balance - amount, now)
+        return wallet.balance - amount
 
     async def _ensure_wallet(self, user_id: int, welcome_bonus: int, now: int) -> None:
         """Create a wallet with the welcome bonus if `user_id` has none yet (idempotent).

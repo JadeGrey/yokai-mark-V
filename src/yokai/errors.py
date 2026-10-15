@@ -454,6 +454,102 @@ class ThreadUnavailableError(YokaiError):
         )
 
 
+class GearNotFoundError(YokaiError):
+    """Raised when an item is not one the member owns."""
+
+    title = "No such item"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You don't have that item.",
+            user_hint="Run /gear inventory to see what you own.",
+        )
+
+
+class GearLevelTooLowError(YokaiError):
+    """Raised when a member tries to wear gear above their level."""
+
+    title = "Level too low"
+
+    def __init__(self, item_name: str, required: int, level: int) -> None:
+        super().__init__(
+            f"{item_name} needs level {required} and you are level {level}.",
+            user_hint="You can keep it, trade it later, or sell it.",
+        )
+
+
+class ItemEquippedError(YokaiError):
+    """Raised when an equipped item is sold or traded."""
+
+    title = "Item is equipped"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That item is equipped.",
+            user_hint="Run /gear unequip first.",
+        )
+
+
+class GearLockedError(YokaiError):
+    """Raised when gear is changed during a fight."""
+
+    title = "Gear is locked"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You can't change your gear while you're in a fight.",
+            user_hint="Finish the fight in its thread first.",
+        )
+
+
+class InventoryFullError(YokaiError):
+    """Raised when an item cannot be added because the inventory is full."""
+
+    title = "Inventory full"
+
+    def __init__(self, cap: int) -> None:
+        super().__init__(
+            f"You already hold {cap} items.",
+            user_hint="Sell or trade something with /gear sell first.",
+        )
+
+
+class ShopLimitError(YokaiError):
+    """Raised when a member has used their daily shop purchases."""
+
+    title = "Shop limit reached"
+
+    def __init__(self, cap: int) -> None:
+        super().__init__(
+            f"You can buy {cap} items from the guild shop per day, and you've bought them.",
+            user_hint="The shop restocks and your limit resets at the next guild day.",
+        )
+
+
+class NotInStockError(YokaiError):
+    """Raised when an item is not in today's guild shop."""
+
+    title = "Not in stock"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That item isn't in today's guild shop.",
+            user_hint="Run /gear shop to see today's stock.",
+        )
+
+
+class NothingToRepairError(YokaiError):
+    """Raised when there is nothing damaged to repair."""
+
+    title = "Nothing to repair"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "None of that gear is damaged.",
+            user_hint="Worn gear shows its durability in /gear inventory.",
+        )
+
+
 class NoCharacterError(YokaiError):
     """Raised when someone looks up a guild character that does not exist."""
 

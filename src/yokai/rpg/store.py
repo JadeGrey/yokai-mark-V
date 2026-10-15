@@ -11,6 +11,13 @@ import aiosqlite
 
 from yokai.errors import NoCharacterError
 from yokai.rpg import guild
+from yokai.rpg.gear_store import (
+    DropResult,
+    GearSettlement,
+    GearWear,
+    add_drops,
+    apply_wear,
+)
 from yokai.rpg.models import Character, StreakRules, XpCurve
 
 if TYPE_CHECKING:
@@ -37,6 +44,8 @@ class Settlement:
     level_before: int
     level_after: int
     xp_now: int
+    wear: tuple[GearWear, ...] = ()
+    drops: tuple[DropResult, ...] = ()
 
     @property
     def levels_gained(self) -> int:
@@ -186,6 +195,8 @@ class RpgStore:
         level_cap: int,
         xp_curve: XpCurve,
         welcome_bonus: int,
+        gear: Optional[GearSettlement] = None,
+        now: Optional[int] = None,
     ) -> Optional[dict[int, Settlement]]:
         """Close an open fight and pay the participants, once.
 
@@ -214,8 +225,15 @@ class RpgStore:
                         "WHERE user_id = ?;",
                         (user_id,),
                     )
+                    wear = await self._wear(conn, user_id, gear, won=False)
                     results[user_id] = Settlement(
-                        user_id, 0, 0, character.level, character.level, character.xp
+                        user_id,
+                        0,
+                        0,
+                        character.level,
+                        character.level,
+                        character.xp,
+                        wear=tuple(wear),
                     )
                     continue
                 reward = rewards.get(user_id, guild.Reward(0, 0))
@@ -231,10 +249,39 @@ class RpgStore:
                     await self._db.credit_within_transaction(
                         user_id, reward.renown, "rpg_reward", welcome_bonus
                     )
+                wear = await self._wear(conn, user_id, gear, won=True)
+                dropped: list[DropResult] = []
+                if gear is not None and gear.drops.get(user_id):
+                    dropped = await add_drops(
+                        conn,
+                        self._db,
+                        user_id,
+                        gear.drops[user_id],
+                        gear,
+                        welcome_bonus,
+                        int(time.time()) if now is None else now,
+                    )
                 results[user_id] = Settlement(
-                    user_id, reward.xp, reward.renown, character.level, level, xp
+                    user_id,
+                    reward.xp,
+                    reward.renown,
+                    character.level,
+                    level,
+                    xp,
+                    wear=tuple(wear),
+                    drops=tuple(dropped),
                 )
         return results
+
+    @staticmethod
+    async def _wear(
+        conn: aiosqlite.Connection, user_id: int, gear: Optional[GearSettlement], *, won: bool
+    ) -> list[GearWear]:
+        """Wear down the member's equipped gear for a finished fight (a loss wears more)."""
+        if gear is None:
+            return []
+        points = gear.rules.win_wear if won else gear.rules.loss_wear
+        return await apply_wear(conn, user_id, points, gear.items)
 
     async def abort_fight(self, fight_id: int) -> bool:
         """Cancel an open fight and refund its attempts. False if it was not open."""
@@ -279,6 +326,7 @@ class RpgStore:
             boards = await conn.execute(
                 "DELETE FROM rpg_boards WHERE created_ts < ?;", (older_than_ts,)
             )
+            await conn.execute("DELETE FROM rpg_shops WHERE created_ts < ?;", (older_than_ts,))
             fights = await conn.execute(
                 "DELETE FROM rpg_fights WHERE ts < ? AND status != ?;",
                 (older_than_ts, FIGHT_OPEN),

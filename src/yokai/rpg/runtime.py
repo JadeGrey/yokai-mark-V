@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from yokai.rpg.content import Content, load_content
+from yokai.rpg.gear_store import GearStore
 from yokai.rpg.store import RpgStore
 
 if TYPE_CHECKING:
@@ -25,10 +26,11 @@ class RpgRuntime:
 
     content: Content
     store: RpgStore
+    gear: GearStore
     active_users: set[int] = field(default_factory=set)
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     @classmethod
     def create(cls, db: Database, content_dir: Path | str) -> RpgRuntime:
         """Load and validate the content files, then bind the store. Raises ContentError."""
-        return cls(content=load_content(content_dir), store=RpgStore(db))
+        return cls(content=load_content(content_dir), store=RpgStore(db), gear=GearStore(db))
