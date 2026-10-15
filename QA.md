@@ -1,6 +1,6 @@
 # Yokai Mark V — Manual QA Checklist
 
-This document details the 43 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
+This document details the 51 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
 
 ---
 
@@ -51,6 +51,14 @@ This document details the 43 manual verification procedures to validate Yokai Ma
 | **41** | **Attempts and Streak** | • Spending all your attempts makes `/guild mission` answer privately with "Out of attempts" and a reset time, before any thread is created.<br>• After the guild-day rollover the attempts are full again and the board has changed.<br>• Playing on consecutive days shows a streak on `/guild board`; after 3 days it adds +1 attempt. | 1. Run missions until attempts run out and try one more.<br>2. Return after midnight (guild time) and run `/guild board`.<br>3. Over several days watch the streak line. | `Pending Owner Run` |
 | **42** | **Restart Mid-Fight** | • Restarting the bot during a fight cancels it and refunds the attempts on startup.<br>• The old thread's buttons no longer do anything and nothing is paid. | 1. Start a mission and note your attempts.<br>2. Stop and restart the bot with `.\run.ps1`.<br>3. Run `/guild board`: the attempts are back. | `Pending Owner Run` |
 | **43** | **Thread Permissions in Diag** | • `/admin diag` shows a "Guild RPG" line with mission and enemy counts and `threads: ok`.<br>• Without the Create Public Threads permission the line says `threads: MISSING` and the embed turns amber. | 1. Run `/admin diag` as the owner.<br>2. Remove the bot's Create Public Threads permission in a test channel setup, re-run, then restore it. | `Pending Owner Run` |
+| **44** | **Guild Shop** | • `/gear shop` is private and lists five sections ("Level 1+ gear" up to "Level 52+ gear") with three items each, their price and stats, your Renown and `3/3` purchases left.<br>• Everyone sees the same stock on the same day; it changes at the guild-day rollover. | 1. Run `/gear shop` with two accounts and compare.<br>2. Check the countdown text and the purchase counter. | `Pending Owner Run` |
+| **45** | **Buying** | • `/gear buy` autocompletes today's stock; buying takes the price from `/balance` and adds the item to `/gear inventory`.<br>• A fourth purchase in a day says "Shop limit reached"; with too little Renown it says "Not enough Renown ... to spend" and nothing changes. | 1. Buy a cheap item.<br>2. Buy two more, then try a fourth.<br>3. Try buying something you can't afford (as a poorer account). | `Pending Owner Run` |
+| **46** | **Equip and Set Bonuses** | • `/gear equip` autocompletes only items you can wear now; equipping shows the slot, the item's stats and any set bonus (for example `Oni (2): +8% Attack`).<br>• `/card` shows each slot with durability, a "Set bonuses" field, and stats that include the gear.<br>• Gear above your level is refused with "Level too low".<br>• `/gear unequip` empties a slot. | 1. Equip two items of the same tag and check `/card`.<br>2. Try equipping a higher-level item.<br>3. Unequip a slot. | `Pending Owner Run` |
+| **47** | **Loot and Wear** | • Winning a mission can add a "Loot" field to the result (bosses almost always).<br>• Equipped gear loses durability after every fight; the result's "Gear" field warns when an item crosses 50%, 25% or 0%.<br>• A broken item shows "broken" on `/card` and stops counting for stats and set bonuses. | 1. Wear gear and run several missions.<br>2. Read the result embeds and `/gear inventory`.<br>3. Check `/card` after an item breaks. | `Pending Owner Run` |
+| **48** | **Low-Gear Warning** | • Starting a mission with gear at 25% or below (or broken) shows a private "Your gear is worn" message with Start anyway and Cancel buttons and spends no attempt until you confirm.<br>• Only you can press them. | 1. Wear an item until it is at 25% or lower.<br>2. Run `/guild mission`.<br>3. Press Cancel, repeat, press Start anyway. | `Pending Owner Run` |
+| **49** | **Repair and Sell** | • `/gear repair` (no argument) repairs everything damaged for one payment; `/gear repair item:` repairs one.<br>• With too little Renown nothing is repaired.<br>• `/gear sell` pays 30% of the price; an equipped item can't be sold.<br>• Equip, unequip, repair and sell are refused during a fight with "Gear is locked". | 1. Repair with plenty of Renown, then with little.<br>2. Sell a spare item and try to sell a worn one.<br>3. Start a mission and try `/gear equip` in the middle. | `Pending Owner Run` |
+| **50** | **Skills in Fights** | • After wearing four pieces of one tag, the fight message gains a **Skill** button; it opens a private picker with the tag's skill (and an epic weapon's skill).<br>• Skills with several possible targets ask for one; used skills go on cooldown for a few rounds. | 1. Wear four matching pieces (an admin can `/admin rpg grant` them).<br>2. Start a mission and press Skill.<br>3. Use it twice in a row and see the cooldown message. | `Pending Owner Run` |
+| **51** | **Admin RPG Tools** | • `/admin rpg grant`, `level`, `rank` and `reset` work for the owner and adminlist and are refused for others.<br>• `reset` needs `confirm: true`, deletes the adventurer and gear but not Renown, and is refused while the member is in a fight.<br>• Each change appears in the admin panel audit log under module `rpg`. | 1. Run each tool as an admin and as a normal member.<br>2. Open the admin panel's audit page. | `Pending Owner Run` |
 
 ---
 
@@ -58,11 +66,11 @@ This document details the 43 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2397 passed, 1 skipped, 101 warnings in 125.58s
+# Result: 2574 passed, 1 skipped, 107 warnings in 130.92s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 312 files already formatted
+# Result: 324 files already formatted
 ```

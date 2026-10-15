@@ -189,17 +189,20 @@ Admins (the owner and the adminlist) get `/admin challenges period:<daily|weekly
 
 ## Guild RPG (in progress)
 
-An Adventurers' Guild RPG is being built in phases (see `docs/superpowers/specs/2026-10-14-guild-rpg-design.md`). **Phases 1 and 2** give you a character, the daily mission board and turn-based fights; gear, ranks and promotion, parties and trading arrive in later phases.
+An Adventurers' Guild RPG is being built in phases (see `docs/superpowers/specs/2026-10-14-guild-rpg-design.md`). **Phases 1 to 3** give you a character, the daily mission board, turn-based fights and gear; ranks and promotion, parties and trading arrive in later phases.
 
 - `/guild join` creates your adventurer (rank E, level 1) and shows your starting stats.
 - `/guild board` shows today's missions by rank with their rewards, your attempts left and your streak. It is private to you.
 - `/guild mission <mission>` starts a fight against a mission from the board (the field autocompletes). The bot opens a thread for it and posts one live message with **Attack**, **Magic** and **Defend** buttons; you pick an action each round (45 seconds by default), actions resolve fastest first, then the enemies act. Win to earn XP and Renown; lose and you get nothing back for that attempt.
-- `/card [member]` shows anyone's adventurer card: rank, level, record, the seven stats (HP, Attack, Magic, Defense, Resist, Speed, Crit) and the level where the next promotion opens.
+- `/card [member]` shows anyone's adventurer card: rank, level, record, the seven stats (HP, Attack, Magic, Defense, Resist, Speed, Crit) including your gear, what you wear in each slot, your set bonuses, and the level where the next promotion opens.
+- `/gear inventory`, `/gear equip`, `/gear unequip`, `/gear repair`, `/gear sell`, `/gear shop` and `/gear buy` manage your equipment (all private to you; item fields autocomplete).
 
 How it works:
 - **Daily attempts.** Every mission costs attempts (1 for ranks E to C, 2 above). You get `RPG_BASE_ATTEMPTS` a day, plus a bonus for a streak of consecutive active days (+1 per 3 days, up to +3). Miss a day and the streak drops by 3 days, not to zero. Unused attempts do not carry over. If the bot restarts mid-fight, the attempts are refunded.
 - **Ranks.** Missions are ranked E, D, C, B, A, SS and SS+. You can enter missions at your rank or below; lower ones pay less. Promotion fights arrive in a later phase, so every character is rank E for now.
 - **The board** is the same for everyone, drawn fresh each guild day (midnight in `RPG_TZ`), three regular missions per rank.
+- **Gear.** There are five slots (weapon, head, body, boots, accessory) and four rarities (common, uncommon, rare, epic). Every piece belongs to one of eight folklore **tags** (Oni, Kitsune, Tengu, Kappa, Yuki-onna, Tsukumogami, Jorogumo, Baku), carries rolled stats (about 10% around its base) and usually a small drawback, and has a level requirement. Wearing 2 matching pieces gives a set bonus; wearing 4 gives a bigger one and a **skill** you can use in fights (an epic weapon can add another). Mission wins drop gear (bosses drop more and better), and the guild shop sells three common or uncommon items per gear tier each day, up to `RPG_SHOP_DAILY_CAP` purchases per member per day.
+- **Durability.** Every equipped item loses durability after a fight (3 points for a win, 8 for a loss, out of 100 or more). You get a warning when an item crosses 50%, 25% and 0%, and again before starting a mission if something is at 25% or below. At 0% an item counts for nothing (no stats, no set piece, no skill) until you repair it with `/gear repair`; a full repair costs about a third of the item's price, pro rata. You can't change gear during a fight, and an inventory holds 60 items (extra drops are sold automatically; `/gear sell` pays 30% of the price).
 - **Away players.** If you do not act in time you defend automatically; after two missed rounds in a row the fight stops waiting for you, and you can rejoin by acting.
 
 Game data (levels, ranks, tags, enemies, skills, missions, balance) lives in TOML files in `content/rpg/` and is validated at startup; a bad file stops the bot with a message naming the file and the problem. The numbers are calibrated with `python scripts/rpg_sim.py`, which plays the real fight engine as a daily player and prints how long each level and rank takes; `tests/test_rpg_pacing.py` fails if a change breaks the targets (rank A in about a month, the level cap in about three). Settings in `.env`:
@@ -211,6 +214,9 @@ Game data (levels, ranks, tags, enemies, skills, missions, balance) lives in TOM
 | `RPG_TZ` | `UTC` | Timezone for the guild day (board, attempts and streak reset at its midnight). Named zones need the `tzdata` package on Windows. |
 | `RPG_BASE_ATTEMPTS` | `8` | Mission attempts per member per day, before streak bonuses. |
 | `RPG_TURN_SECONDS` | `45` | Seconds each player has to choose an action every round (minimum 10). |
+| `RPG_SHOP_DAILY_CAP` | `3` | Items one member can buy from the guild shop per guild day. |
+
+The owner and admins also get `/admin rpg grant`, `level`, `rank` and `reset` (recorded in the admin audit log). The 800 gear items are generated: change `src/yokai/rpg/itemgen.py` or `content/rpg/tags.toml` and run `python scripts/gen_rpg_items.py` (a test fails if `items.toml` is out of date).
 
 Fights run in threads, so the bot needs permission to create public threads and send messages in them; `/admin diag` shows a "Guild RPG" line that reports whether it has them.
 
