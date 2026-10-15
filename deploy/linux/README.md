@@ -152,8 +152,8 @@ virtual environment, which `yokai` owns.
 
 - The service and timer files have not been loaded by a real systemd; run
   `systemd-analyze verify /etc/systemd/system/yokai.service` after copying them.
-- The test suite is run on Linux by the GitHub Actions workflow (`.github/workflows/ci.yml`), but
-  that has not been seen passing yet, and nothing has run on a Raspberry Pi.
+- The test suite passes on Linux (x86-64, Python 3.12 and 3.13) in the GitHub Actions workflow
+  (`.github/workflows/ci.yml`), but nothing has run on a Raspberry Pi or on 64-bit ARM yet.
 - Whether YouTube accepts requests from the Pi without cookies is only known by trying. Test with
   several `/play` requests on day one.
 - Voice quality over your network and Discord's voice servers from the new location.
