@@ -25,14 +25,15 @@ from yokai.rpg.gear_store import (
     add_drops,
     apply_wear,
 )
-from yokai.rpg.models import Character, StreakRules, XpCurve
+from yokai.rpg.models import NO_VOICE, Character, StreakRules, VoiceRules, XpCurve
 
 if TYPE_CHECKING:
     from yokai.storage.db import Database
 
 _CHARACTER_COLUMNS = (
     "user_id, level, xp, rank, battles_won, battles_lost, created_ts, "
-    "attempts_used, attempts_day, streak, last_active_day, promo_cooldown_until"
+    "attempts_used, attempts_day, streak, last_active_day, promo_cooldown_until, "
+    "voice_seconds, voice_day"
 )
 
 FIGHT_OPEN = "open"
@@ -87,6 +88,8 @@ def _character_from_row(row: Sequence[Any]) -> Character:
         streak=row[9],
         last_active_day=row[10],
         promo_cooldown_until=row[11],
+        voice_seconds=row[12],
+        voice_day=row[13],
     )
 
 
@@ -158,6 +161,26 @@ class RpgStore:
         async with self._db.conn.execute("SELECT COUNT(*) FROM rpg_characters;") as cursor:
             row = await cursor.fetchone()
         return characters, int(row[0]) if row else 0
+
+    async def add_voice_time(self, user_ids: Sequence[int], seconds: int, today: str) -> int:
+        """Add `seconds` of call time to each member's total for the guild day `today`.
+
+        A total from an earlier day is replaced, not added to. Members without a character are
+        skipped. All members are updated in one transaction. Returns how many characters changed.
+        """
+        if not user_ids or seconds <= 0:
+            return 0
+        async with self._db.transaction() as conn:
+            changed = 0
+            for user_id in user_ids:
+                cursor = await conn.execute(
+                    "UPDATE rpg_characters SET "
+                    "voice_seconds = CASE WHEN voice_day = ? THEN voice_seconds + ? ELSE ? END, "
+                    "voice_day = ? WHERE user_id = ?;",
+                    (today, seconds, seconds, today, user_id),
+                )
+                changed += cursor.rowcount
+        return changed
 
     # ------------------------------------------------------------------ admin tools
 
@@ -258,6 +281,7 @@ class RpgStore:
         today: str,
         base_attempts: int,
         streak_rules: StreakRules,
+        voice_rules: VoiceRules = NO_VOICE,
         resets_ts: Optional[int] = None,
         now: Optional[int] = None,
         promotion: Optional[PromotionRequest] = None,
@@ -278,7 +302,7 @@ class RpgStore:
                 if promotion is not None:
                     await self._check_promotion(conn, character, promotion, ts)
                 plan = guild.plan_spend(
-                    character, cost, today, base_attempts, streak_rules, resets_ts
+                    character, cost, today, base_attempts, streak_rules, resets_ts, voice_rules
                 )
                 await conn.execute(
                     "UPDATE rpg_characters SET attempts_used = ?, attempts_day = ?, "

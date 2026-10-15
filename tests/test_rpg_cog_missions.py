@@ -32,6 +32,8 @@ def make_bot(runtime: RpgRuntime, *, attempts: int = 8) -> MagicMock:
     bot.rpg = runtime
     bot.config.rpg_tz = "UTC"
     bot.config.rpg_base_attempts = attempts
+    bot.config.rpg_voice_minutes_per_attempt = 30
+    bot.config.rpg_voice_max_bonus = 8
     bot.config.rpg_turn_seconds = 45
     return bot
 

@@ -71,6 +71,7 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **61** | **Trade Safety** | • Equipping, selling or giving away an offered item before the second Confirm removes it from the offer with a clear message and nothing moves.<br>• Offering more Renown than you hold at the moment of confirming, or a trade that would exceed the 60-item inventory, is refused and names who is short.<br>• Starting a guild fight blocks trading until it ends. | 1. Offer an item, then equip or sell it in another window before confirming.<br>2. Spend your Renown after setting an offer.<br>3. Start a mission while a trade is open. | `Pending Owner Run` |
 | **62** | **Guild Wiki** | • `/guild wiki` is private and opens on a contents page listing every section with its page number; `section:` jumps straight to one.<br>• The menu jumps to any section; Prev/Next/Contents turn pages and disable at the ends; only you can use your copy and it disables itself after five minutes.<br>• Numbers (attempts, rank levels, drop odds, set bonuses, mission and raid lists) match the game, including after you change `RPG_BASE_ATTEMPTS` or the content files. | 1. Run `/guild wiki` and page through every section on desktop and phone.<br>2. Try `section:Commands`.<br>3. Change an env value, restart and check the page. | `Pending Owner Run` |
 | **63** | **Linux Hosting** | • On the Pi, `systemctl status yokai` shows it running, `journalctl -u yokai` shows a normal start, and killing the process (`sudo kill -9 <pid>`) brings it back within ~10 seconds.<br>• `systemctl stop yokai` stops it cleanly (no restart) and `restart` brings it back with no fight left stuck open.<br>• `yokai-backup.service` makes a backup in `data/backups` and the timer is listed in `systemctl list-timers`; restoring that file on a spare machine opens with all balances.<br>• `/admin diag` reports ffmpeg, deno and YouTube healthy, and several different `/play` requests work from the Pi's network. | 1. Follow `deploy/linux/README.md` on the Pi.<br>2. Try the stop, kill and backup checks.<br>3. Play 5+ different videos and a Spotify link. | `Pending Owner Run` |
+| **64** | **Voice Attempts** | • After 30 minutes in a voice channel with at least one other person, `/guild board` shows `Voice time: +1 attempts today` and the allowance grows by one; every further 30 minutes adds another, up to +8.<br>• Being alone, with only bots, or in the AFK channel adds nothing, and the progress line (`N min in a call with someone gives the next one`) does not move.<br>• The bonus starts over at the guild-day rollover, and the extra attempts can pay for a mission once the base attempts are spent.<br>• With `RPG_VOICE_MINUTES_PER_ATTEMPT=0` the line disappears and nothing is added. | 1. Join a voice channel with a friend (not the AFK channel) and wait 30+ minutes.<br>2. Run `/guild board` before and after.<br>3. Spend all base attempts, then start a mission.<br>4. Try the AFK channel and a solo call.<br>5. Change the env values, restart and check `/guild wiki`. | `Pending Owner Run` |
 
 ---
 
@@ -78,11 +79,11 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2768 passed, 1 skipped, 109 warnings in 165.46s
+# Result: 2795 passed, 1 skipped, 109 warnings in 170.97s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 347 files already formatted
+# Result: 348 files already formatted
 ```

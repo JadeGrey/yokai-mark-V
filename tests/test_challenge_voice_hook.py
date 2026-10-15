@@ -25,6 +25,7 @@ def _bot(channels, blacklisted=()) -> MagicMock:
     guild.afk_channel = None
     bot.get_guild.return_value = guild
     bot.db.credit_wallet = AsyncMock()
+    bot.rpg = None
     bot.moderation = fake_moderation(owner_id=0, blacklisted=blacklisted)
     return bot
 

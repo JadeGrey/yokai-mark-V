@@ -31,6 +31,7 @@ def _bot_with_guild(channels: list[MagicMock], afk_channel: MagicMock | None = N
     guild.afk_channel = afk_channel
     bot.get_guild.return_value = guild
     bot.db.credit_wallet = AsyncMock()
+    bot.rpg = None
     bot.moderation = fake_moderation(owner_id=0)  # nobody blacklisted
     return bot
 
@@ -76,6 +77,7 @@ async def test_tick_does_nothing_when_the_guild_is_not_found() -> None:
     bot.config.guild_id = 1
     bot.get_guild.return_value = None
     bot.db.credit_wallet = AsyncMock()
+    bot.rpg = None
     tracker = VoiceEarnTracker(bot, interval_s=300, reward=5)
     await tracker.tick()
     bot.db.credit_wallet.assert_not_awaited()

@@ -204,7 +204,7 @@ An Adventurers' Guild RPG is being built in phases (see `docs/superpowers/specs/
 - `/gear inventory`, `/gear equip`, `/gear unequip`, `/gear repair`, `/gear sell`, `/gear shop` and `/gear buy` manage your equipment (all private to you; item fields autocomplete).
 
 How it works:
-- **Daily attempts.** Every mission costs attempts (1 for ranks E to C, 2 above). You get `RPG_BASE_ATTEMPTS` a day, plus a bonus for a streak of consecutive active days (+1 per 3 days, up to +3). Miss a day and the streak drops by 3 days, not to zero. Unused attempts do not carry over. If the bot restarts mid-fight, the attempts are refunded.
+- **Daily attempts.** Every mission costs attempts (1 for ranks E to C, 2 above). You get `RPG_BASE_ATTEMPTS` a day, plus a bonus for a streak of consecutive active days (+1 per 3 days, up to +3). Miss a day and the streak drops by 3 days, not to zero. **Time in voice earns more:** every 30 minutes in a call with at least one other person gives +1 attempt for that day, up to +8 (`/guild board` shows your bonus and the time to the next one). Unused attempts do not carry over. If the bot restarts mid-fight, the attempts are refunded.
 - **Ranks.** Missions are ranked E, D, C, B, A, SS and SS+. You can enter missions at your rank or below; lower ones pay less. Promotion fights arrive in a later phase, so every character is rank E for now.
 - **The board** is the same for everyone, drawn fresh each guild day (midnight in `RPG_TZ`), three regular missions per rank.
 - **Gear.** There are five slots (weapon, head, body, boots, accessory) and four rarities (common, uncommon, rare, epic). Every piece belongs to one of eight folklore **tags** (Oni, Kitsune, Tengu, Kappa, Yuki-onna, Tsukumogami, Jorogumo, Baku), carries rolled stats (about 10% around its base) and usually a small drawback, and has a level requirement. Wearing 2 matching pieces gives a set bonus; wearing 4 gives a bigger one and a **skill** you can use in fights (an epic weapon can add another). Mission wins drop gear (bosses drop more and better), and the guild shop sells three common or uncommon items per gear tier each day, up to `RPG_SHOP_DAILY_CAP` purchases per member per day.
@@ -219,6 +219,8 @@ Game data (levels, ranks, tags, enemies, skills, missions, balance) lives in TOM
 | `RPG_CONTENT_DIR` | `content/rpg` | Folder with the RPG content files, relative to where the bot is started. |
 | `RPG_TZ` | `UTC` | Timezone for the guild day (board, attempts and streak reset at its midnight). Named zones need the `tzdata` package on Windows. |
 | `RPG_BASE_ATTEMPTS` | `8` | Mission attempts per member per day, before streak bonuses. |
+| `RPG_VOICE_MINUTES_PER_ATTEMPT` | `30` | Minutes in a voice call with another person that give +1 attempt for the day. `0` turns voice attempts off. |
+| `RPG_VOICE_MAX_BONUS` | `8` | The most extra attempts per guild day that voice time can give. |
 | `RPG_TURN_SECONDS` | `45` | Seconds each player has to choose an action every round (minimum 10). |
 | `RPG_SHOP_DAILY_CAP` | `3` | Items one member can buy from the guild shop per guild day. |
 

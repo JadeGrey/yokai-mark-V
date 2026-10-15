@@ -23,7 +23,14 @@ from yokai.errors import (
 )
 from yokai.rpg import guild
 from yokai.rpg.content import Content
-from yokai.rpg.models import MAX_PARTY, Character, Mission, StreakRules
+from yokai.rpg.models import (
+    MAX_PARTY,
+    NO_VOICE,
+    Character,
+    Mission,
+    StreakRules,
+    VoiceRules,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,13 +86,14 @@ def check_member(
     today: str,
     base_attempts: int,
     streak_rules: StreakRules,
+    voice_rules: VoiceRules = NO_VOICE,
     resets_ts: int,
     fighting: Collection[int],
 ) -> None:
     """Raise a YokaiError if this member may not take the mission right now."""
     if not guild.can_enter(content, character.rank, mission):
         raise MissionRankError(mission.rank, character.rank)
-    status = guild.attempt_status(character, today, base_attempts, streak_rules)
+    status = guild.attempt_status(character, today, base_attempts, streak_rules, voice_rules)
     if mission.attempt_cost > status.remaining:
         raise NoAttemptsError(status.remaining, mission.attempt_cost, resets_ts)
     if character.user_id in fighting:
@@ -100,6 +108,7 @@ def screen_members(
     today: str,
     base_attempts: int,
     streak_rules: StreakRules,
+    voice_rules: VoiceRules = NO_VOICE,
     resets_ts: int,
     fighting: Collection[int],
 ) -> tuple[list[Character], dict[int, YokaiError]]:
@@ -121,6 +130,7 @@ def screen_members(
                 today=today,
                 base_attempts=base_attempts,
                 streak_rules=streak_rules,
+                voice_rules=voice_rules,
                 resets_ts=resets_ts,
                 fighting=fighting,
             )

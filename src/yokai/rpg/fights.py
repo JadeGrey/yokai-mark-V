@@ -21,7 +21,7 @@ from yokai.rpg.combat.engine import Fight
 from yokai.rpg.combat.models import OUTCOME_WON
 from yokai.rpg.gear import Loadout, compute_loadout, durability_percent, roll_drop, roll_stats
 from yokai.rpg.gear_store import GearSettlement, ItemDrop
-from yokai.rpg.models import Character, Mission
+from yokai.rpg.models import NO_VOICE, Character, Mission, VoiceRules
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import stats_at_level
 from yokai.rpg.store import PromotionRequest
@@ -382,6 +382,7 @@ async def launch_fight(
     today: str,
     resets_ts: int,
     base_attempts: int,
+    voice_rules: VoiceRules = NO_VOICE,
     turn_seconds: float,
     promotion: Optional[PromotionRequest] = None,
     promotion_cooldown_s: int = 0,
@@ -404,6 +405,7 @@ async def launch_fight(
         today=today,
         resets_ts=resets_ts,
         base_attempts=base_attempts,
+        voice_rules=voice_rules,
         turn_seconds=turn_seconds,
         promotion=promotion,
         promotion_cooldown_s=promotion_cooldown_s,
@@ -420,6 +422,7 @@ async def launch_party_fight(
     today: str,
     resets_ts: int,
     base_attempts: int,
+    voice_rules: VoiceRules = NO_VOICE,
     turn_seconds: float,
 ) -> discord.Thread:
     """Charge every member's attempts at once, open one thread and start the shared fight.
@@ -439,6 +442,7 @@ async def launch_party_fight(
         today=today,
         resets_ts=resets_ts,
         base_attempts=base_attempts,
+        voice_rules=voice_rules,
         turn_seconds=turn_seconds,
     )
 
@@ -454,6 +458,7 @@ async def _start_fight(
     today: str,
     resets_ts: int,
     base_attempts: int,
+    voice_rules: VoiceRules = NO_VOICE,
     turn_seconds: float,
     promotion: Optional[PromotionRequest] = None,
     promotion_cooldown_s: int = 0,
@@ -473,6 +478,7 @@ async def _start_fight(
             today=today,
             base_attempts=base_attempts,
             streak_rules=runtime.content.balance.streak,
+            voice_rules=voice_rules,
             resets_ts=resets_ts,
             promotion=promotion,
         )

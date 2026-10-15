@@ -54,6 +54,8 @@ class WikiSettings:
     shop_daily_cap: int = 3
     timezone: str = "UTC"
     lobby_minutes: int = 3
+    voice_minutes_per_attempt: int = 30
+    voice_max_bonus: int = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +139,17 @@ def _plural(count: int, word: str) -> str:
 # ------------------------------------------------------------------------------- sections
 
 
+def _voice_paragraph(s: WikiSettings) -> list[str]:
+    if s.voice_minutes_per_attempt <= 0 or s.voice_max_bonus <= 0:
+        return []
+    return [
+        f"**Voice time.** Every **{s.voice_minutes_per_attempt} minutes** you spend in a voice "
+        "call with at least one other person gives **+1 attempt** for that day, up to "
+        f"**+{s.voice_max_bonus}**. The time counts for the guild day it happens in and starts "
+        "over at midnight. The AFK channel and calls where you are alone do not count."
+    ]
+
+
 def _start(content: Content, s: WikiSettings) -> list[str]:
     streak = content.balance.streak
     regular = [m.attempt_cost for m in content.missions.values() if m.kind == "mission"]
@@ -161,6 +174,7 @@ def _start(content: Content, s: WikiSettings) -> list[str]:
         f"**{streak.days_per_bonus} days** adds **+1 attempt** a day, up to "
         f"**+{streak.bonus_cap}**. "
         f"A fully missed day costs {_plural(streak.drop_per_missed_day, 'day')} of streak.",
+        *_voice_paragraph(s),
         f"**The board.** It is the same for everyone and changes every guild day: "
         f"{guild.MISSIONS_PER_RANK} missions per rank, plus {guild.RAIDS_PER_RANK} raid per rank "
         f"from {raid_ranks[0]} up. You can take missions at your rank or below; lower-rank "

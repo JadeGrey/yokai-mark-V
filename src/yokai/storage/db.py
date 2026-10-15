@@ -35,7 +35,7 @@ from yokai.gambling.pot import POOLED_GAMES, bet_house_take, lobby_house_take
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 13
+CURRENT_SCHEMA_VERSION = 14
 
 MIGRATION_V1 = """
 CREATE TABLE IF NOT EXISTS command_log (
@@ -337,6 +337,12 @@ RPG_CHARACTER_V10_COLUMNS = (
     ("last_active_day", "TEXT"),
 )
 
+# Seconds spent in a call with another person on `voice_day` (the guild day), for voice attempts.
+RPG_CHARACTER_V14_COLUMNS = (
+    ("voice_seconds", "INTEGER NOT NULL DEFAULT 0"),
+    ("voice_day", "TEXT"),
+)
+
 
 class Database:
     """Async SQLite database manager."""
@@ -481,6 +487,14 @@ class Database:
             await self.conn.execute("PRAGMA user_version = 13;")
             await self.conn.commit()
             logger.info("SQLite schema migrated to version 13.")
+
+        if version < 14:
+            logger.info("Applying SQLite migration v14...")
+            for column, definition in RPG_CHARACTER_V14_COLUMNS:
+                await self._add_column_if_missing("rpg_characters", column, definition)
+            await self.conn.execute("PRAGMA user_version = 14;")
+            await self.conn.commit()
+            logger.info("SQLite schema migrated to version 14.")
 
     async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         """ALTER TABLE ... ADD COLUMN, but only if the column is not there yet (replay-safe).

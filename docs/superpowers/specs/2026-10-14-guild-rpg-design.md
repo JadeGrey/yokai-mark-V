@@ -568,8 +568,8 @@ changes.
   logged and never stops the Renown credit or the challenge events. The tracker gets the store
   through the bot's RPG runtime and does nothing when the RPG is disabled.
 - **Config:** the two variables above in `config.py` and `.env.example`.
-- **Display:** `/guild board` and `/card` show the attempts line as before with a "+N from voice"
-  part, and while under the cap, the minutes left to the next voice attempt. The wiki's attempts
+- **Display:** `/guild board` (the only place attempts are shown) adds a "Voice time: +N" part to
+  the attempts line and, while under the cap, the minutes left to the next voice attempt. The wiki's attempts
   section explains the rule using the configured numbers.
 
 **Tests:** the pure rules (threshold, the cap, off switch, day reset), store accrual (same day,

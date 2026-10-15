@@ -298,6 +298,8 @@ async def make_cog(tmp_path: Path):  # type: ignore[no-untyped-def]
     bot.config.rpg_turn_seconds = 45
     bot.config.rpg_promotion_cooldown_hours = 6
     bot.config.rpg_shop_daily_cap = 3
+    bot.config.rpg_voice_minutes_per_attempt = 30
+    bot.config.rpg_voice_max_bonus = 8
     return db, RpgCog(bot)
 
 

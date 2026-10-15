@@ -93,6 +93,8 @@ class Config:
     rpg_turn_seconds: int = 45
     rpg_shop_daily_cap: int = 3
     rpg_promotion_cooldown_hours: int = 6
+    rpg_voice_minutes_per_attempt: int = 30
+    rpg_voice_max_bonus: int = 8
 
 
 def _parse_bool(value: str | None, default: bool = True) -> bool:
@@ -297,6 +299,14 @@ def load_config(env_path: Path | str | None = None) -> Config:
         0,
         _parse_int("RPG_PROMOTION_COOLDOWN_HOURS", os.getenv("RPG_PROMOTION_COOLDOWN_HOURS"), 6),
     )
+    # 0 minutes turns voice attempts off.
+    rpg_voice_minutes_per_attempt = max(
+        0,
+        _parse_int("RPG_VOICE_MINUTES_PER_ATTEMPT", os.getenv("RPG_VOICE_MINUTES_PER_ATTEMPT"), 30),
+    )
+    rpg_voice_max_bonus = max(
+        0, _parse_int("RPG_VOICE_MAX_BONUS", os.getenv("RPG_VOICE_MAX_BONUS"), 8)
+    )
 
     return Config(
         discord_token=token,
@@ -348,4 +358,6 @@ def load_config(env_path: Path | str | None = None) -> Config:
         rpg_turn_seconds=rpg_turn_seconds,
         rpg_shop_daily_cap=rpg_shop_daily_cap,
         rpg_promotion_cooldown_hours=rpg_promotion_cooldown_hours,
+        rpg_voice_minutes_per_attempt=rpg_voice_minutes_per_attempt,
+        rpg_voice_max_bonus=rpg_voice_max_bonus,
     )

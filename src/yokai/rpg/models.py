@@ -117,6 +117,8 @@ class Character:
     streak: int = 0
     last_active_day: str | None = None
     promo_cooldown_until: int | None = None
+    voice_seconds: int = 0
+    voice_day: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +217,24 @@ class StreakRules:
     days_per_bonus: int
     bonus_cap: int
     drop_per_missed_day: int
+
+
+@dataclass(frozen=True, slots=True)
+class VoiceRules:
+    """Extra daily attempts for time in a call with another person (operational settings).
+
+    `minutes_per_attempt` of 0 turns voice attempts off.
+    """
+
+    minutes_per_attempt: int
+    max_bonus: int
+
+    @property
+    def enabled(self) -> bool:
+        return self.minutes_per_attempt > 0 and self.max_bonus > 0
+
+
+NO_VOICE = VoiceRules(minutes_per_attempt=0, max_bonus=0)
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,12 +5,15 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from datetime import date, tzinfo
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from yokai.challenges.periods import DAILY, next_reset_ts, period_key
 from yokai.errors import NoAttemptsError
 from yokai.rpg.content import Content
-from yokai.rpg.models import Character, Mission, Rank, StreakRules, XpCurve
+from yokai.rpg.models import NO_VOICE, Character, Mission, Rank, StreakRules, VoiceRules, XpCurve
+
+if TYPE_CHECKING:
+    from yokai.config import Config
 
 MISSIONS_PER_RANK = 3
 RAIDS_PER_RANK = 1
@@ -55,6 +58,26 @@ def streak_bonus(streak: int, rules: StreakRules) -> int:
     return min(rules.bonus_cap, max(0, streak) // rules.days_per_bonus)
 
 
+def voice_bonus(seconds: int, rules: VoiceRules) -> int:
+    """Extra daily attempts earned by `seconds` in a call with another person."""
+    if not rules.enabled:
+        return 0
+    return min(rules.max_bonus, max(0, seconds) // (rules.minutes_per_attempt * 60))
+
+
+def voice_seconds_to_next(seconds: int, rules: VoiceRules) -> Optional[int]:
+    """Seconds of call time until the next voice attempt, or None if off or at the cap."""
+    if not rules.enabled or voice_bonus(seconds, rules) >= rules.max_bonus:
+        return None
+    step = rules.minutes_per_attempt * 60
+    return step - max(0, seconds) % step
+
+
+def voice_rules_from_config(config: Config) -> VoiceRules:
+    """The voice-attempt settings from the bot's configuration."""
+    return VoiceRules(config.rpg_voice_minutes_per_attempt, config.rpg_voice_max_bonus)
+
+
 @dataclass(frozen=True, slots=True)
 class AttemptStatus:
     """Where a member stands on today's attempts."""
@@ -63,6 +86,8 @@ class AttemptStatus:
     used: int
     streak: int
     bonus: int
+    voice_bonus: int = 0
+    voice_seconds_to_next: Optional[int] = None
 
     @property
     def remaining(self) -> int:
@@ -80,13 +105,29 @@ class AttemptPlan:
 
 
 def attempt_status(
-    character: Character, today: str, base_attempts: int, rules: StreakRules
+    character: Character,
+    today: str,
+    base_attempts: int,
+    rules: StreakRules,
+    voice: VoiceRules = NO_VOICE,
 ) -> AttemptStatus:
-    """Today's attempts for a character, as they would be after the day rolls over (read-only)."""
+    """Today's attempts for a character, as they would be after the day rolls over (read-only).
+
+    Voice time only counts while it was recorded on `today`.
+    """
     streak = rollover_streak(character.streak, character.last_active_day, today, rules)
     used = character.attempts_used if character.attempts_day == today else 0
     bonus = streak_bonus(streak, rules)
-    return AttemptStatus(allowance=base_attempts + bonus, used=used, streak=streak, bonus=bonus)
+    voice_seconds = character.voice_seconds if character.voice_day == today else 0
+    from_voice = voice_bonus(voice_seconds, voice)
+    return AttemptStatus(
+        allowance=base_attempts + bonus + from_voice,
+        used=used,
+        streak=streak,
+        bonus=bonus,
+        voice_bonus=from_voice,
+        voice_seconds_to_next=voice_seconds_to_next(voice_seconds, voice),
+    )
 
 
 def plan_spend(
@@ -96,12 +137,13 @@ def plan_spend(
     base_attempts: int,
     rules: StreakRules,
     resets_ts: Optional[int] = None,
+    voice: VoiceRules = NO_VOICE,
 ) -> AttemptPlan:
     """Work out spending `cost` attempts. Raises NoAttemptsError if there are not enough.
 
     The first spend on a new day also extends the streak by one.
     """
-    status = attempt_status(character, today, base_attempts, rules)
+    status = attempt_status(character, today, base_attempts, rules, voice)
     if cost > status.remaining:
         raise NoAttemptsError(status.remaining, cost, resets_ts)
     streak = status.streak + (0 if character.last_active_day == today else 1)

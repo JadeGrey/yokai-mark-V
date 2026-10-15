@@ -102,6 +102,7 @@ class _LobbyHost:
             "today": self.today,
             "base_attempts": self.cog.bot.config.rpg_base_attempts,
             "streak_rules": runtime.content.balance.streak,
+            "voice_rules": guild.voice_rules_from_config(self.cog.bot.config),
             "resets_ts": self.resets_ts,
             "fighting": runtime.active_users,
         }
@@ -143,6 +144,7 @@ class _LobbyHost:
             today=self.today,
             resets_ts=self.resets_ts,
             base_attempts=self.cog.bot.config.rpg_base_attempts,
+            voice_rules=guild.voice_rules_from_config(self.cog.bot.config),
             turn_seconds=self.cog.bot.config.rpg_turn_seconds,
         )
 
@@ -227,12 +229,21 @@ class RpgCog(commands.Cog, name="Guild"):
 
     def _attempts_text(self, character: Character, today: str, content: Content) -> str:
         status = guild.attempt_status(
-            character, today, self.bot.config.rpg_base_attempts, content.balance.streak
+            character,
+            today,
+            self.bot.config.rpg_base_attempts,
+            content.balance.streak,
+            guild.voice_rules_from_config(self.bot.config),
         )
         text = f"Attempts: **{status.remaining}/{status.allowance}** left today."
         if status.streak:
             bonus = f" (+{status.bonus} attempts)" if status.bonus else ""
             text += f" Streak: **{status.streak}** day(s){bonus}."
+        if status.voice_bonus:
+            text += f" Voice time: **+{status.voice_bonus}** attempts today."
+        if status.voice_seconds_to_next is not None:
+            minutes = max(1, -(-status.voice_seconds_to_next // 60))
+            text += f" {minutes} min in a call with someone gives the next one."
         return text
 
     # ------------------------------------------------------------------ /guild join
@@ -341,7 +352,11 @@ class RpgCog(commands.Cog, name="Guild"):
             )
             return
         status = guild.attempt_status(
-            character, today, self.bot.config.rpg_base_attempts, content.balance.streak
+            character,
+            today,
+            self.bot.config.rpg_base_attempts,
+            content.balance.streak,
+            guild.voice_rules_from_config(self.bot.config),
         )
         if chosen.attempt_cost > status.remaining:
             await self._send_domain_error(
@@ -417,6 +432,7 @@ class RpgCog(commands.Cog, name="Guild"):
                 today=today,
                 resets_ts=resets_ts,
                 base_attempts=self.bot.config.rpg_base_attempts,
+                voice_rules=guild.voice_rules_from_config(self.bot.config),
                 turn_seconds=self.bot.config.rpg_turn_seconds,
                 promotion=promotion,
                 promotion_cooldown_s=self.bot.config.rpg_promotion_cooldown_hours * 3600,
@@ -543,7 +559,11 @@ class RpgCog(commands.Cog, name="Guild"):
                 raise PromotionStaleError()
             today, resets_ts = self._day()
             attempts = guild.attempt_status(
-                character, today, self.bot.config.rpg_base_attempts, content.balance.streak
+                character,
+                today,
+                self.bot.config.rpg_base_attempts,
+                content.balance.streak,
+                guild.voice_rules_from_config(self.bot.config),
             )
             if trial.attempt_cost > attempts.remaining:
                 raise NoAttemptsError(attempts.remaining, trial.attempt_cost, resets_ts)
@@ -612,6 +632,8 @@ class RpgCog(commands.Cog, name="Guild"):
                 shop_daily_cap=config.rpg_shop_daily_cap,
                 timezone=config.rpg_tz,
                 lobby_minutes=int(LOBBY_TIMEOUT_S // 60),
+                voice_minutes_per_attempt=config.rpg_voice_minutes_per_attempt,
+                voice_max_bonus=config.rpg_voice_max_bonus,
             ),
         )
         start = built.first_page.get(section.value, 0) if section else 0

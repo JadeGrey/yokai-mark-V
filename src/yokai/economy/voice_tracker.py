@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Optional
 
 from yokai.challenges.models import VoiceMinutes
+from yokai.challenges.periods import load_tz
+from yokai.rpg.guild import day_key
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -53,12 +56,14 @@ class VoiceEarnTracker:
         A single member's credit failure is caught and logged so it doesn't abort crediting
         the rest of that tick. Blacklisted members still count toward the 2-human minimum but
         are never credited. Each such human's minutes are reported to the challenge engine even
-        when voice pay is off (reward 0) or the credit fails.
+        when voice pay is off (reward 0) or the credit fails. The same humans also earn guild
+        voice time (extra mission attempts), recorded in one batch at the end of the tick.
         """
         guild = self.bot.get_guild(self.bot.config.guild_id)
         if guild is None:
             return
         afk_channel = guild.afk_channel
+        in_company: list[int] = []
         for channel in guild.voice_channels:
             if afk_channel is not None and channel.id == afk_channel.id:
                 continue
@@ -79,3 +84,19 @@ class VoiceEarnTracker:
                     except Exception as exc:
                         logger.error("Voice-earn credit failed for user %d: %s", member.id, exc)
                 self.bot.challenges.emit(VoiceMinutes(member.id, max(1, self.interval_s // 60)))
+                in_company.append(member.id)
+        await self._record_guild_time(in_company)
+
+    async def _record_guild_time(self, user_ids: list[int]) -> None:
+        """Add this tick to each member's guild voice time. Never raises."""
+        config = self.bot.config
+        runtime = self.bot.rpg
+        if not user_ids or runtime is None:
+            return
+        try:
+            if config.rpg_voice_minutes_per_attempt <= 0 or config.rpg_voice_max_bonus <= 0:
+                return
+            today = day_key(int(time.time()), load_tz(config.rpg_tz))
+            await runtime.store.add_voice_time(user_ids, self.interval_s, today)
+        except Exception as exc:
+            logger.error("Recording guild voice time failed: %s", exc)
