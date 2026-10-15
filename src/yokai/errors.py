@@ -430,6 +430,18 @@ class AlreadyFightingError(YokaiError):
         )
 
 
+class NotInFightError(YokaiError):
+    """Raised when someone who is not in a guild fight presses its buttons."""
+
+    title = "Not your fight"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Only the adventurers in this fight can act in it.",
+            user_hint="You can start your own with /guild mission.",
+        )
+
+
 class ThreadUnavailableError(YokaiError):
     """Raised when a fight thread cannot be opened where the command was used."""
 

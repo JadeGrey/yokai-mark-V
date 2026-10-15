@@ -76,6 +76,10 @@ class Fight:
         """Living players who have not chosen an action yet."""
         return [p for p in self.living_players() if p.id not in self._pending]
 
+    def has_chosen(self, actor_id: str) -> bool:
+        """Whether this player has locked in an action for the current round."""
+        return actor_id in self._pending
+
     def usable_skills(self, actor: Combatant) -> list[SkillDef]:
         """The actor's skills that are off cooldown."""
         found = [self.skills[s] for s in actor.skills if s in self.skills]

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,10 +16,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class RpgRuntime:
-    """Everything the RPG cogs need. Created once at startup when RPG_ENABLED is true."""
+    """Everything the RPG cogs need. Created once at startup when RPG_ENABLED is true.
+
+    `active_users` is the set of members who are mid-fight (not persisted: a restart clears it,
+    and the store refunds the attempts of fights that were left open). `tasks` keeps running
+    fight tasks alive.
+    """
 
     content: Content
     store: RpgStore
+    active_users: set[int] = field(default_factory=set)
+    tasks: set[asyncio.Task[None]] = field(default_factory=set)
 
     @classmethod
     def create(cls, db: Database, content_dir: Path | str) -> RpgRuntime:
