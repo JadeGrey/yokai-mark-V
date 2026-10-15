@@ -265,6 +265,8 @@ Settlement, once per fight and inside a single transaction:
   higher-rank missions 2, and raids 3 to 4. Counters reset when the day key changes.
 - **Streak:** a day counts when at least one attempt was used. Starting values: +1 attempt per 3
   consecutive days up to +3. A missed day drops the streak by 3 days instead of zeroing it.
+- **Voice attempts:** time spent in a call with another person adds extra attempts for the day, see
+  section 19.
 - **Eligibility:** a mission's rank must be at or below the player's rank. For a party, every member
   must be eligible. Missions below the player's rank pay a reduced share of Renown and XP.
 - **Promotion:** at the level threshold for the next rank, `/guild rank` offers the promotion fight, a
@@ -331,6 +333,8 @@ Operational settings only. Balance numbers live in the TOML files.
 | `RPG_CONTENT_DIR` | `content/rpg` | Folder with the TOML content files, relative to where the bot starts. |
 | `RPG_TZ` | `UTC` | Time zone for the day key. |
 | `RPG_BASE_ATTEMPTS` | `8` | Attempts per day before streak bonuses. |
+| `RPG_VOICE_MINUTES_PER_ATTEMPT` | `30` | Minutes in a call with another person for +1 attempt; `0` turns voice attempts off. |
+| `RPG_VOICE_MAX_BONUS` | `8` | Most extra attempts voice time can give per day. |
 | `RPG_TURN_SECONDS` | `45` | Time to choose an action each round. |
 | `RPG_PROMOTION_COOLDOWN_HOURS` | `6` | Wait after losing a promotion fight. |
 | `RPG_SHOP_DAILY_CAP` | `3` | Items a member can buy from the shop per day. |
@@ -531,3 +535,47 @@ fit an embed; hand-written text only explains the rules. Tests check the page li
 rank, tag, mission, enemy and registered command appears, and that the text follows balance
 changes.
 
+## 19. Voice-time attempts (added 2026-10-15, owner-approved)
+
+**Goal:** members who spend time in a call together earn extra mission attempts for the day.
+
+**Decisions**
+
+- Every full `RPG_VOICE_MINUTES_PER_ATTEMPT` (30) minutes in a voice channel with at least one other
+  human gives +1 attempt, up to `RPG_VOICE_MAX_BONUS` (8) per day. The daily allowance becomes base
+  attempts + streak bonus + voice bonus (at most 8 + 3 + 8 = 19 with the defaults).
+- "In a call with another person" is exactly the rule the voice tracker already uses for voice
+  Renown: 2 or more non-bot humans in the channel, the guild's AFK channel skipped, blacklisted
+  members earn nothing. Mute and deafen are not checked. It works when voice Renown is off
+  (`ECONOMY_VOICE_REWARD=0`). Setting `RPG_VOICE_MINUTES_PER_ATTEMPT=0` turns voice attempts off.
+- Voice time is counted per guild day (the same `RPG_TZ` day key as attempts) and resets at the
+  rollover. A partial half hour does not carry over, and a call across midnight is split between
+  the two days. The earned attempts only raise the allowance; spending, refunds and the streak
+  work as before. Only members with a character accrue time.
+
+**Pieces**
+
+- **Schema v14:** `rpg_characters` gains `voice_seconds INTEGER NOT NULL DEFAULT 0` and
+  `voice_day TEXT`. The day column lets the counter reset without a scheduled job, like
+  `attempts_day`. The `Character` model and the store's column list get both fields.
+- **`rpg/guild.py`:** a new pure `voice_bonus(seconds, minutes_per_attempt, cap)`;
+  `attempt_status` takes the voice settings and returns `voice_bonus` and `voice_seconds_to_next`
+  alongside the existing fields. Its callers in `cogs/rpg.py` pass the settings through.
+- **`RpgStore.add_voice_time(credits, today)`:** adds seconds for several members in one
+  transaction. A new day replaces the old total. Members without a character are ignored.
+- **`VoiceEarnTracker.tick`:** collects the members it already credits (after the blacklist check)
+  and makes one `add_voice_time` call per tick with `interval_s` seconds each. A failure there is
+  logged and never stops the Renown credit or the challenge events. The tracker gets the store
+  through the bot's RPG runtime and does nothing when the RPG is disabled.
+- **Config:** the two variables above in `config.py` and `.env.example`.
+- **Display:** `/guild board` and `/card` show the attempts line as before with a "+N from voice"
+  part, and while under the cap, the minutes left to the next voice attempt. The wiki's attempts
+  section explains the rule using the configured numbers.
+
+**Tests:** the pure rules (threshold, the cap, off switch, day reset), store accrual (same day,
+new day, missing character, several members at once), tracker behaviour (lone member, AFK channel,
+blacklisted member, reward 0, RPG disabled, store failure) and the display and wiki text. A QA row
+is added for a real voice check.
+
+**Not covered:** members muting themselves, or alternate accounts pairing up, to farm time. With
+about ten trusted members this is accepted. Revisit if it is abused.
