@@ -13,7 +13,16 @@ from yokai.rpg.content.common import (
     stats_value,
     text_value,
 )
-from yokai.rpg.models import STAT_NAMES, LevelTable, Rank, SkillDef, Tag
+from yokai.rpg.content.parse_world import parse_stages
+from yokai.rpg.models import (
+    STAT_NAMES,
+    EnemyDef,
+    LevelTable,
+    Promotion,
+    Rank,
+    SkillDef,
+    Tag,
+)
 
 MAX_LEANS = 3
 
@@ -25,7 +34,7 @@ def parse_levels(raw: dict[str, Any]) -> LevelTable:
     return LevelTable(cap=cap, base=base, growth=growth)
 
 
-def parse_ranks(raw: dict[str, Any], cap: int) -> tuple[Rank, ...]:
+def parse_ranks(raw: dict[str, Any], cap: int, enemies: Mapping[str, EnemyDef]) -> tuple[Rank, ...]:
     ranks: list[Rank] = []
     seen: set[str] = set()
     for index, entry in enumerate(entries(raw, "rank", "ranks.toml"), start=1):
@@ -39,14 +48,41 @@ def parse_ranks(raw: dict[str, Any], cap: int) -> tuple[Rank, ...]:
             raise ContentError(f"{where} min_level must be higher than the previous rank's")
         xp_share = number_value(entry.get("xp_share"), f"{where} xp_share", 0.001, 1.0)
         enemy_power = int_value(entry.get("enemy_power", 100), f"{where} enemy_power", 10, 400)
+        promotion = _parse_promotion(entry.get("promotion"), where, enemies, cap, first=not ranks)
         ranks.append(
-            Rank(id=rank_id, min_level=min_level, xp_share=xp_share, enemy_power=enemy_power)
+            Rank(
+                id=rank_id,
+                min_level=min_level,
+                xp_share=xp_share,
+                enemy_power=enemy_power,
+                promotion=promotion,
+            )
         )
     if ranks[0].min_level != 1:
         raise ContentError("ranks.toml: the first rank must start at level 1")
     if ranks[-1].min_level > cap:
         raise ContentError("ranks.toml: the last rank's min_level is above the level cap")
     return tuple(ranks)
+
+
+def _parse_promotion(
+    value: object, where: str, enemies: Mapping[str, EnemyDef], cap: int, *, first: bool
+) -> Promotion | None:
+    if first:
+        if value is not None:
+            raise ContentError(f"{where} is the first rank and cannot have a promotion trial")
+        return None
+    if value is None:
+        raise ContentError(f"{where} needs a [rank.promotion] trial")
+    if not isinstance(value, dict):
+        raise ContentError(f"{where} promotion must be a table")
+    where = f"{where} promotion"
+    return Promotion(
+        name=text_value(value.get("name"), f"{where} name"),
+        attempt_cost=int_value(value.get("attempt_cost", 2), f"{where} attempt_cost", 1, 10),
+        power=int_value(value.get("power", 100), f"{where} power", 10, 1000),
+        stages=parse_stages(value.get("stages"), where, enemies, cap),
+    )
 
 
 def _parse_leans(value: object, where: str) -> tuple[str, ...]:

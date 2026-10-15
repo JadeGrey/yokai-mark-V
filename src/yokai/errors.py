@@ -550,6 +550,55 @@ class NothingToRepairError(YokaiError):
         )
 
 
+class PromotionNotReadyError(YokaiError):
+    """Raised when a member is below the level a promotion needs."""
+
+    title = "Not ready to promote"
+
+    def __init__(self, next_rank: str, needed: int, level: int) -> None:
+        super().__init__(
+            f"Rank {next_rank} opens at level {needed} and you are level {level}.",
+            user_hint="Keep taking missions to level up.",
+        )
+
+
+class PromotionCooldownError(YokaiError):
+    """Raised when a member tries another promotion fight too soon after losing one."""
+
+    title = "Still recovering"
+
+    def __init__(self, until_ts: int) -> None:
+        super().__init__(
+            "You lost your last promotion fight and need to recover first.",
+            user_hint=f"You can try again <t:{until_ts}:R>.",
+        )
+        self.until_ts = until_ts
+
+
+class PromotionStaleError(YokaiError):
+    """Raised when a promotion no longer matches the member's rank."""
+
+    title = "Your rank changed"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "That promotion doesn't match your current rank.",
+            user_hint="Run /guild rank again.",
+        )
+
+
+class TopRankError(YokaiError):
+    """Raised when a member who holds the highest rank asks to promote."""
+
+    title = "Top rank"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "You already hold the highest rank in the guild.",
+            user_hint="Harder missions arrive with future updates.",
+        )
+
+
 class NoCharacterError(YokaiError):
     """Raised when someone looks up a guild character that does not exist."""
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 STAT_NAMES: tuple[str, ...] = ("hp", "attack", "magic", "defense", "resist", "speed", "crit")
 
@@ -24,6 +25,7 @@ SKILL_TARGETS: tuple[str, ...] = ("foe", "all_foes", "ally", "all_allies", "self
 ENEMY_TARGET_RULES: tuple[str, ...] = ("random", "lowest_hp")
 BASIC_ACTIONS: tuple[str, ...] = ("attack", "magic")
 MISSION_KINDS: tuple[str, ...] = ("mission", "raid")
+PROMOTION_KIND = "promotion"
 SLOTS: tuple[str, ...] = ("weapon", "head", "body", "boots", "accessory")
 RARITIES: tuple[str, ...] = ("common", "uncommon", "rare", "epic")
 
@@ -69,6 +71,16 @@ class Tag:
 
 
 @dataclass(frozen=True, slots=True)
+class Promotion:
+    """The solo trial that earns a rank: a fight like a mission, with its own difficulty."""
+
+    name: str
+    attempt_cost: int
+    power: int
+    stages: tuple["Stage", ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Rank:
     """A guild rank, the level at which promotion into it opens, and its XP reward share."""
 
@@ -76,6 +88,7 @@ class Rank:
     min_level: int
     xp_share: float = 0.1
     enemy_power: int = 100  # percent applied to every stat of the enemies in this rank's missions
+    promotion: Optional[Promotion] = None  # the trial to enter this rank (none for the first)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +115,7 @@ class Character:
     attempts_day: str | None = None
     streak: int = 0
     last_active_day: str | None = None
+    promo_cooldown_until: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

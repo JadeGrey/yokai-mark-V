@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from yokai.rpg.models import (
+    PROMOTION_KIND,
     Balance,
     EnemyDef,
     ItemDef,
@@ -49,6 +50,22 @@ class Content:
     def missions_for_rank(self, rank_id: str) -> list[Mission]:
         """Missions of exactly this rank, in file order."""
         return [m for m in self.missions.values() if m.rank == rank_id]
+
+    def promotion_mission(self, rank_id: str) -> Optional[Mission]:
+        """The trial for entering a rank, as a mission the runner can play (None for rank 1)."""
+        rank = self.rank(rank_id)
+        trial = rank.promotion
+        if trial is None:
+            return None
+        return Mission(
+            id=f"promotion_{rank.id}",
+            name=trial.name,
+            rank=rank.id,
+            kind=PROMOTION_KIND,
+            attempt_cost=trial.attempt_cost,
+            stages=trial.stages,
+            power=trial.power,
+        )
 
     def item_tiers(self) -> list[int]:
         """The distinct level requirements of all items, ascending (one per gear tier)."""

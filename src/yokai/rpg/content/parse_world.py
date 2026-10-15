@@ -289,14 +289,14 @@ def parse_missions(
             rank=rank,
             kind=kind,
             attempt_cost=int_value(entry.get("attempt_cost"), f"{where} attempt_cost", 1, 10),
-            stages=_parse_stages(entry.get("stages"), where, enemies, cap),
+            stages=parse_stages(entry.get("stages"), where, enemies, cap),
             description=str(entry.get("description", "")).strip(),
             power=int_value(entry.get("power", 100), f"{where} power", 10, 1000),
         )
     return missions
 
 
-def _parse_stages(
+def parse_stages(
     value: object, where: str, enemies: Mapping[str, EnemyDef], cap: int
 ) -> tuple[Stage, ...]:
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_STAGES:

@@ -23,12 +23,12 @@ def load_content(directory: Path | str) -> Content:
     """Read and validate every content file in `directory`. Raises ContentError on any problem."""
     root = Path(directory)
     levels = parse_levels(read_toml(root, "levels.toml"))
-    ranks = parse_ranks(read_toml(root, "ranks.toml"), levels.cap)
     balance = parse_balance(read_toml(root, "balance.toml"))
     skills = parse_skills(read_toml(root, "skills.toml"))
+    enemies = parse_enemies(read_toml(root, "enemies.toml"), skills)
+    ranks = parse_ranks(read_toml(root, "ranks.toml"), levels.cap, enemies)
     tags = parse_tags(read_toml(root, "tags.toml"), skills)
     items = parse_items(read_toml(root, "items.toml"), tags, skills, levels.cap)
-    enemies = parse_enemies(read_toml(root, "enemies.toml"), skills)
     missions = parse_missions(
         read_toml(root, "missions.toml"), tuple(rank.id for rank in ranks), enemies, levels.cap
     )

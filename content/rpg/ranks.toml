@@ -2,13 +2,18 @@
 # opens (the first rank starts at level 1).
 #   xp_share     the fraction of one level that one attempt's worth of mission pays at this rank.
 #   enemy_power  percent applied to every stat of the enemies in this rank's missions.
+#   [rank.promotion]  the solo trial that earns the rank (every rank but the first): a name, an
+#                attempt_cost (default 2), `power` (percent on top of the rank's enemy_power) and
+#                stages like a mission. A win promotes; a loss starts a cooldown. A promotion pays
+#                Renown but no XP and no drops.
 # Calibrated with the pacing simulator (python scripts/rpg_sim.py) and the per-mission `power` in
 # missions.toml: the rank's enemy_power is the median of its missions' calibrated strengths, and
 # each mission's power evens out the rest. E and D assume a new member with little or no gear (the
 # shop sells three items a day), so they are the gentlest. From C up, a member wearing the gear
-# they can afford wins about 80% of fights right after a promotion. xp_share hits the pacing
-# targets (rank A, level 30, in about 30 days; the level cap in about 90).
-# tests/test_rpg_pacing.py fails if these drift.
+# they can afford wins about 80% of fights right after a promotion, and each trial is tuned to be
+# won about 70% of the time at the threshold level. xp_share hits the pacing targets (rank A,
+# level 30, in about 30 days; the level cap in about 90). tests/test_rpg_pacing.py fails if these
+# drift.
 [[rank]]
 id = "E"
 min_level = 1
@@ -21,11 +26,29 @@ min_level = 5
 xp_share = 0.085
 enemy_power = 50
 
+[rank.promotion]
+name = "Trial of the Back Alleys"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["bakeneko"], level = 5 },
+  { enemies = ["kamaitachi"], level = 6 },
+]
+
 [[rank]]
 id = "C"
 min_level = 12
 xp_share = 0.085
 enemy_power = 60
+
+[rank.promotion]
+name = "Trial of the Long Road"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["rokurokubi", "nopperabo"], level = 12 },
+  { enemies = ["ushi_oni"], level = 13 },
+]
 
 [[rank]]
 id = "B"
@@ -33,11 +56,29 @@ min_level = 20
 xp_share = 0.075
 enemy_power = 60
 
+[rank.promotion]
+name = "Trial of the Spider Court"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["tsuchigumo", "tsuchigumo"], level = 20 },
+  { enemies = ["hannya"], level = 22 },
+]
+
 [[rank]]
 id = "A"
 min_level = 30
 xp_share = 0.05
 enemy_power = 63
+
+[rank.promotion]
+name = "Trial of the Chimera"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["nue"], level = 30 },
+  { enemies = ["gashadokuro"], level = 32 },
+]
 
 [[rank]]
 id = "SS"
@@ -45,8 +86,26 @@ min_level = 45
 xp_share = 0.042
 enemy_power = 54
 
+[rank.promotion]
+name = "Trial of the Ogre King"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["ushi_oni", "ushi_oni"], level = 45 },
+  { enemies = ["shuten_doji"], level = 47 },
+]
+
 [[rank]]
 id = "SS+"
 min_level = 60
 xp_share = 0.04
 enemy_power = 56
+
+[rank.promotion]
+name = "Trial of the Nine Tails"
+attempt_cost = 2
+power = 100
+stages = [
+  { enemies = ["nue", "nue"], level = 60 },
+  { enemies = ["yamata_orochi"], level = 60 },
+]

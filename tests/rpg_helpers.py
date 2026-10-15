@@ -37,10 +37,23 @@ id = "D"
 min_level = 5
 xp_share = 0.1
 
+[rank.promotion]
+name = "Trial of Claws"
+stages = [{ enemies = ["cat"], level = 5 }]
+
 [[rank]]
 id = "C"
 min_level = 12
 xp_share = 0.08
+
+[rank.promotion]
+name = "Trial of Fangs"
+attempt_cost = 3
+power = 120
+stages = [
+  { enemies = ["cat", "gaki"], level = 12 },
+  { enemies = ["cat"], level = 13 },
+]
 """
 
 TAGS = """\
