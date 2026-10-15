@@ -62,9 +62,7 @@ def clean_text(text: str) -> str:
     """Normalise line endings and drop control, ANSI and bidirectional-override characters."""
     text = _ANSI.sub("", text.replace("\r\n", "\n").replace("\r", "\n"))
     return "".join(
-        ch
-        for ch in text
-        if ch in "\n\t" or unicodedata.category(ch) not in ("Cc", "Cf")
+        ch for ch in text if ch in "\n\t" or unicodedata.category(ch) not in ("Cc", "Cf")
     )
 
 

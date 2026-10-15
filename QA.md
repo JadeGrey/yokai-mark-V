@@ -84,5 +84,5 @@ python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 342 files already formatted
+# Result: 347 files already formatted
 ```

@@ -115,7 +115,10 @@ def download(request: Request, file: str = "") -> Response:
             if size > MAX_DOWNLOAD_BYTES:
                 return _files_page(
                     request,
-                    Flash("error", f"{found.name} is too large to download here. Copy it from the folder."),
+                    Flash(
+                        "error",
+                        f"{found.name} is too large to download here. Copy it from the folder.",
+                    ),
                 )
             data = handle.read(size)
     except OSError as exc:
