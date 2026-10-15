@@ -189,11 +189,13 @@ Admins (the owner and the adminlist) get `/admin challenges period:<daily|weekly
 
 ## Guild RPG (in progress)
 
-An Adventurers' Guild RPG is being built in phases (see `docs/superpowers/specs/2026-10-14-guild-rpg-design.md`). **Phases 1 to 3** give you a character, the daily mission board, turn-based fights and gear; ranks and promotion, parties and trading arrive in later phases.
+An Adventurers' Guild RPG is being built in phases (see `docs/superpowers/specs/2026-10-14-guild-rpg-design.md`). **Phases 1 to 4** give you a character, the daily mission board, turn-based fights, gear and rank promotion; parties, raids and trading arrive in later phases.
 
 - `/guild join` creates your adventurer (rank E, level 1) and shows your starting stats.
 - `/guild board` shows today's missions by rank with their rewards, your attempts left and your streak. It is private to you.
 - `/guild mission <mission>` starts a fight against a mission from the board (the field autocompletes). The bot opens a thread for it and posts one live message with **Attack**, **Magic** and **Defend** buttons; you pick an action each round (45 seconds by default), actions resolve fastest first, then the enemies act. Win to earn XP and Renown; lose and you get nothing back for that attempt.
+- `/guild rank` shows your rank and what the next one needs. When you have reached the level (D at 5, C at 12, B at 20, A at 30, SS at 45, SS+ at 60) it offers a **Challenge** button: a solo trial fight that costs 2 attempts, pays Renown (no XP, no gear drops) and promotes you if you win. A loss starts a cooldown (`RPG_PROMOTION_COOLDOWN_HOURS`, 6 by default) before you may try again. Missions of your new rank open as soon as you pass.
+- `/guild leaderboard [sort] [page]` shows the guild standings, public, sortable by rank, level or battles won with a dropdown and Prev/Next buttons.
 - `/card [member]` shows anyone's adventurer card: rank, level, record, the seven stats (HP, Attack, Magic, Defense, Resist, Speed, Crit) including your gear, what you wear in each slot, your set bonuses, and the level where the next promotion opens.
 - `/gear inventory`, `/gear equip`, `/gear unequip`, `/gear repair`, `/gear sell`, `/gear shop` and `/gear buy` manage your equipment (all private to you; item fields autocomplete).
 

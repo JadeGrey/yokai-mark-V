@@ -358,7 +358,7 @@ async def trial_runner(
     (content_dir / "enemies.toml").write_text(enemies, encoding="utf-8")
     ranks = (content_dir / "ranks.toml").read_text(encoding="utf-8")
     pattern = re.compile(
-        r'(name = "Trial of the Back Alleys"\nattempt_cost = 2\npower = 100\n)stages = \[.*?\n\]\n',
+        r'(name = "Trial of the Back Alleys"\nattempt_cost = 2\npower = \d+\n)stages = \[.*?\n\]\n',
         re.S,
     )
     assert pattern.search(ranks)

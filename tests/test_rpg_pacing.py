@@ -136,3 +136,31 @@ def test_gear_costs_renown_but_leaves_income_positive(runs: list[SimResult]) -> 
         assert spent > 0 and 0 < run.net_per_day(first, last) < earned
         # The first month is an investment: a new member buys a set for every gear tier.
         assert spent < (0.85 if first == 1 else 0.7) * earned
+
+
+def test_rank_a_arrives_through_its_trial_in_about_a_month(
+    content: Content, runs: list[SimResult]
+) -> None:
+    days = sorted(run.rank_day["A"] for run in runs)
+    assert 26 <= days[len(days) // 2] <= 36
+
+
+def test_every_promotion_trial_is_won_within_a_few_tries(
+    content: Content, runs: list[SimResult]
+) -> None:
+    """Trials are tuned to about 70% at the threshold level; a daily player passes within days."""
+    for run in runs:
+        for rank in content.ranks[1:]:
+            assert rank.id in run.rank_day, f"rank {rank.id} was never reached"
+            tries = run.promotion_attempts.get(rank.id, 0)
+            assert 1 <= tries <= 4, f"rank {rank.id} took {tries} tries"
+    total = sum(sum(run.promotion_attempts.values()) for run in runs)
+    needed = len(runs) * (len(content.ranks) - 1)
+    assert needed / total >= 0.5  # overall at least half of all trial fights are won
+
+
+def test_a_failed_trial_costs_a_day_not_the_whole_run(runs: list[SimResult]) -> None:
+    for run in runs:
+        lost = sum(r.promotions_lost for r in run.records)
+        won = sum(r.promotions_won for r in run.records)
+        assert won == 6 and lost <= 6

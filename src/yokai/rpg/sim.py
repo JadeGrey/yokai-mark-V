@@ -4,6 +4,10 @@ Used by `scripts/rpg_sim.py` (a printed report) and `tests/test_rpg_pacing.py` (
 a balance change breaks the pacing targets). The player always attacks, takes the best mission
 they can enter by XP per attempt, and steps away from a mission they keep losing.
 
+Promotion is played for real: when the player reaches a rank's level threshold they fight its
+trial (spending attempts and wearing gear). A loss blocks further tries until the next day, which
+is a little harsher than the real six-hour cooldown.
+
 By default the player is geared. They start with the 200 Renown welcome bonus, buy the best full
 set of Oni gear they can afford (uncommon, else common) whenever a new gear tier opens, upgrade a
 common set to uncommon when they can afford it, and repair everything at the end of every day, so
@@ -45,6 +49,8 @@ class DayRecord:
     renown: int = 0
     attempts_used: int = 0
     spent: int = 0
+    promotions_won: int = 0
+    promotions_lost: int = 0
 
 
 @dataclass(slots=True)
@@ -54,6 +60,16 @@ class SimResult:
     rank_day: dict[str, int] = field(default_factory=dict)
     # rank id -> (gear tier requirement, rarity) the player wore on the day they reached it
     gear_at_rank: dict[str, tuple[Optional[int], Optional[str]]] = field(default_factory=dict)
+    # rank id -> how many times its promotion trial was fought
+    promotion_attempts: dict[str, int] = field(default_factory=dict)
+
+    def promotion_win_rate(self, rank_id: str) -> Optional[float]:
+        """Share of this rank's trials that were won, or None if it was never fought."""
+        tries = self.promotion_attempts.get(rank_id, 0)
+        if not tries:
+            return None
+        won = 1 if rank_id in self.rank_day else 0
+        return won / tries
 
     def day_reaching_level(self, level: int) -> Optional[int]:
         return self.level_day.get(level)
@@ -140,6 +156,41 @@ def simulate(
     rules_gear = content.balance.gear
     result = SimResult(rank_day={content.ranks[0].id: 1})
     result.level_day[1] = 1
+    promo_blocked = False
+    repairs_due = 0
+    remaining = 0
+    record = DayRecord(day=0, level=level, rank=content.ranks[0].id)
+    day = 0
+
+    def attempt_promotion() -> None:
+        """Fight the next rank's trial if the member is eligible and has the attempts."""
+        nonlocal rank_index, remaining, balance, promo_blocked, repairs_due
+        if promo_blocked or rank_index + 1 >= len(content.ranks):
+            return
+        target = content.ranks[rank_index + 1]
+        if level < target.min_level:
+            return
+        trial = content.promotion_mission(target.id)
+        if trial is None or trial.attempt_cost > remaining:
+            return
+        remaining -= trial.attempt_cost
+        record.attempts_used += trial.attempt_cost
+        won, _ = fight_once(content, trial, stats_of(level), rng)
+        repairs_due += wear_cost(rules_gear.win_wear if won else rules_gear.loss_wear)
+        result.promotion_attempts[target.id] = result.promotion_attempts.get(target.id, 0) + 1
+        if not won:
+            record.promotions_lost += 1
+            promo_blocked = True
+            return
+        record.promotions_won += 1
+        reward = guild.mission_reward(content, trial, content.ranks[rank_index].id)
+        record.renown += reward.renown
+        balance += reward.renown
+        rank_index += 1
+        result.rank_day.setdefault(target.id, day)
+        result.gear_at_rank.setdefault(
+            target.id, (owned_tier, owned_rarity if owned_tier else None)
+        )
 
     for day in range(1, days + 1):
         day_key = (START_DAY + timedelta(days=day - 1)).isoformat()
@@ -165,6 +216,8 @@ def simulate(
                         break
         losses_here: dict[str, int] = {}
         board = guild.board_missions(content, guild.draw_board(content, day_key))
+        promo_blocked = False
+        attempt_promotion()
 
         while remaining > 0:
             rank_id = content.ranks[rank_index].id
@@ -197,17 +250,7 @@ def simulate(
             level, xp, _ = guild.apply_xp(level, xp, reward.xp, cap, rules.xp)
             for reached in range(before + 1, level + 1):
                 result.level_day.setdefault(reached, day)
-            # Phase 2 promotes instantly at the level threshold; phase 4 adds real promotion fights.
-            while (
-                rank_index + 1 < len(content.ranks)
-                and level >= content.ranks[rank_index + 1].min_level
-            ):
-                rank_index += 1
-                result.rank_day.setdefault(content.ranks[rank_index].id, day)
-                result.gear_at_rank.setdefault(
-                    content.ranks[rank_index].id,
-                    (owned_tier, owned_rarity if owned_tier else None),
-                )
+            attempt_promotion()
 
         balance -= repairs_due
         record.spent += repairs_due

@@ -787,6 +787,59 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             ),
         ),
         (
+            "Guild (promotion passed)",
+            EmbedFactory.fight_result(
+                True,
+                "Trial of the Back Alleys",
+                7,
+                [("<@42>", 0, 60, 0)],
+                ["The last foe falls"],
+                promotion_to="D",
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (promotion failed)",
+            EmbedFactory.fight_result(
+                False,
+                "Trial of the Back Alleys",
+                9,
+                [],
+                ["The party has fallen"],
+                promotion_to="D",
+                cooldown_ts=1_900_000_000,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (rank status, ready)",
+            EmbedFactory.rank_status(
+                "E",
+                5,
+                [
+                    "Next: **Rank D**, which opens at level 5.",
+                    "Trial: *Trial of the Back Alleys* (2 attempts, 2 stage(s)).",
+                    "You can challenge now. A win promotes you; a loss starts a 6-hour cooldown.",
+                ],
+                True,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (leaderboard)",
+            EmbedFactory.guild_leaderboard(
+                [
+                    (1, 42, "SS", 51, 812),
+                    (2, 77, "A", 33, 540),
+                    (3, 19, "B", 24, 301),
+                ],
+                "rank",
+                1,
+                1,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
             "Guild (player card)",
             EmbedFactory.player_card(
                 "<@42>",
@@ -798,6 +851,7 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
                 9,
                 1_700_000_000,
                 next_rank=("B", 20),
+                promotion_note="recovering, try again <t:1900000000:R>",
                 bot_avatar_url=av,
             ),
         ),

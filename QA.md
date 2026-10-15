@@ -59,6 +59,10 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **49** | **Repair and Sell** | • `/gear repair` (no argument) repairs everything damaged for one payment; `/gear repair item:` repairs one.<br>• With too little Renown nothing is repaired.<br>• `/gear sell` pays 30% of the price; an equipped item can't be sold.<br>• Equip, unequip, repair and sell are refused during a fight with "Gear is locked". | 1. Repair with plenty of Renown, then with little.<br>2. Sell a spare item and try to sell a worn one.<br>3. Start a mission and try `/gear equip` in the middle. | `Pending Owner Run` |
 | **50** | **Skills in Fights** | • After wearing four pieces of one tag, the fight message gains a **Skill** button; it opens a private picker with the tag's skill (and an epic weapon's skill).<br>• Skills with several possible targets ask for one; used skills go on cooldown for a few rounds. | 1. Wear four matching pieces (an admin can `/admin rpg grant` them).<br>2. Start a mission and press Skill.<br>3. Use it twice in a row and see the cooldown message. | `Pending Owner Run` |
 | **51** | **Admin RPG Tools** | • `/admin rpg grant`, `level`, `rank` and `reset` work for the owner and adminlist and are refused for others.<br>• `reset` needs `confirm: true`, deletes the adventurer and gear but not Renown, and is refused while the member is in a fight.<br>• Each change appears in the admin panel audit log under module `rpg`. | 1. Run each tool as an admin and as a normal member.<br>2. Open the admin panel's audit page. | `Pending Owner Run` |
+| **52** | **Guild Rank Screen** | • `/guild rank` is private and shows your rank, level, the next rank, its trial and what is missing.<br>• Below the level it says how many levels you need; at the top rank it says you hold the highest rank; no button is shown in those cases. | 1. Run `/guild rank` as a new member, then after `/admin rpg level` to 5.<br>2. Run it as an SS+ member. | `Pending Owner Run` |
+| **53** | **Promotion Trial** | • At the threshold level a **Challenge for Rank X** button appears; only you can press it, it works once, and it re-checks level, cooldown and attempts when pressed.<br>• The trial costs 2 attempts, opens a thread, and has no XP or gear drops on a win.<br>• Winning promotes you (the result says so, `/card` shows the new rank and today's board unlocks the new rank's missions). | 1. Raise yourself to level 5 with `/admin rpg level`.<br>2. Press Challenge and play the fight.<br>3. Check `/card`, `/guild board` and your attempts. | `Pending Owner Run` |
+| **54** | **Promotion Cooldown** | • A lost trial refunds nothing, says when you can retry (`<t:..:R>`), and `/guild rank` and `/card` show that you are recovering until then.<br>• Pressing Challenge during the cooldown is refused with a private message.<br>• An unfinished trial (bot restart) refunds the attempts and sets no cooldown. | 1. Lose a trial on purpose (or set `RPG_PROMOTION_COOLDOWN_HOURS`).<br>2. Open `/guild rank` and `/card`.<br>3. Restart the bot mid-trial. | `Pending Owner Run` |
+| **55** | **Guild Leaderboard** | • `/guild leaderboard` is visible to everyone; the dropdown switches between rank, level and battles won; Prev/Next page through ten at a time and the buttons disable at the ends.<br>• Ties on rank are broken by level, then wins. | 1. Run the command in a channel with several adventurers.<br>2. Change the sort and page. | `Pending Owner Run` |
 
 ---
 
@@ -66,11 +70,11 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2574 passed, 1 skipped, 107 warnings in 130.92s
+# Result: 2634 passed, 1 skipped, 107 warnings in 141.30s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 324 files already formatted
+# Result: 327 files already formatted
 ```

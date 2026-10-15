@@ -458,3 +458,25 @@ share; how many missions of each rank appear per day.
   the first month (buying a set for each tier) and about 40% later. The late-game surplus (about
   +600 Renown a day) is deliberate headroom for the sinks later phases add (trade fees, prestige);
   raise prices or `repair_percent` if inflation shows up in play.
+
+**Phase 4 (ranks) added or changed these details:**
+
+- **Promotion trials** live in `ranks.toml` as a `[rank.promotion]` table per rank (name,
+  `attempt_cost`, `power` relative to the rank's `enemy_power`, stages). They run as solo fights of
+  kind `promotion`, are validated atomically with the attempt spend (rank, level, cooldown and no
+  open trial are re-checked inside `begin_fight`) and pay Renown only: no XP, no drops. Gear still
+  wears.
+- **Cooldown:** a lost trial stores `promo_cooldown_until` (schema v12) for
+  `RPG_PROMOTION_COOLDOWN_HOURS` (default 6, 0 disables). A win clears it and sets the new rank in
+  the same transaction as the settlement. An aborted trial refunds the attempts and sets no cooldown.
+- **Commands:** `/guild rank` (private; Challenge button for the owner only) and `/guild
+  leaderboard [sort] [page]` (public; sort by rank, level or battles won). `/card` mentions when a
+  promotion is ready or recovering. A rank id missing from the content files is handled without
+  crashing (the screen says the rank is unknown; admins can set it).
+- **Calibration:** each trial is tuned to be won about 70% of the time at the threshold level with
+  the gear a member could have bought by then (none for D). The simulator now fights real trials
+  (a loss blocks further tries that day, a little harsher than the real cooldown). With the shipped
+  numbers a daily player reaches rank A on about day 31, level 30 on day 30 to 32 and the cap on
+  day 93 to 94. SS missions were nudged harder (`enemy_power` 54 to 55) because the first
+  post-promotion days there were too easy once trials took a few attempts.
+

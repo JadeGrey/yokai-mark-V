@@ -29,7 +29,7 @@ enemy_power = 50
 [rank.promotion]
 name = "Trial of the Back Alleys"
 attempt_cost = 2
-power = 100
+power = 156
 stages = [
   { enemies = ["bakeneko"], level = 5 },
   { enemies = ["kamaitachi"], level = 6 },
@@ -44,7 +44,7 @@ enemy_power = 60
 [rank.promotion]
 name = "Trial of the Long Road"
 attempt_cost = 2
-power = 100
+power = 107
 stages = [
   { enemies = ["rokurokubi", "nopperabo"], level = 12 },
   { enemies = ["ushi_oni"], level = 13 },
@@ -59,7 +59,7 @@ enemy_power = 60
 [rank.promotion]
 name = "Trial of the Spider Court"
 attempt_cost = 2
-power = 100
+power = 120
 stages = [
   { enemies = ["tsuchigumo", "tsuchigumo"], level = 20 },
   { enemies = ["hannya"], level = 22 },
@@ -74,7 +74,7 @@ enemy_power = 63
 [rank.promotion]
 name = "Trial of the Chimera"
 attempt_cost = 2
-power = 100
+power = 108
 stages = [
   { enemies = ["nue"], level = 30 },
   { enemies = ["gashadokuro"], level = 32 },
@@ -84,12 +84,12 @@ stages = [
 id = "SS"
 min_level = 45
 xp_share = 0.042
-enemy_power = 54
+enemy_power = 55
 
 [rank.promotion]
 name = "Trial of the Ogre King"
 attempt_cost = 2
-power = 100
+power = 89
 stages = [
   { enemies = ["ushi_oni", "ushi_oni"], level = 45 },
   { enemies = ["shuten_doji"], level = 47 },
@@ -104,7 +104,7 @@ enemy_power = 56
 [rank.promotion]
 name = "Trial of the Nine Tails"
 attempt_cost = 2
-power = 100
+power = 104
 stages = [
   { enemies = ["nue", "nue"], level = 60 },
   { enemies = ["yamata_orochi"], level = 60 },
