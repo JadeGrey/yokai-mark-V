@@ -844,6 +844,21 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             ),
         ),
         (
+            "Guild (wiki contents)",
+            EmbedFactory.wiki_page(
+                "Contents",
+                "Everything about the Adventurers' Guild in one place. Use the menu below to "
+                "jump to a section.\n\n"
+                "`1.` **Getting started** - page 2\n"
+                "    Joining, attempts, the daily board and streaks\n"
+                "`2.` **Commands** - page 3\n"
+                "    Every guild command and what it does",
+                1,
+                13,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
             "Guild (raid lobby)",
             EmbedFactory.party_lobby(
                 "Bandit Fortress",

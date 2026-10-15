@@ -21,6 +21,7 @@ CHECKED = [
     "ui/lottery_views.py",
     "ui/party_views.py",
     "ui/trade_views.py",
+    "ui/wiki_views.py",
     "cogs/trade.py",
     "ui/rpg_views.py",
     "ui/table_common.py",

@@ -524,3 +524,10 @@ share; how many missions of each rank appear per day.
   `rpg_trades` table (schema v13) as JSON for dispute resolution.
 - **Gifts** are ordinary trades with one side empty; the recipient still has to press Confirm.
 
+**Guild wiki (added after phase 6):** `/guild wiki [section]` opens a private, paginated guide with
+a contents page and eleven sections. `rpg/wiki.py` builds the pages from the loaded content and
+settings (so odds, thresholds, set bonuses and the mission list can't go stale) and splits them to
+fit an embed; hand-written text only explains the rules. Tests check the page limits, that every
+rank, tag, mission, enemy and registered command appears, and that the text follows balance
+changes.
+

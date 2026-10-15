@@ -69,6 +69,7 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **59** | **Trade Session** | • `/trade @member` posts a public trade showing both offers; only the two members can press its buttons.<br>• **Add item** opens a private picker of your unequipped gear that isn't already offered; **Remove item** and **Set Renown** (0 withdraws it) work; you can't offer more Renown than you have.<br>• Any change clears both confirmations (the "(confirmed)" tags disappear).<br>• Trading with yourself, a bot, someone who hasn't joined, or someone already in a trade or a fight is refused privately. | 1. Open a trade between two accounts.<br>2. Add and remove items, set Renown, confirm from one side then change the offer.<br>3. Press buttons from a third account.<br>4. Try the refused cases. | `Pending Owner Run` |
 | **60** | **Trade Completion** | • When both confirm, gear and Renown swap at once; the result lists what each side received. Durability travels with the gear.<br>• A gift (one side empty) needs the receiver to press Confirm too.<br>• Cancel, or five idle minutes, closes the trade with nothing moved and frees both members to start another. | 1. Do a gear-for-gear, a gear-for-Renown and a gift trade.<br>2. Check `/gear inventory` and Renown on both accounts.<br>3. Cancel one and let another expire. | `Pending Owner Run` |
 | **61** | **Trade Safety** | • Equipping, selling or giving away an offered item before the second Confirm removes it from the offer with a clear message and nothing moves.<br>• Offering more Renown than you hold at the moment of confirming, or a trade that would exceed the 60-item inventory, is refused and names who is short.<br>• Starting a guild fight blocks trading until it ends. | 1. Offer an item, then equip or sell it in another window before confirming.<br>2. Spend your Renown after setting an offer.<br>3. Start a mission while a trade is open. | `Pending Owner Run` |
+| **62** | **Guild Wiki** | • `/guild wiki` is private and opens on a contents page listing every section with its page number; `section:` jumps straight to one.<br>• The menu jumps to any section; Prev/Next/Contents turn pages and disable at the ends; only you can use your copy and it disables itself after five minutes.<br>• Numbers (attempts, rank levels, drop odds, set bonuses, mission and raid lists) match the game, including after you change `RPG_BASE_ATTEMPTS` or the content files. | 1. Run `/guild wiki` and page through every section on desktop and phone.<br>2. Try `section:Commands`.<br>3. Change an env value, restart and check the page. | `Pending Owner Run` |
 
 ---
 
@@ -82,5 +83,5 @@ python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 336 files already formatted
+# Result: 339 files already formatted
 ```

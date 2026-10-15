@@ -855,6 +855,24 @@ class EmbedFactory:
         )
 
     @classmethod
+    def wiki_page(
+        cls,
+        title: str,
+        body: str,
+        page: int,
+        total_pages: int,
+        bot_avatar_url: Optional[str] = None,
+    ) -> discord.Embed:
+        """One page of the guild wiki."""
+        return cls._create_base(
+            title=f"{Emoji.SWORDS} {escape_md(clamp(title, 200))}",
+            description=body,
+            color=COLOR_BRAND,
+            context=f"Guild wiki{SEP}page {page}/{max(total_pages, 1)}",
+            bot_avatar_url=bot_avatar_url,
+        )
+
+    @classmethod
     def trade_session(
         cls,
         sides: Sequence[tuple[str, str, Sequence[str], int, bool]],

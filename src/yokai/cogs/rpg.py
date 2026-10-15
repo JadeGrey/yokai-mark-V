@@ -1,4 +1,4 @@
-"""Guild RPG slash commands: /guild join, board and mission, and /card."""
+"""Guild RPG slash commands: /guild join, board, mission, rank, leaderboard and wiki, and /card."""
 
 from __future__ import annotations
 
@@ -33,11 +33,13 @@ from yokai.rpg.party import Lobby, PartyMember, check_member, screen_members
 from yokai.rpg.runtime import RpgRuntime
 from yokai.rpg.stats import format_stats, stats_at_level
 from yokai.rpg.store import PromotionRequest
+from yokai.rpg.wiki import SECTIONS, WikiSettings, build_wiki
 from yokai.textutil import escape_md
 from yokai.theme import SEP
 from yokai.ui.embeds import EmbedFactory, send
-from yokai.ui.party_views import PartyLobbyView
+from yokai.ui.party_views import LOBBY_TIMEOUT_S, PartyLobbyView
 from yokai.ui.rpg_views import ConfirmView, GuildLeaderboardView, PromotionView
+from yokai.ui.wiki_views import WikiView
 
 if TYPE_CHECKING:
     from yokai.bot import YokaiBot
@@ -45,6 +47,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_AUTOCOMPLETE = 25
+WIKI_CHOICES = [app_commands.Choice(name=title, value=key) for key, title, _ in SECTIONS]
 SORT_CHOICES = [
     app_commands.Choice(name="Rank", value="rank"),
     app_commands.Choice(name="Level", value="level"),
@@ -586,6 +589,34 @@ class RpgCog(commands.Cog, name="Guild"):
         )
         embed = await view.build_embed()
         view.message = await send(interaction, embed=embed, view=view)
+
+    # ------------------------------------------------------------------ /guild wiki
+
+    @guild_group.command(name="wiki", description="Read the guild guide: commands, loot and more.")
+    @app_commands.describe(section="Jump straight to a section (defaults to the contents)")
+    @app_commands.choices(section=WIKI_CHOICES)
+    async def wiki(
+        self,
+        interaction: discord.Interaction,
+        section: Optional[app_commands.Choice[str]] = None,
+    ) -> None:
+        """A private, paginated guide built from the live content files."""
+        runtime = self._runtime()
+        config = self.bot.config
+        built = build_wiki(
+            runtime.content,
+            WikiSettings(
+                base_attempts=config.rpg_base_attempts,
+                turn_seconds=int(config.rpg_turn_seconds),
+                promotion_cooldown_hours=config.rpg_promotion_cooldown_hours,
+                shop_daily_cap=config.rpg_shop_daily_cap,
+                timezone=config.rpg_tz,
+                lobby_minutes=int(LOBBY_TIMEOUT_S // 60),
+            ),
+        )
+        start = built.first_page.get(section.value, 0) if section else 0
+        view = WikiView(self.bot, built, interaction.user.id, start)
+        view.message = await send(interaction, embed=view.render(), view=view, ephemeral=True)
 
     # ------------------------------------------------------------------ /card
 
