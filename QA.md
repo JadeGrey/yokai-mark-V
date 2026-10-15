@@ -63,6 +63,9 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 | **53** | **Promotion Trial** | • At the threshold level a **Challenge for Rank X** button appears; only you can press it, it works once, and it re-checks level, cooldown and attempts when pressed.<br>• The trial costs 2 attempts, opens a thread, and has no XP or gear drops on a win.<br>• Winning promotes you (the result says so, `/card` shows the new rank and today's board unlocks the new rank's missions). | 1. Raise yourself to level 5 with `/admin rpg level`.<br>2. Press Challenge and play the fight.<br>3. Check `/card`, `/guild board` and your attempts. | `Pending Owner Run` |
 | **54** | **Promotion Cooldown** | • A lost trial refunds nothing, says when you can retry (`<t:..:R>`), and `/guild rank` and `/card` show that you are recovering until then.<br>• Pressing Challenge during the cooldown is refused with a private message.<br>• An unfinished trial (bot restart) refunds the attempts and sets no cooldown. | 1. Lose a trial on purpose (or set `RPG_PROMOTION_COOLDOWN_HOURS`).<br>2. Open `/guild rank` and `/card`.<br>3. Restart the bot mid-trial. | `Pending Owner Run` |
 | **55** | **Guild Leaderboard** | • `/guild leaderboard` is visible to everyone; the dropdown switches between rank, level and battles won; Prev/Next page through ten at a time and the buttons disable at the ends.<br>• Ties on rank are broken by level, then wins. | 1. Run the command in a channel with several adventurers.<br>2. Change the sort and page. | `Pending Owner Run` |
+| **56** | **Party Lobby** | • `/guild mission mission:<x> party:true` posts a public lobby with you seated; others press **Join**, **Leave** works for members, the leader can't leave but can **Cancel**.<br>• Joining checks rank, attempts and that you aren't fighting, and a joiner with worn gear gets a private heads-up.<br>• Only the leader can Start or Cancel; the lobby holds at most four and its buttons disable when full.<br>• After three minutes it says it expired and nobody is charged. | 1. Open a lobby, join from a second account (and a third that is a lower rank or out of attempts).<br>2. Try Start from a non-leader and Leave as the leader.<br>3. Let one lobby expire. | `Pending Owner Run` |
+| **57** | **Party Fight** | • Start charges every member's attempts together, opens one thread and adds everyone.<br>• All members choose actions each round; a member who is away doesn't stall the others.<br>• On a win each member gets their own XP, Renown and a separate drop roll; on a loss everyone's gear wears and nobody is paid.<br>• If a member used their attempts elsewhere before Start, they are removed (named in the lobby) and the leader presses Start again. | 1. Start a party mission with two or three accounts.<br>2. Have one account stay idle for a few rounds.<br>3. Check each member's `/card`, Renown and `/gear inventory` afterwards.<br>4. Spend a member's attempts in another channel before Start. | `Pending Owner Run` |
+| **58** | **Raids** | • From rank C the board shows `Raid:` entries; a raid always opens a lobby and Start needs two members.<br>• A raid has three stages (HP carries over), costs 3 or 4 attempts and a win drops better gear.<br>• A three-member party usually wins; two struggle and four have it easiest. | 1. Open `/guild board` as a rank C+ member.<br>2. Open a raid lobby and try Start alone.<br>3. Run a raid with three accounts. | `Pending Owner Run` |
 
 ---
 
@@ -70,11 +73,11 @@ This document details the 51 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 2634 passed, 1 skipped, 107 warnings in 141.30s
+# Result: 2681 passed, 1 skipped, 107 warnings in 243.11s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 327 files already formatted
+# Result: 331 files already formatted
 ```

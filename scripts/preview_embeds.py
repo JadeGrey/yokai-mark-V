@@ -826,6 +826,37 @@ def build_samples() -> list[tuple[str, discord.Embed]]:
             ),
         ),
         (
+            "Guild (raid lobby)",
+            EmbedFactory.party_lobby(
+                "Bandit Fortress",
+                "C",
+                19,
+                3,
+                [("<@42>", "C", 14), ("<@77>", "B", 22)],
+                2,
+                4,
+                1_900_000_000,
+                True,
+                bot_avatar_url=av,
+            ),
+        ),
+        (
+            "Guild (party lobby, member removed)",
+            EmbedFactory.party_lobby(
+                "Ox Pasture",
+                "C",
+                14,
+                1,
+                [("<@42>", "C", 14)],
+                1,
+                4,
+                1_900_000_000,
+                False,
+                note="Removed before starting:\n<@77>: You're out of attempts for today.",
+                bot_avatar_url=av,
+            ),
+        ),
+        (
             "Guild (leaderboard)",
             EmbedFactory.guild_leaderboard(
                 [

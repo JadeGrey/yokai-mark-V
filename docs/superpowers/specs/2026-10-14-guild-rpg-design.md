@@ -480,3 +480,31 @@ share; how many missions of each rank appear per day.
   day 93 to 94. SS missions were nudged harder (`enemy_power` 54 to 55) because the first
   post-promotion days there were too easy once trials took a few attempts.
 
+**Phase 5 (parties and raids) added or changed these details:**
+
+- **Entry point:** `/guild mission mission [party]`. Raids always open a lobby; other missions
+  open one when `party` is true. The lobby is a public message with Join, Leave, Start and Cancel
+  buttons; it lives in memory, closes after three minutes and charges nothing until the leader
+  starts it. Eligibility lives in the pure `rpg/party.py` and is checked when someone joins and
+  again for everyone at Start (members who are no longer eligible are removed and named, and the
+  leader presses Start again).
+- **Launch:** `launch_party_fight` charges all members in one `begin_fight` transaction, opens one
+  thread, adds every member and starts the same `FightRunner` used for solo fights. A thread that
+  cannot be created refunds everyone. Each member is rewarded and wears gear separately.
+- **Raids** are `kind = "raid"` missions with `min_party = 2` (the parser rejects a raid that
+  allows a party of one). The board draws one raid per rank from C upward each day from a pool of
+  two, using its own seed so regular missions are never reshuffled by raid changes. They cost 3 or
+  4 attempts, have three stages with a boss, and use the boss drop table.
+- **Party scaling changed.** The placeholder scaling (extra copies of the weakest foe) let a party
+  face several copies of a lone monster and made a trio far harder than a pair or a quartet. Now
+  extra foes join only stages that already have a group, and `balance.toml [party]` is
+  `hp_percent = [100, 120, 230, 255]`, `extra_foes = [0, 1, 1, 2]`. Raid escorts were added so
+  every boss stage can grow.
+- **Calibration:** raids are tuned (per-mission `power`) for about 70% wins with a party of three
+  wearing typical gear for the band; with the shipped numbers an always-attack party wins about
+  66% of raids with two members, 87% with three and 74% with four. Ordinary missions are slightly
+  safer in a party than alone. Win rate versus enemy strength is a cliff for a scripted party, so
+  real play (skills, defending, healing) will differ; adjust per-raid `power` if it does.
+- **Not included:** parties skip the private worn-gear confirmation (a joiner gets a heads-up),
+  and there is no matchmaking or invite list. Trading is phase 6.
+
