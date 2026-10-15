@@ -173,6 +173,11 @@ content edit mid-day never changes today's missions or stock. Old boards and fin
 purged by the scheduler after 30 days. "Battles won" is a counter on the character, so purging the
 fight log never changes the leaderboard; the log is an audit trail and the restart-recovery record.
 
+Phase 1 (implemented) creates `rpg_characters` with only `user_id, level, xp, rank, battles_won,
+battles_lost, created_ts`. The attempt, streak and cooldown columns shown above are added by the phase
+that first uses them, with `_add_column_if_missing`. The public transaction hook is
+`Database.transaction()`.
+
 At startup, any `rpg_fights` row still `open` is marked `aborted` and its participants' attempts are
 refunded, mirroring `refund_open_bets`.
 
@@ -313,7 +318,8 @@ through `ui/embeds.py`, errors are ephemeral, and input is validated before defe
 
 `/admin diag` gains an RPG check: content loaded, tables present, and the permissions to create threads.
 The bot has the Administrator permission on the server, so thread permissions are expected to be
-present, but the check stays as a safety net.
+present, but the check stays as a safety net. It arrives with phase 2, when fights first need thread
+permissions.
 
 ## 13. Configuration (document all in `.env.example`)
 
@@ -322,6 +328,7 @@ Operational settings only. Balance numbers live in the TOML files.
 | Variable | Default | Meaning |
 |---|---|---|
 | `RPG_ENABLED` | `true` | Master switch; when false the commands are not registered. |
+| `RPG_CONTENT_DIR` | `content/rpg` | Folder with the TOML content files, relative to where the bot starts. |
 | `RPG_TZ` | `UTC` | Time zone for the day key. |
 | `RPG_BASE_ATTEMPTS` | `8` | Attempts per day before streak bonuses. |
 | `RPG_TURN_SECONDS` | `45` | Time to choose an action each round. |

@@ -187,6 +187,20 @@ Admins (the owner and the adminlist) get `/admin challenges period:<daily|weekly
 | `CHALLENGE_MIN_WAGER` | `10` | Minimum stake for a game round to count. |
 | `CHALLENGE_REWARD_SCALE` | `1.0` | Multiplier on every challenge reward (0.1 to 10). |
 
+## Guild RPG (in progress)
+
+An Adventurers' Guild RPG is being built in phases. **Phase 1 (foundation)** adds the character and the player card; missions, gear, ranks, parties and trading arrive in later phases (see `docs/superpowers/specs/2026-10-14-guild-rpg-design.md`).
+
+- `/guild join` creates your adventurer (rank E, level 1) and shows your starting stats.
+- `/card [member]` shows anyone's adventurer card: rank, level, record, the seven stats (HP, Attack, Magic, Defense, Resist, Speed, Crit) and the level where the next promotion opens.
+
+Game data (levels, ranks, gear tags) lives in TOML files in `content/rpg/` and is validated at startup; a bad file stops the bot with a message naming the file and the problem. The numbers in those files are placeholders that later phases tune. Settings in `.env`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `RPG_ENABLED` | `true` | Master switch. When false the `/guild` and `/card` commands are not registered. |
+| `RPG_CONTENT_DIR` | `content/rpg` | Folder with the RPG content files, relative to where the bot is started. |
+
 ## Updating yt-dlp
 
 YouTube frequently updates player algorithms and cipher signatures. Keeping `yt-dlp` up to date ensures uninterrupted streaming:

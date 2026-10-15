@@ -1,6 +1,6 @@
 # Yokai Mark V — Manual QA Checklist
 
-This document details the 33 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
+This document details the 36 manual verification procedures to validate Yokai Mark V in Discord alongside automated unit tests.
 
 ---
 
@@ -41,6 +41,9 @@ This document details the 33 manual verification procedures to validate Yokai Ma
 | **31** | **Restart Keeps Slate and Progress** | • After restarting the bot mid-day the same challenges and the same progress are shown. | 1. Note the challenges and progress from `/challenges`.<br>2. Stop and restart with `.\run.ps1`.<br>3. Run `/challenges` again and compare ids, targets and progress. | `Pending Owner Run` |
 | **32** | **Admin Challenge Tools** | • `/admin challenges period action` with `list`, `reroll` and `set` works for the owner or an adminlist member.<br>• A normal member is refused.<br>• `set` with garbage ids (empty, unknown, wrong period, 50 ids) shows an ephemeral error and changes nothing. | 1. As the owner, run `/admin challenges period: daily action: list`, then `reroll`, then `set` with ids copied from `list`.<br>2. Confirm `/challenges` reflects each change.<br>3. As a normal member, run each action and verify refusal.<br>4. Run `set` with `nonsense,,🎲` and a list of 50 ids; verify an ephemeral error and that `list` is unchanged. | `Pending Owner Run` |
 | **33** | **Challenges Disabled** | • With `CHALLENGE_ENABLED=false` and a restart, `/challenges` says they are off.<br>• Playing tracks, games and time in voice advance nothing. | 1. Set `CHALLENGE_ENABLED=false` in `.env` and restart the bot.<br>2. Run `/challenges` and read the response.<br>3. Play a game round and a track with two humans; set the flag back to `true`, restart, and confirm progress did not move while off. | `Pending Owner Run` |
+| **34** | **Guild Join** | • `/guild join` creates a character and shows a "Welcome to the guild" embed with rank E, level 1 and the seven stats (HP 100, Attack 10, Magic 10, Defense 5, Resist 5, Speed 10, Crit 5%).<br>• The reply is visible to the channel and has exactly one emoji.<br>• Running it again answers privately with "Already on the roster". | 1. Run `/guild join` with an account that has not joined.<br>2. Check the embed fields and the single emoji.<br>3. Run `/guild join` again and confirm only you see the reply. | `Pending Owner Run` |
+| **35** | **Player Card** | • `/card` shows your own card; `/card member:@friend` shows a friend's (visible to the channel).<br>• Fields: Rank, Level (`1 / 60`), Record, seven stats, and "Next promotion: Rank D at level 5".<br>• A member who has not joined, and a bot account, produce a private "No adventurer yet" error. | 1. Run `/card`.<br>2. Run `/card` with another member who has joined, then one who has not, then a bot.<br>3. Check each reply and who can see it. | `Pending Owner Run` |
+| **36** | **RPG Disabled and Bad Content** | • With `RPG_ENABLED=false` and a restart, `/guild` and `/card` are absent from the command list and the rest of the bot works.<br>• With `RPG_ENABLED=true` and a broken file in `content/rpg/` (for example delete a closing bracket in `tags.toml`), the bot refuses to start and the log names `tags.toml` and the problem. | 1. Set `RPG_ENABLED=false`, restart, type `/guild` in Discord.<br>2. Set it back to `true`, damage `content/rpg/tags.toml`, start the bot, read the log, then restore the file with `git checkout content/rpg/tags.toml`. | `Pending Owner Run` |
 
 ---
 
@@ -48,11 +51,11 @@ This document details the 33 manual verification procedures to validate Yokai Ma
 
 ```powershell
 python -m pytest -q
-# Result: 264 passed, 16 warnings in 9.57s
+# Result: 2172 passed, 1 skipped, 101 warnings in 106.74s
 
 python -m ruff check .
 # Result: All checks passed!
 
 python -m ruff format --check .
-# Result: 76 files already formatted
+# Result: 289 files already formatted
 ```
